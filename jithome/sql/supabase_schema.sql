@@ -1,24 +1,27 @@
--- ═══════════════════════════════════════════════════════════════
---  JitHome — Supabase / PostgreSQL Schema
---  ระบบติดตามผู้ป่วยจิตเวช (Thai Psychiatric Patient Tracking)
---
---  วิธีใช้:
---  1. ไปที่ Supabase Dashboard → SQL Editor
---  2. วางโค้ดนี้ทั้งหมด แล้วกด Run
--- ═══════════════════════════════════════════════════════════════
+-- JitHome — Supabase Schema
+-- วางใน SQL Editor แล้วกด Run
 
--- ─── TABLES ────────────────────────────────────────────────────
+SET search_path TO public;
 
-CREATE TABLE IF NOT EXISTS patients (
+-- DROP ของเก่าก่อน
+DROP VIEW  IF EXISTS public.monthly_trend     CASCADE;
+DROP VIEW  IF EXISTS public.patient_status    CASCADE;
+DROP TABLE IF EXISTS public.home_visits       CASCADE;
+DROP TABLE IF EXISTS public.injection_records CASCADE;
+DROP TABLE IF EXISTS public.app_settings      CASCADE;
+DROP TABLE IF EXISTS public.patients          CASCADE;
+
+-- TABLES
+CREATE TABLE public.patients (
   id         BIGSERIAL    PRIMARY KEY,
   name       VARCHAR(200) NOT NULL UNIQUE,
   village    VARCHAR(50)  DEFAULT '',
   created_at TIMESTAMPTZ  DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS injection_records (
-  id             BIGSERIAL PRIMARY KEY,
-  patient_id     BIGINT      NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+CREATE TABLE public.injection_records (
+  id             BIGSERIAL   PRIMARY KEY,
+  patient_id     BIGINT      NOT NULL REFERENCES public.patients(id) ON DELETE CASCADE,
   injection_date DATE        NOT NULL,
   group_color    VARCHAR(10) NOT NULL DEFAULT 'yellow'
                    CHECK (group_color IN ('red','yellow','green')),
@@ -29,11 +32,11 @@ CREATE TABLE IF NOT EXISTS injection_records (
   created_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_ir_patient_date ON injection_records (patient_id, injection_date);
+CREATE INDEX idx_ir_patient_date ON public.injection_records (patient_id, injection_date);
 
-CREATE TABLE IF NOT EXISTS home_visits (
-  id           BIGSERIAL   PRIMARY KEY,
-  patient_id   BIGINT      REFERENCES patients(id) ON DELETE SET NULL,
+CREATE TABLE public.home_visits (
+  id           BIGSERIAL    PRIMARY KEY,
+  patient_id   BIGINT       REFERENCES public.patients(id) ON DELETE SET NULL,
   patient_name VARCHAR(200) DEFAULT '',
   village      VARCHAR(50)  DEFAULT '',
   visit_type   VARCHAR(10)  NOT NULL DEFAULT 'aosomo'
@@ -48,15 +51,15 @@ CREATE TABLE IF NOT EXISTS home_visits (
   created_at   TIMESTAMPTZ  DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS settings (
+-- ใช้ชื่อ app_settings แทน settings เพื่อหลีกเลี่ยง conflict
+CREATE TABLE public.app_settings (
   setting_key   VARCHAR(100) PRIMARY KEY,
   setting_value TEXT         DEFAULT '',
   updated_at    TIMESTAMPTZ  DEFAULT NOW()
 );
 
--- ─── DEFAULT SETTINGS ──────────────────────────────────────────
-
-INSERT INTO settings (setting_key, setting_value) VALUES
+-- DEFAULT SETTINGS
+INSERT INTO public.app_settings (setting_key, setting_value) VALUES
   ('hospital_name',    'รพ.สต.สองคอน'),
   ('alert_days',       '1'),
   ('telegram_bot',     '@JitHomeBot'),
@@ -69,49 +72,44 @@ INSERT INTO settings (setting_key, setting_value) VALUES
   ('telegram_enabled', '1')
 ON CONFLICT (setting_key) DO NOTHING;
 
--- ─── VIEWS ─────────────────────────────────────────────────────
-
--- Latest status per patient (next appointment + days until)
-CREATE OR REPLACE VIEW patient_status AS
+-- VIEWS
+CREATE VIEW public.patient_status AS
 SELECT
   p.id,
   p.name,
   p.village,
-  ir.id                                                          AS record_id,
-  ir.injection_date                                              AS last_date,
+  ir.id                                                           AS record_id,
+  ir.injection_date                                               AS last_date,
   ir.group_color,
   ir.group_label,
   ir.interval_str,
   ir.interval_days,
   ir.note,
-  ir.injection_date + (ir.interval_days || ' days')::INTERVAL    AS next_date,
+  ir.injection_date + (ir.interval_days || ' days')::INTERVAL     AS next_date,
   EXTRACT(DAY FROM
     (ir.injection_date + (ir.interval_days || ' days')::INTERVAL)
     - CURRENT_DATE
-  )::INT                                                         AS days_until
-FROM patients p
-INNER JOIN injection_records ir ON ir.id = (
-  SELECT id FROM injection_records r2
+  )::INT                                                          AS days_until
+FROM public.patients p
+INNER JOIN public.injection_records ir ON ir.id = (
+  SELECT id FROM public.injection_records r2
   WHERE r2.patient_id = p.id
   ORDER BY injection_date DESC, id DESC
   LIMIT 1
 );
 
--- Monthly trend for line chart
-CREATE OR REPLACE VIEW monthly_trend AS
+CREATE VIEW public.monthly_trend AS
 SELECT
-  TO_CHAR(injection_date, 'YYYY-MM')          AS month_key,
-  COUNT(*)                                     AS total,
-  COUNT(*) FILTER (WHERE group_color = 'red')  AS red_count,
-  COUNT(*) FILTER (WHERE group_color = 'yellow') AS yellow_count,
-  COUNT(*) FILTER (WHERE group_color = 'green')  AS green_count
-FROM injection_records
+  TO_CHAR(injection_date, 'YYYY-MM')             AS month_key,
+  COUNT(*)                                        AS total,
+  COUNT(*) FILTER (WHERE group_color = 'red')     AS red_count,
+  COUNT(*) FILTER (WHERE group_color = 'yellow')  AS yellow_count,
+  COUNT(*) FILTER (WHERE group_color = 'green')   AS green_count
+FROM public.injection_records
 GROUP BY TO_CHAR(injection_date, 'YYYY-MM')
 ORDER BY month_key;
 
--- ─── ROW LEVEL SECURITY (แนะนำสำหรับ production) ──────────────
--- เปิดใช้ RLS ถ้าต้องการ authentication:
--- ALTER TABLE patients         ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE injection_records ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE home_visits       ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE settings          ENABLE ROW LEVEL SECURITY;
+-- ตรวจสอบ
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;

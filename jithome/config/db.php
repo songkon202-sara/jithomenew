@@ -27,7 +27,7 @@ function getDB(): PDO {
 function getSetting(string $key, string $default = ''): string {
     try {
         $db  = getDB();
-        $st  = $db->prepare('SELECT setting_value FROM settings WHERE setting_key = $1');
+        $st  = $db->prepare('SELECT setting_value FROM app_settings WHERE setting_key = $1');
         $st->execute([$key]);
         $row = $st->fetch();
         return $row ? $row['setting_value'] : $default;
