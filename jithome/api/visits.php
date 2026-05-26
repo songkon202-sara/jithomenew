@@ -13,7 +13,6 @@ require_once __DIR__ . '/../includes/functions.php';
 $db = getDB();
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    // List visits
     $type = $_GET['type'] ?? 'all';
     $sql  = 'SELECT * FROM home_visits';
     $args = [];
@@ -41,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $checks      = (array)($body['checks']    ?? []);
     $score       = (int)($body['score']       ?? count($checks));
     $note        = trim($body['note']         ?? '');
-    $refer       = !empty($body['refer']) ? 1 : 0;
+    $refer       = !empty($body['refer']);   // boolean for PostgreSQL
     $nextAppt    = !empty($body['next_appt']) ? $body['next_appt'] : null;
 
     if (!$patientName || !$visitDate) {
@@ -54,18 +53,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $st->execute([$patientName]);
     $patientId = $st->fetchColumn() ?: null;
 
+    // RETURNING id for PostgreSQL
     $ins = $db->prepare(
         'INSERT INTO home_visits
            (patient_id, patient_name, village, visit_type, visit_date, visitor,
             checks_json, score, note, refer, next_appt)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)
+         RETURNING id'
     );
     $ins->execute([
         $patientId, $patientName, $village, $visitType, $visitDate, $visitor,
-        json_encode($checks, JSON_UNESCAPED_UNICODE), $score, $note, $refer, $nextAppt
+        json_encode($checks, JSON_UNESCAPED_UNICODE), $score, $note,
+        $refer ? 'true' : 'false', $nextAppt
     ]);
 
-    echo json_encode(['success'=>true,'id'=>(int)$db->lastInsertId()]);
+    echo json_encode(['success'=>true,'id'=>(int)$ins->fetchColumn()]);
     exit;
 }
 

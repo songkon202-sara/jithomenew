@@ -1,16 +1,18 @@
 <?php
-// ─── Database Configuration ────────────────────────────────────
-// Edit these values to match your MySQL server
-define('DB_HOST',    'localhost');
-define('DB_NAME',    'jithome');
-define('DB_USER',    'root');
-define('DB_PASS',    '');
-define('DB_CHARSET', 'utf8mb4');
+// ─── Database Configuration — Supabase (PostgreSQL) ────────────
+define('DB_HOST',    'db.drwnsumijarzqezljare.supabase.co');
+define('DB_PORT',    '5432');
+define('DB_NAME',    'postgres');
+define('DB_USER',    'postgres');
+define('DB_PASS',    'huMmoq-xytsyd-8sarse');
 
 function getDB(): PDO {
     static $pdo = null;
     if ($pdo === null) {
-        $dsn     = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
+        $dsn = sprintf(
+            'pgsql:host=%s;port=%s;dbname=%s;sslmode=require',
+            DB_HOST, DB_PORT, DB_NAME
+        );
         $options = [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -25,7 +27,7 @@ function getDB(): PDO {
 function getSetting(string $key, string $default = ''): string {
     try {
         $db  = getDB();
-        $st  = $db->prepare('SELECT setting_value FROM settings WHERE setting_key = ?');
+        $st  = $db->prepare('SELECT setting_value FROM settings WHERE setting_key = $1');
         $st->execute([$key]);
         $row = $st->fetch();
         return $row ? $row['setting_value'] : $default;

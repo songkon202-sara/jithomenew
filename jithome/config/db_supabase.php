@@ -7,11 +7,11 @@
 //   host=db.xxxxxxxxxxxx.supabase.co port=5432 dbname=postgres
 //   user=postgres password=YOUR_PASSWORD
 
-define('DB_HOST',    'db.xxxxxxxxxxxx.supabase.co');  // <── เปลี่ยนตรงนี้
+define('DB_HOST',    'db.drwnsumijarzqezljare.supabase.co');
 define('DB_PORT',    '5432');
 define('DB_NAME',    'postgres');
 define('DB_USER',    'postgres');
-define('DB_PASS',    'YOUR_DB_PASSWORD');              // <── เปลี่ยนตรงนี้
+define('DB_PASS',    'huMmoq-xytsyd-8sarse');
 
 function getDB(): PDO {
     static $pdo = null;
