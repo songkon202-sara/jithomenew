@@ -1,10 +1,11 @@
 <?php
 // ─── Database Configuration — Supabase (PostgreSQL) ────────────
-define('DB_HOST',    'db.drwnsumijarzqezljare.supabase.co');
-define('DB_PORT',    '5432');
-define('DB_NAME',    'postgres');
-define('DB_USER',    'postgres');
-define('DB_PASS',    'huMmoq-xytsyd-8sarse');
+// ใช้ environment variables ถ้ามี, ไม่งั้นใช้ค่า default
+define('DB_HOST', getenv('DB_HOST') ?: 'db.drwnsumijarzqezljare.supabase.co');
+define('DB_PORT', getenv('DB_PORT') ?: '5432');
+define('DB_NAME', getenv('DB_NAME') ?: 'postgres');
+define('DB_USER', getenv('DB_USER') ?: 'postgres');
+define('DB_PASS', getenv('DB_PASS') ?: 'huMmoq-xytsyd-8sarse');
 
 function getDB(): PDO {
     static $pdo = null;

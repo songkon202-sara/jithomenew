@@ -10,7 +10,7 @@ async function openModal(patientId) {
   content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">กำลังโหลด...</div>';
 
   try {
-    const res = await fetch('/jithome/api/patients.php?action=detail&id=' + patientId);
+    const res = await fetch('/api/patients.php?action=detail&id=' + patientId);
     const p   = await res.json();
     if (p.error) throw new Error(p.error);
     content.innerHTML = buildPatientModal(p);
@@ -143,7 +143,7 @@ async function savePatientRecord(patientId, name, village, groupLabel) {
   if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
 
   try {
-    const r = await fetch('/jithome/api/records.php', {
+    const r = await fetch('/api/records.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, village, group: groupStr, date, interval, note }),
@@ -336,7 +336,7 @@ async function saveVisit() {
   if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
 
   try {
-    const r = await fetch('/jithome/api/visits.php', {
+    const r = await fetch('/api/visits.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

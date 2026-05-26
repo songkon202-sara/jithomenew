@@ -13,14 +13,14 @@ try {
     $db->query('SELECT 1 FROM patients LIMIT 1');
 } catch (PDOException $e) {
     if (!file_exists(__DIR__ . '/.setup_done')) {
-        header('Location: /jithome/setup.php');
+        header('Location: /setup.php');
         exit;
     }
     die('<div style="font-family:sans-serif;padding:40px;color:#dc2626">
       <h2>⚠️ ไม่สามารถเชื่อมต่อฐานข้อมูลได้</h2>
       <p style="margin-top:12px">กรุณาตรวจสอบ <code>config/db.php</code></p>
       <pre style="margin-top:8px;background:#f3f4f6;padding:12px;border-radius:8px">' . htmlspecialchars($e->getMessage()) . '</pre>
-      <p style="margin-top:12px"><a href="/jithome/setup.php">🔧 เรียกใช้ Setup อีกครั้ง</a></p>
+      <p style="margin-top:12px"><a href="/setup.php">🔧 เรียกใช้ Setup อีกครั้ง</a></p>
     </div>');
 }
 

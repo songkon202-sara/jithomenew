@@ -28,6 +28,6 @@
   </div>
 </div>
 
-<script src="/jithome/assets/app.js"></script>
+<script src="/assets/app.js"></script>
 </body>
 </html>
