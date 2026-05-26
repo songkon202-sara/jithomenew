@@ -1,0 +1,117 @@
+-- ═══════════════════════════════════════════════════════════════
+--  JitHome — Supabase / PostgreSQL Schema
+--  ระบบติดตามผู้ป่วยจิตเวช (Thai Psychiatric Patient Tracking)
+--
+--  วิธีใช้:
+--  1. ไปที่ Supabase Dashboard → SQL Editor
+--  2. วางโค้ดนี้ทั้งหมด แล้วกด Run
+-- ═══════════════════════════════════════════════════════════════
+
+-- ─── TABLES ────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS patients (
+  id         BIGSERIAL    PRIMARY KEY,
+  name       VARCHAR(200) NOT NULL UNIQUE,
+  village    VARCHAR(50)  DEFAULT '',
+  created_at TIMESTAMPTZ  DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS injection_records (
+  id             BIGSERIAL PRIMARY KEY,
+  patient_id     BIGINT      NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  injection_date DATE        NOT NULL,
+  group_color    VARCHAR(10) NOT NULL DEFAULT 'yellow'
+                   CHECK (group_color IN ('red','yellow','green')),
+  group_label    VARCHAR(50) DEFAULT '',
+  interval_str   VARCHAR(30) DEFAULT '1 เดือน',
+  interval_days  INT         DEFAULT 30,
+  note           TEXT,
+  created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ir_patient_date ON injection_records (patient_id, injection_date);
+
+CREATE TABLE IF NOT EXISTS home_visits (
+  id           BIGSERIAL   PRIMARY KEY,
+  patient_id   BIGINT      REFERENCES patients(id) ON DELETE SET NULL,
+  patient_name VARCHAR(200) DEFAULT '',
+  village      VARCHAR(50)  DEFAULT '',
+  visit_type   VARCHAR(10)  NOT NULL DEFAULT 'aosomo'
+                 CHECK (visit_type IN ('staff','aosomo')),
+  visit_date   DATE         NOT NULL,
+  visitor      VARCHAR(100) DEFAULT '',
+  checks_json  TEXT,
+  score        INT          DEFAULT 0,
+  note         TEXT,
+  refer        BOOLEAN      DEFAULT FALSE,
+  next_appt    DATE,
+  created_at   TIMESTAMPTZ  DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  setting_key   VARCHAR(100) PRIMARY KEY,
+  setting_value TEXT         DEFAULT '',
+  updated_at    TIMESTAMPTZ  DEFAULT NOW()
+);
+
+-- ─── DEFAULT SETTINGS ──────────────────────────────────────────
+
+INSERT INTO settings (setting_key, setting_value) VALUES
+  ('hospital_name',    'รพ.สต.สองคอน'),
+  ('alert_days',       '1'),
+  ('telegram_bot',     '@JitHomeBot'),
+  ('telegram_chatid',  '-1001234567890'),
+  ('line_token',       ''),
+  ('sheets_url',       ''),
+  ('cloud_backup',     '1'),
+  ('hosxp_enabled',    '1'),
+  ('line_enabled',     '1'),
+  ('telegram_enabled', '1')
+ON CONFLICT (setting_key) DO NOTHING;
+
+-- ─── VIEWS ─────────────────────────────────────────────────────
+
+-- Latest status per patient (next appointment + days until)
+CREATE OR REPLACE VIEW patient_status AS
+SELECT
+  p.id,
+  p.name,
+  p.village,
+  ir.id                                                          AS record_id,
+  ir.injection_date                                              AS last_date,
+  ir.group_color,
+  ir.group_label,
+  ir.interval_str,
+  ir.interval_days,
+  ir.note,
+  ir.injection_date + (ir.interval_days || ' days')::INTERVAL    AS next_date,
+  EXTRACT(DAY FROM
+    (ir.injection_date + (ir.interval_days || ' days')::INTERVAL)
+    - CURRENT_DATE
+  )::INT                                                         AS days_until
+FROM patients p
+INNER JOIN injection_records ir ON ir.id = (
+  SELECT id FROM injection_records r2
+  WHERE r2.patient_id = p.id
+  ORDER BY injection_date DESC, id DESC
+  LIMIT 1
+);
+
+-- Monthly trend for line chart
+CREATE OR REPLACE VIEW monthly_trend AS
+SELECT
+  TO_CHAR(injection_date, 'YYYY-MM')          AS month_key,
+  COUNT(*)                                     AS total,
+  COUNT(*) FILTER (WHERE group_color = 'red')  AS red_count,
+  COUNT(*) FILTER (WHERE group_color = 'yellow') AS yellow_count,
+  COUNT(*) FILTER (WHERE group_color = 'green')  AS green_count
+FROM injection_records
+GROUP BY TO_CHAR(injection_date, 'YYYY-MM')
+ORDER BY month_key;
+
+-- ─── ROW LEVEL SECURITY (แนะนำสำหรับ production) ──────────────
+-- เปิดใช้ RLS ถ้าต้องการ authentication:
+-- ALTER TABLE patients         ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE injection_records ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE home_visits       ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE settings          ENABLE ROW LEVEL SECURITY;
