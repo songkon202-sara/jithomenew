@@ -30,7 +30,6 @@ if (!$name || !$date) {
     exit;
 }
 
-// Validate date
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
     echo json_encode(['success' => false, 'error' => 'วันที่ไม่ถูกต้อง']);
     exit;
@@ -47,8 +46,10 @@ $intervalDays = parseInterval($interval);
 try {
     $db = getDB();
 
-    // Upsert patient
-    $db->prepare('INSERT IGNORE INTO patients (name, village) VALUES (?, ?)')->execute([$name, $village]);
+    // Upsert patient (PostgreSQL: ON CONFLICT DO NOTHING)
+    $db->prepare(
+        'INSERT INTO patients (name, village) VALUES (?, ?) ON CONFLICT (name) DO NOTHING'
+    )->execute([$name, $village]);
 
     $st = $db->prepare('SELECT id FROM patients WHERE name = ?');
     $st->execute([$name]);
@@ -62,14 +63,15 @@ try {
     // Update village if changed
     $db->prepare('UPDATE patients SET village = ? WHERE id = ?')->execute([$village, $patientId]);
 
-    // Insert record
+    // Insert record — RETURNING id for PostgreSQL
     $ins = $db->prepare(
         'INSERT INTO injection_records
            (patient_id, injection_date, group_color, group_label, interval_str, interval_days, note)
-         VALUES (?, ?, ?, ?, ?, ?, ?)'
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         RETURNING id'
     );
     $ins->execute([$patientId, $date, $groupColor, $groupLabel, $interval, $intervalDays, $note]);
-    $recordId = $db->lastInsertId();
+    $recordId = $ins->fetchColumn();
 
     echo json_encode([
         'success'    => true,

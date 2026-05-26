@@ -14,9 +14,14 @@ $allowed = ['hospital_name','alert_days','telegram_enabled','telegram_bot','tele
 
 try {
     $db = getDB();
-    $st = $db->prepare('INSERT INTO settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?');
+    // PostgreSQL: ON CONFLICT ... DO UPDATE (upsert)
+    $st = $db->prepare(
+        'INSERT INTO settings (setting_key, setting_value)
+         VALUES (?, ?)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value'
+    );
     foreach ($body as $k => $v) {
-        if (in_array($k, $allowed)) $st->execute([$k, $v, $v]);
+        if (in_array($k, $allowed)) $st->execute([$k, $v]);
     }
     echo json_encode(['success' => true]);
 } catch (PDOException $e) {
