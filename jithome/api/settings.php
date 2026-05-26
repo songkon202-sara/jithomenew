@@ -16,7 +16,7 @@ try {
     $db = getDB();
     // PostgreSQL: ON CONFLICT ... DO UPDATE (upsert)
     $st = $db->prepare(
-        'INSERT INTO settings (setting_key, setting_value)
+        'INSERT INTO app_settings (setting_key, setting_value)
          VALUES (?, ?)
          ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value'
     );

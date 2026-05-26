@@ -2,7 +2,7 @@
 // ─── Admin Page ────────────────────────────────────────────────
 $patients  = getAllPatients($db);
 $pNames    = getPatientNames($db);
-$settings  = $db->query('SELECT setting_key, setting_value FROM settings')->fetchAll(PDO::FETCH_KEY_PAIR);
+$settings  = $db->query('SELECT setting_key, setting_value FROM app_settings')->fetchAll(PDO::FETCH_KEY_PAIR);
 
 $total   = count($patients);
 $redC    = count(array_filter($patients, fn($p) => $p['group_color'] === 'red'));
