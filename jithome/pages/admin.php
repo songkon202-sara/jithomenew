@@ -102,7 +102,7 @@ $todayC  = count(array_filter($patients, fn($p) => (int)$p['days_until'] === 0))
   <!-- Notification settings -->
   <div class="form-section">
     <h3>⚙️ ตั้งค่าการแจ้งเตือน</h3>
-    <form method="POST" action="/jithome/api/settings.php" onsubmit="saveSettings(event)">
+    <form method="POST" action="/api/settings.php" onsubmit="saveSettings(event)">
       <div class="settings-row">
         <div><div class="settings-label">ชื่อโรงพยาบาล</div></div>
         <input name="hospital_name" value="<?= e($settings['hospital_name']??'รพ.สต.สองคอน') ?>" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'Sarabun',sans-serif;font-size:13px;width:160px">
@@ -131,7 +131,7 @@ $todayC  = count(array_filter($patients, fn($p) => (int)$p['days_until'] === 0))
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">นำเข้า/ส่งออก และเชื่อมข้อมูลกับระบบภายนอก</div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
-      <a href="/jithome/api/export.php?format=csv" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:10px;cursor:pointer;text-decoration:none">
+      <a href="/api/export.php?format=csv" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:10px;cursor:pointer;text-decoration:none">
         <div style="display:flex;align-items:center;gap:6px"><span style="font-size:18px">📥</span><span style="font-size:13px;font-weight:700;color:#059669">ส่งออกข้อมูล</span></div>
         <div style="font-size:10px;color:var(--text3)">CSV / JSON</div>
       </a>
@@ -231,7 +231,7 @@ async function saveRecord(e) {
   };
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
   try {
-    const r = await fetch('/jithome/api/records.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    const r = await fetch('/api/records.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     const j = await r.json();
     if (j.success) {
       btn.textContent = '✅ บันทึกสำเร็จ';
@@ -253,7 +253,7 @@ async function saveSettings(e) {
   obj.line_enabled     = fd.has('line_enabled') ? '1' : '0';
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
   try {
-    const r = await fetch('/jithome/api/settings.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(obj)});
+    const r = await fetch('/api/settings.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(obj)});
     const j = await r.json();
     btn.textContent = j.success ? '✅ บันทึกแล้ว' : '❌ ผิดพลาด';
     setTimeout(()=>{ btn.textContent='บันทึกการตั้งค่า'; btn.disabled=false; }, 2000);
@@ -263,6 +263,6 @@ async function saveSettings(e) {
 }
 
 async function toggleSetting(key, val) {
-  await fetch('/jithome/api/settings.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({[key]: val?'1':'0'})});
+  await fetch('/api/settings.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({[key]: val?'1':'0'})});
 }
 </script>

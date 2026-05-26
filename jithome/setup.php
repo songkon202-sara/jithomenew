@@ -428,7 +428,7 @@ button:hover{background:#065f7d}
       <h1>Setup สำเร็จ!</h1>
       <p style="margin:8px 0 0">ระบบ JitHome พร้อมใช้งานแล้ว</p>
       <?php foreach ($steps as $s): ?><div class="step"><?= htmlspecialchars($s) ?></div><?php endforeach; ?>
-      <a href="/jithome/">เข้าสู่ระบบ JitHome →</a>
+      <a href="/">เข้าสู่ระบบ JitHome →</a>
     </div>
   <?php else: ?>
     <h1>🏥 JitHome Setup</h1>
