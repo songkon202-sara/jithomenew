@@ -1,0 +1,1756 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>JitHome — ระบบติดตามผู้ป่วยจิตเวช</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#0a7ea4;--primary-dk:#065f7d;--primary-lt:#e8f6fb;
+  --bg:#f2f6f9;--card:#ffffff;--text:#1a2332;--text2:#4a5568;--text3:#8a9ab0;
+  --border:#e2eaf2;--shadow:0 1px 3px rgba(0,0,0,.07),0 2px 8px rgba(0,0,0,.05);
+  --shadow-lg:0 4px 16px rgba(0,0,0,.1),0 1px 4px rgba(0,0,0,.06);
+  --red:#dc2626;--red-lt:#fef2f2;--red-bd:#fecaca;
+  --yellow:#d97706;--yellow-lt:#fffbeb;--yellow-bd:#fde68a;
+  --green:#059669;--green-lt:#ecfdf5;--green-bd:#a7f3d0;
+  --radius:12px;--radius-sm:8px;
+}
+html,body{height:100%;background:var(--bg);font-family:'Sarabun',sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
+#root{height:100%;display:flex;flex-direction:column;max-width:480px;margin:0 auto;position:relative}
+@media(min-width:960px){
+  #root{max-width:100%;flex-direction:row}
+  .sidebar{display:flex!important;flex-direction:column;width:240px;min-height:100vh;background:var(--card);border-right:1px solid var(--border);padding:0;flex-shrink:0}
+  .sidebar-logo{padding:20px 20px 8px;border-bottom:1px solid var(--border);margin-bottom:8px}
+  .sidebar-nav{flex:1;padding:8px 12px}
+  .sidebar-nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer;font-size:14px;font-weight:500;color:var(--text2);transition:.15s;margin-bottom:2px}
+  .sidebar-nav-item:hover{background:var(--bg)}
+  .sidebar-nav-item.active{background:var(--primary-lt);color:var(--primary)}
+  .bottom-nav{display:none!important}
+  .app-main{flex:1;min-width:0;overflow-y:auto;height:100vh}
+  .app-header{position:sticky;top:0;z-index:10}
+}
+.app-header{background:var(--primary);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.header-title{font-size:17px;font-weight:700;letter-spacing:.3px}
+.header-sub{font-size:11px;opacity:.75;margin-top:1px}
+.header-right{display:flex;align-items:center;gap:10px}
+.notif-btn{position:relative;background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.notif-badge{position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--primary)}
+.avatar{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;cursor:pointer}
+.app-main{flex:1;overflow-y:auto;padding-bottom:80px}
+.bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:20;padding:8px 0 env(safe-area-inset-bottom,8px)}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;cursor:pointer;border:none;background:none;color:var(--text3);font-family:'Sarabun',sans-serif;font-size:10px;font-weight:500;transition:.15s}
+.nav-item.active{color:var(--primary)}
+.nav-item svg{width:22px;height:22px}
+.page{padding:16px}
+.page-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px}
+.page-sub{font-size:13px;color:var(--text3);margin-bottom:16px}
+/* Stat cards */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat-card{background:var(--card);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:4px}
+.stat-card.wide{grid-column:1/-1}
+.stat-num{font-size:26px;font-weight:800;line-height:1}
+.stat-label{font-size:12px;color:var(--text3);font-weight:600;white-space:normal;word-break:keep-all;line-height:1.4}
+.stat-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+/* Group badge */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge.red{background:var(--red-lt);color:var(--red);border:1px solid var(--red-bd)}
+.badge.yellow{background:var(--yellow-lt);color:var(--yellow);border:1px solid var(--yellow-bd)}
+.badge.green{background:var(--green-lt);color:var(--green);border:1px solid var(--green-bd)}
+.badge-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.badge.red .badge-dot{background:var(--red)}
+.badge.yellow .badge-dot{background:var(--yellow)}
+.badge.green .badge-dot{background:var(--green)}
+/* Patient card */
+.patient-card{background:var(--card);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);cursor:pointer;transition:.15s;margin-bottom:10px;border-left:4px solid transparent}
+.patient-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-1px)}
+.patient-card.red{border-left-color:var(--red)}
+.patient-card.yellow{border-left-color:var(--yellow)}
+.patient-card.green{border-left-color:var(--green)}
+.patient-card.overdue{background:var(--red-lt)}
+.pc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
+.pc-name{font-size:15px;font-weight:600;line-height:1.2}
+.pc-village{font-size:12px;color:var(--text3);margin-top:2px}
+.pc-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pc-date{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px}
+.pc-note{font-size:12px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Days indicator */
+.days-chip{padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.days-chip.today{background:#0a7ea4;color:#fff}
+.days-chip.soon{background:#fef3c7;color:#92400e}
+.days-chip.upcoming{background:#d1fae5;color:#065f46}
+.days-chip.overdue{background:#fee2e2;color:#991b1b}
+/* Section header */
+.section-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;margin-top:4px}
+.section-hd h3{font-size:14px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.section-hd .see-all{font-size:12px;color:var(--primary);font-weight:600;cursor:pointer;border:none;background:none;padding:0}
+/* Today strip */
+.today-strip{background:linear-gradient(135deg,#0a7ea4,#065f7d);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;color:#fff}
+.today-strip h2{font-size:22px;font-weight:700}
+.today-strip p{font-size:13px;opacity:.8;margin-top:2px}
+.today-count{font-size:13px;background:rgba(255,255,255,.2);display:inline-block;padding:3px 10px;border-radius:20px;margin-top:8px;font-weight:600}
+/* Timeline */
+.tl-date-hd{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:8px}
+.tl-date-hd.today-hd{color:var(--primary)}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+@media(min-width:480px){.modal-overlay{align-items:center}}
+.modal-sheet{background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;padding:20px}
+@media(min-width:480px){.modal-sheet{border-radius:var(--radius);max-height:80vh}}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
+.modal-name{font-size:20px;font-weight:700;margin-bottom:4px}
+.modal-village{font-size:14px;color:var(--text3);margin-bottom:12px}
+.history-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.history-item:last-child{border-bottom:none}
+.history-dot{width:10px;height:10px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.history-date{font-size:13px;font-weight:600;color:var(--text)}
+.history-note{font-size:12px;color:var(--text3);margin-top:2px}
+/* Search */
+.search-wrap{position:relative;margin-bottom:12px}
+.search-wrap input{width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:'Sarabun',sans-serif;font-size:14px;background:var(--card);outline:none;color:var(--text);transition:.15s}
+.search-wrap input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(10,126,164,.1)}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3)}
+/* Filter chips */
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.filter-chip{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--text2);transition:.15s;font-family:'Sarabun',sans-serif}
+.filter-chip:hover{border-color:var(--primary);color:var(--primary)}
+.filter-chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.filter-chip.red.active{background:var(--red);border-color:var(--red)}
+.filter-chip.yellow.active{background:var(--yellow);border-color:var(--yellow)}
+.filter-chip.green.active{background:var(--green);border-color:var(--green)}
+/* Admin form */
+.form-section{background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px}
+.form-section h3{font-size:15px;font-weight:700;margin-bottom:14px;color:var(--text)}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:'Sarabun',sans-serif;font-size:14px;color:var(--text);outline:none;transition:.15s;background:var(--card)}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(10,126,164,.1)}
+.btn{padding:11px 20px;border-radius:var(--radius-sm);font-family:'Sarabun',sans-serif;font-size:14px;font-weight:700;cursor:pointer;border:none;transition:.15s}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dk)}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text2)}
+.btn-block{width:100%}
+/* Settings row */
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
+.settings-row:last-child{border-bottom:none}
+.settings-label{font-size:14px;font-weight:500}
+.settings-val{font-size:13px;color:var(--text3)}
+/* Empty */
+.empty{text-align:center;padding:40px 20px;color:var(--text3)}
+.empty svg{width:48px;height:48px;margin:0 auto 12px;display:block;opacity:.4}
+/* Tweaks panel */
+.tweaks-panel{position:fixed;bottom:90px;right:16px;z-index:40;background:var(--card);border-radius:var(--radius);padding:16px;width:240px;box-shadow:var(--shadow-lg);border:1px solid var(--border)}
+@media(min-width:960px){.tweaks-panel{bottom:20px}}
+.tweaks-title{font-size:13px;font-weight:700;margin-bottom:12px;color:var(--text);display:flex;justify-content:space-between;align-items:center}
+.tweak-row{margin-bottom:10px}
+.tweak-row label{font-size:11px;font-weight:600;color:var(--text3);display:block;margin-bottom:4px}
+.tweak-row select,.tweak-row input{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:'Sarabun',sans-serif;font-size:12px;color:var(--text);background:var(--card)}
+/* toggle */
+.toggle{position:relative;width:40px;height:22px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-slider{position:absolute;inset:0;background:#d1d5db;border-radius:11px;cursor:pointer;transition:.2s}
+.toggle-slider::before{content:'';position:absolute;width:18px;height:18px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle input:checked+.toggle-slider{background:var(--primary)}
+.toggle input:checked+.toggle-slider::before{transform:translateX(18px)}
+/* Sidebar (desktop) */
+.sidebar{display:none}
+/* Bottom nav scrollable for 6 items */
+.bottom-nav{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.bottom-nav::-webkit-scrollbar{display:none}
+.nav-item{min-width:64px}
+/* Tab switcher */
+.tab-bar{display:flex;background:var(--bg);border-radius:10px;padding:3px;margin-bottom:16px}
+.tab-btn{flex:1;padding:8px 4px;border:none;background:none;border-radius:8px;font-family:'Sarabun',sans-serif;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer;transition:.15s}
+.tab-btn.active{background:var(--card);color:var(--primary);box-shadow:var(--shadow)}
+/* Visit card */
+.visit-card{background:var(--card);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);margin-bottom:10px;border-left:4px solid var(--primary)}
+.visit-card.aosomo{border-left-color:#7c3aed}
+/* Checklist */
+.check-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.check-item:last-child{border-bottom:none}
+.check-box{width:20px;height:20px;border-radius:5px;border:2px solid #94a3b8;background:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.check-box:hover{border-color:var(--primary)}
+.check-box.checked{background:var(--primary);border-color:var(--primary)}
+.check-box.checked svg{display:block}
+.check-box svg{display:none;width:12px;height:12px;stroke:#fff;stroke-width:3}
+.check-label{font-size:13px;color:var(--text);flex:1;line-height:1.45;word-break:keep-all;overflow-wrap:break-word}
+/* Score badge */
+.score-badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700}
+/* Scroll reveal */
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp .2s ease both}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// ─── RAW DATA ───────────────────────────────────────────────
+const RAW = [
+[45905,"สีเหลือง","นายอุทัย แสงงาม","หมู่ 5","3 สัปดาห์",""],
+[45792,"สีแดง","นายอุุดร ไชยพันโท","หมู่ 9","4สัปดาห์",""],
+[45819,"สีแดง","นายสุรชัย พิมพ์สอน","หมู่ 6","4สัปดาห์",""],
+[45817,"สีเขียว","นางไสว ไชยพันโท","หมู่ 9","4สัปดาห์","ไม่มา"],
+[45798,"สีแดง","นายอุทัย แสงงาม","หมู่ 5","4สัปดาห์",""],
+[45810,"สีแดง","นายอุุดร ไชยพันโท","หมู่ 9","4สัปดาห์",""],
+[45821,"สีเขียว","นายนันทโก คุณพาที","หมู่ 1","4สัปดาห์",""],
+[45761,"สีแดง","นายศักดา เรืองสา","หมู่ 8","3สัปดาห์","ไม่มา"],
+[45802,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","4สัปดาห์","มา"],
+[45626,"สีเหลือง","นายนันทวุฒิ จันทชารี","หมู่ 1","4สัปดาห์","ไม่ยาฉีด/cosult"],
+[45834,"สีเขียว","นายอรรถพงษ์ วงษายะ","หมู่ 1","4สัปดาห์",""],
+[45804,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","4สัปดาห์",""],
+[45798,"สีเหลือง","นายก้องเกียรติ อู่แก้ว","หมู่ 3","4สัปดาห์","มา"],
+[45804,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","4สัปดาห์",""],
+[45811,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","4สัปดาห์",""],
+[45802,"สีเหลือง","นางโกศรี สีดาแก้ว","หมู่ 5","4สัปดาห์","มา"],
+[45788,"สีเหลือง","นายสิทธิโชค สายใจ","หมู่ 5","4สัปดาห์","ไม่มา"],
+[45805,"สีเหลือง","นายอาทิตย์ วงศ์ชาลี","หมู่ 7","4สัปดาห์",""],
+[45784,"สีแดง","นายสุวัจน์ ศรีประเสริฐ","หมู่ 8","4สัปดาห์","ไม่มา"],
+[45823,"สีเหลือง","นายบัวพา สุวรรณรมย์","หมู่ 4","4สัปดาห์",""],
+[45829,"สีเขียว","นายก้องเกียรติ อู่แก้ว","หมู่ 3","4สัปดาห์","มา"],
+[45831,"สีแดง","นางสาวสุดาพร แก้วงาม","หมู่ 1","4สัปดาห์",""],
+[45812,"สีแดง","นายอุุดร ไชยพันโท","หมู่ 9",null,"ฉีดยา Invega 100 mg inj."],
+[45833,"สีเหลือง","นางโกศรี สีดาแก้ว","หมู่ 5","4สัปดาห์",""],
+[45834,"สีเหลือง","นายสมเด็จ ไชยพันโท","หมู่ 7","4สัปดาห์",""],
+[45833,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","4สัปดาห์",""],
+[45835,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","4สัปดาห์",""],
+[45820,"สีแดง","นายสิทธิโชค สายใจ","หมู่ 5","2สัปดาห์","มียา DEPO-A ฉีด ทุก 3 เดือน"],
+[45837,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","4สัปดาห์",""],
+[45841,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","4สัปดาห์",""],
+[45836,"สีเหลือง","นายวิชาญ สีดาแก้ว","หมู่ 5","4สัปดาห์",""],
+[45833,"สีแดง","นายอุทัย แสงงาม","หมู่ 5","3สัปดาห์","เผาเสื้อผ้า มียา DEPO-A ฉีด ทุก 3 เดือน"],
+[45818,"สีแดง","นายศักดา เรืองสา","หมู่ 8","4สัปดาห์",""],
+[45842,"สีแดง","นายอุุดร ไชยพันโท","หมู่ 9","4สัปดาห์","ฉีดยา Invega 100 mg inj."],
+[45842,"สีแดง","นายสุวัจน์ ศรีประเสริฐ","หมู่ 8","4สัปดาห์","ฉีดยา 4 มิ.ย 68"],
+[45842,"สีเหลือง","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 3","4สัปดาห์","ฉีดยา 4 มิ.ย 68"],
+[45846,"สีแดง","นายสุรชัย พิมพ์สอน","หมู่ 6","4สัปดาห์","มียา DEPO-A ฉีด ทุก 3 เดือน"],
+[45848,"สีเหลือง","นายศักดา เรืองสา","หมู่ 8","4สัปดาห์",""],
+[45866,"สีเขียว","นายอาทิตย์ วงศ์ชาลี","หมู่ 7","4สัปดาห์",""],
+[45884,"สีแดง","นายอุุดร ไชยพันโท","หมู่ 9","3 เดือน","มียา DEPO-A ฉีด ทุก 3 เดือน"],
+[45851,"สีเหลือง","นายนันทโก คุณพาที","หมู่ 1","4สัปดาห์",""],
+[45853,"สีเหลือง","นายบัวพา สุวรรณรมย์","หมู่ 4","4สัปดาห์",""],
+[45839,"สีแดง","นายสิทธิโชค สายใจ","หมู่ 5","2สัปดาห์",""],
+[45859,"สีเขียว","นายก้องเกียรติ อู่แก้ว","หมู่ 3","4สัปดาห์",""],
+[45859,"สีเหลือง","นางสาวสุดาพร แก้วงาม","หมู่ 1","4สัปดาห์",""],
+[45863,"สีเหลือง","นางสาวโกศรี สีดาแก้ว","หมู่ 5","4สัปดาห์",""],
+[45863,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","4สัปดาห์",""],
+[45864,"สีเหลือง","นายอรรถพงษ์ วงษายะ","หมู่ 1","4สัปดาห์",""],
+[45865,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","4สัปดาห์",""],
+[45866,"สีเหลือง","นายอาทิตย์ วงศ์ชาลี","หมู่ 7","4สัปดาห์",""],
+[45866,"สีเหลือง","นายวิชาญ สีดาแก้ว","หมู่ 5","4สัปดาห์",""],
+[45898,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","4สัปดาห์",""],
+[45873,"สีเหลือง","นายอุุดร ไชยพันโท","หมู่ 9","4สัปดาห์","อาการคุ้มคลั่ง ตำรวจนำส่ง รพ.โพธิ์ไทร"],
+[45863,"สีแดง","นายสุวัจน์ ศรีประเสริฐ","หมู่ 8","4สัปดาห์",""],
+[45872,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","4สัปดาห์",""],
+[45873,"สีเหลือง","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 3","4สัปดาห์",""],
+[45874,"สีเหลือง","นายศักดา เรืองสา","หมู่ 8","4สัปดาห์",""],
+[45877,"สีแดง","นายสุรชัย พิมพ์สอน","หมู่ 6","4สัปดาห์","มียา DEPO-A ฉีด 8 ก.ค.68 ทุก 3 เดือน"],
+[45882,"สีเขียว","นายนันทโก คุณพาที","หมู่ 9","4สัปดาห์",""],
+[45884,"สีเขียว","นายบัวพา สุวรรณรมย์","หมู่ 4","4สัปดาห์",""],
+[45885,"สีเขียว","นายก้องเกียรติ อู่แก้ว","หมู่ 3","4สัปดาห์",""],
+[45892,"สีเหลือง","นางสาวสุดาพร แก้วงาม","หมู่ 1","4สัปดาห์",""],
+[45894,"สีเหลือง","นางสาวโกศรี สีดาแก้ว","หมู่ 5","4สัปดาห์",""],
+[45894,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","4สัปดาห์",""],
+[45895,"สีเหลือง","นายอรรถพงษ์ วงษายะ","หมู่ 1","4สัปดาห์",""],
+[45898,"สีเขียว","นายอาทิตย์ วงศ์ชาลี","หมู่ 7","4สัปดาห์",""],
+[45901,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","4สัปดาห์",""],
+[45903,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","4สัปดาห์",""],
+[45904,"สีเขียว","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 2","4สัปดาห์",""],
+[45913,"สีเขียว","นายนันทโก คุณพาที","หมู่ 1","4สัปดาห์",""],
+[45883,"สีแดง","นายอุทัย แสงงาม","หมู่ 5","3สัปดาห","มา จาก รพ.พระศรี"],
+[45894,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","4สัปดาห์",""],
+[45913,"สีแดง","นายศักดา เรืองสา","หมู่ 8","4สัปดาห์",""],
+[45908,"สีแดง","นายสุรชัย พิมพ์สอน","หมู่ 6","4สัปดาห์",""],
+[45883,"สีแดง","นายสิทธิโชค สายใจ","หมู่ 5","3สัปดาห์","DMPA"],
+[45904,"สีแดง","นายสิทธิโชค สายใจ","หมู่ 5","3สัปดาห์",""],
+[45904,"สีแดง","นายอุทัย แสงงาม","หมู่ 5","3สัปดาห",""],
+[45915,"สีเหลือง","นายบัวพา สุวรรณรมย์","หมู่ 4","4สัปดาห์",""],
+[45913,"สีเหลือง","นายก้องเกียรติ อู่แก้ว","หมู่ 3","4สัปดาห์",""],
+[45926,"สีเหลือง","นายอรรถพงษ์ วงษายะ","หมู่ 1","4สัปดาห์",""],
+[45928,"สีเหลือง","นายวิชาญ สีดาแก้ว","หมู่ 5","4สัปดาห์",""],
+[45928,"สีเหลือง","นายอาทิตย์ วงศ์ชาลี","หมู่ 7","4สัปดาห์",""],
+[45930,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","4สัปดาห์",""],
+[45931,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","4สัปดาห์",""],
+[45903,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","4สัปดาห์",""],
+[45933,"สีแดง","นายศักดา เรืองสา","หมู่ 8","4สัปดาห์",""],
+[45933,"สีเหลือง","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 5","4สัปดาห์",""],
+[45905,"สีเขียว","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 2","4สัปดาห์",""],
+[45929,"สีแดง","นายอุทัย แสงงาม","หมู่ 5","3 สัปดาห์",""],
+[45922,"สีเหลือง","นายสิทธิโชค สายใจ","หมู่ 5","3สัปดาห์",""],
+[45941,"สีเหลือง","นายก้องเกียรติ อู่แก้ว","หมู่ 3","4สัปดาห์",""],
+[45944,"สีแดง","นายสุรชัย พิมพ์สอน","หมู่ 6","1 เดือน",""],
+[45945,"สีเหลือง","นายบัวพา สุวรรณรมย์","หมู่ 4","1 เดือน",""],
+[45955,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","1 เดือน",""],
+[45955,"สีเหลือง","นางโกศรี สีดาแก้ว","หมู่ 2","1 เดือน",""],
+[45955,"สีแดง","นายสุวัจน์ ศรีประเสริฐ","หมู่ 8","1 เดือน",""],
+[45956,"สีเหลือง","นายอรรถพงษ์ วงษายะ","หมู่ 1","1 เดือน",""],
+[45958,"สีเหลือง","นายอาทิตย์ วงศ์ชาลี","หมู่ 7","1 เดือน",""],
+[45959,"สีเหลือง","นายวิชาญ สีดาแก้ว","หมู่ 5","1 เดือน",""],
+[45960,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","1 เดือน",""],
+[45951,"สีแดง","นายสิทธิโชค สายใจ","หมู่ 5","3 สัปดาห์",""],
+[45951,"สีแดง","นายอุทัย แสงงาม","หมู่ 5","3 สัปดาห์",""],
+[45962,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","1 เดือน",""],
+[45964,"สีเขียว","นายแพว กุลสิริ","หมู่ 4","1 เดือน",""],
+[45964,"สีเหลือง","นางเฟื้องฟ้า อัปกาญจน์","หมู่ 6","1 เดือน",""],
+[45964,"สีเหลือง","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 2","1 เดือน",""],
+[45964,"สีเหลือง","นายศักดา เรืองสา","หมู่ 8","4สัปดาห์",""],
+[45971,"สีเหลือง","นายก้องเกียรติ อู่แก้ว","หมู่ 3","4สัปดาห์",""],
+[45974,"สีเหลือง","นายนันทโก คุณพาที","หมู่ 1","1 เดือน",""],
+[45980,"สีแดง","นายสุรชัย พิมพ์สอน","หมู่ 6","1 เดือน",""],
+[45984,"สีเหลือง","นางสาวสุดาพร แก้วงาม","หมู่ 1","1 เดือน",""],
+[45975,"สีแดง","นายสิทธิโชค สายใจ","หมู่ 5","3สัปดาห์",""],
+[45975,"สีแดง","นายอุทัย แสงงาม","หมู่ 5","3สัปดาห์",""],
+[45986,"สีเหลือง","นายสุวัจน์ ศรีประเสริฐ","หมู่ 8","1 เดือน",""],
+[45991,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","1 เดือน",""],
+[45989,"สีเหลือง","นายอาทิตย์ วงศ์ชาลี","หมู่ 7","1 เดือน",""],
+[45987,"สีเหลือง","นายอรรถพงษ์ วงษายะ","หมู่ 1","1 เดือน",""],
+[45990,"สีเหลือง","นายวิชาญ สีดาแก้ว","หมู่ 5","1 เดือน",""],
+[45992,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","1 เดือน",""],
+[45994,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","1 เดือน",""],
+[45994,"สีเหลือง","นางเฟื้องฟ้า อัปกาญจน์","หมู่ 6","1 เดือน",""],
+[45994,"สีเขียว","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 2","1 เดือน",""],
+[45999,"สีเหลือง","นายก้องเกียรติ อู่แก้ว","หมู่ 3","1 เดือน",""],
+[45996,"สีแดง","นายอุทัย แสงงาม","หมู่ 5","3 สัปดาห์",""],
+[45996,"สีแดง","นายสิทธิโชค สายใจ","หมู่ 5","3 สัปดาห์",""],
+[45996,"สีแดง","นายศักดา เรืองสา","หมู่ 8","4สัปดาห์",""],
+[46004,"สีเหลือง","นายนันทโก คุณพาที","หมู่ 1","1 เดือน",""],
+[46010,"สีแดง","นายสุรชัย พิมพ์สอน","หมู่ 6","1 เดือน",""],
+[46014,"สีเหลือง","นางสาวสุดาพร แก้วงาม","หมู่ 1","1 เดือน",""],
+[46016,"สีเขียว","นางโกศรี สีดาแก้ว","หมู่ 2","1 เดือน",""],
+[46015,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","1 เดือน",""],
+[46017,"สีเหลือง","นายอรรถพงษ์ วงษายะ","หมู่ 1","1 เดือน",""],
+[46021,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","1 เดือน",""],
+[46025,"สีเหลือง","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 3","1 เดือน",""],
+[46025,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","1 เดือน",""],
+[46030,"สีเหลือง","นายก้องเกียรติ อู่แก้ว","หมู่ 3","1 เดือน",""],
+[46018,"สีแดง","นายอุทัย แสงงาม","หมู่ 5","3 สัปดาห์",""],
+[46018,"สีแดง","นายสิทธิโชค สายใจ","หมู่ 5","3 สัปดาห์",""],
+[46023,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","1 เดือน",""],
+[46035,"สีเหลือง","นายนันทโก คุณพาที","หมู่ 1","1 เดือน",""],
+[46045,"สีแดง","นายสุรชัย พิมพ์สอน","หมู่ 6","1 เดือน",""],
+[46047,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","1 เดือน",""],
+[46055,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","4สัปดาห์",""],
+[46057,"สีเหลือง","นายสมเด็จ ไชยพันโท","หมู่ 7","4สัปดาห์",""],
+[46081,"สีเขียว","นายวิชาญ สีดาแก้ว","หมู่ 5","1 เดือน",""],
+[46078,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","1 เดือน",""],
+[46078,"สีเหลือง","นางสาวโกศรี สีดาแก้ว","หมู่ 2","1 เดือน",""],
+[46078,"สีเหลือง","นายสุวัจน์ ศรีประเสริฐ","หมู่ 8","1 เดือน",""],
+[46081,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","1 เดือน",""],
+[46080,"สีเหลือง","นายอรรถพงษ์ วงษายะ","หมู่ 1","1 เดือน",""],
+[46082,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","1 เดือน",""],
+[46084,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","1 เดือน",""],
+[46084,"สีเหลือง","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 3","1 เดือน",""],
+[46083,"สีเขียว","นายโพธิ์ไทร สิงหาปันยา","หมู่ 1","1 เดือน","FLUPENTIXOL INJ. 40MG/2ML"],
+[46106,"สีเขียว","นางสาวโกศรี สีดาแก้ว","หมู่ 2","1 เดือน",""],
+[46106,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","1 เดือน",""],
+[46104,"สีเขียว","นางสาวสุดาพร แก้วงาม","หมู่ 1","1 เดือน",""],
+[46106,"สีเขียว","นายสุวัจน์ ศรีประเสริฐ","หมู่ 8","1 เดือน",""],
+[46096,"สีเขียว","นายบัวพา สุวรรณรมย์","หมู่ 4","1 เดือน",""],
+[46090,"สีเขียว","นายวิชาญ สีดาแก้ว","หมู่ 5","1 เดือน",""],
+[46106,"สีเขียว","พระนันทโก คุณพาที","หมู่ 1","1 เดือน",""],
+[46115,"สีเขียว","พระนันทรักษ์ ศรีวงศ์ษา","หมู่ 2","1 เดือน",""],
+[46115,"สีเขียว","นายคำหล้า ขันตะคุต","หมู่ 1","1 เดือน",""],
+[46115,"สีเขียว","นายอรรถพงษ์ วงษายะ","หมู่ 1","1 เดือน",""],
+[46115,"สีเขียว","นายก้องเกียรติ อู่แก้ว","หมู่ 3","1 เดือน",""],
+[46084,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","1 เดือน",""],
+[46109,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","1 เดือน",""],
+[46120,"สีเหลือง","นายวิชาญ สีดาแก้ว","หมู่ 5","1 เดือน",""],
+[46131,"สีเหลือง","นายสุรชัย พิมพ์สอน","หมู่ 6","1 เดือน",""],
+[46132,"สีเหลือง","นายก้องเกียรติ อู่แก้ว","หมู่ 3","4สัปดาห์",""],
+[46137,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","1 เดือน",""],
+[46137,"สีเหลือง","นางโกศรี สีดาแก้ว","หมู่ 5","1 เดือน",""],
+[46137,"สีเหลือง","พระนันทโก คุณพาที","หมู่ 1","1 เดือน",""],
+[46137,"สีเขียว","นายสุวัจน์ ศรีประเสริฐ","หมู่ 8","1 เดือน",""],
+[46137,"สีเขียว","นายศักดา เรืองสา","หมู่ 8","1 เดือน",""],
+[46138,"สีแดง","นายอุดร ไชยพันโท","หมู่ 9","1 เดือน",""],
+[46140,"สีเหลือง","นายสีทา จันทะชารี","หมู่ 4","1 เดือน",""],
+[46142,"สีเหลือง","นายโพธิ์ไทร สิงหาปันยา","หมู่ 1","4สัปดาห์",""],
+[46144,"สีเหลือง","นายคำหล้า ขันตะคุต","หมู่ 1","1 เดือน",""],
+[46145,"สีเหลือง","นายแพว กุลสิริ","หมู่ 4","1 เดือน",""],
+[46150,"สีเหลือง","นายวิชาญ สีดาแก้ว","หมู่ 5","1 เดือน",""],
+[46157,"สีเหลือง","นายบัวพา สุวรรณรมย์","หมู่ 4","1 เดือน",""],
+[46161,"สีเหลือง","นายสุรชัย พิมพ์สอน","หมู่ 6","1 เดือน",""],
+[46160,"สีเหลือง","นายก้องเกียรติ อู่แก้ว","หมู่ 3","4สัปดาห์",""],
+[46165,"สีเขียว","นางสาวสุดาพร แก้วงาม","หมู่ 1","1 เดือน",""],
+[46167,"สีเหลือง","นายวีรชัย บัวถา","หมู่ 1","1 เดือน",""],
+];
+
+// ─── DATA PROCESSING ────────────────────────────────────────
+function excelToDate(s){return new Date((s-25569)*86400*1000);}
+function parseGroup(g){
+  if(g.includes('สีแดง'))return'red';
+  if(g.includes('สีเหลือง'))return'yellow';
+  if(g.includes('สีเขียว'))return'green';
+  return'yellow';
+}
+function parseInterval(s){
+  if(!s)return 30;
+  if(/3\s*เดือน/.test(s))return 90;
+  if(/1\s*เดือน/.test(s))return 30;
+  if(/4\s*สัปดาห์?/.test(s))return 28;
+  if(/3\s*สัปดาห์?/.test(s))return 21;
+  if(/2\s*สัปดาห์?/.test(s))return 14;
+  return 30;
+}
+function thDate(d){
+  if(!d)return'';
+  const day=d.getUTCDate(),m=d.getUTCMonth(),y=d.getUTCFullYear()+543;
+  const months=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return `${day} ${months[m]} ${y}`;
+}
+function thDateFull(d){
+  if(!d)return'';
+  const day=d.getUTCDate(),m=d.getUTCMonth(),y=d.getUTCFullYear()+543;
+  const months=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  return `${day} ${months[m]} ${y}`;
+}
+
+const records = RAW.map((r,i)=>({
+  idx:i, serial:r[0], date:excelToDate(r[0]),
+  groupLabel:r[1], group:parseGroup(r[1]),
+  name:r[2], village:r[3]||'', intervalStr:r[4]||'',
+  interval:parseInterval(r[4]), note:r[5]||''
+}));
+
+// Build patient map from ALL records, latest serial per name
+const pMap={};
+records.forEach(r=>{
+  if(!r.name||r.name==='ทดสอบ')return;
+  if(!pMap[r.name]||r.serial>pMap[r.name].serial){
+    pMap[r.name]={...r};
+  }
+});
+
+const TODAY_SERIAL=46137; // April 25, 2026
+const TODAY=excelToDate(TODAY_SERIAL);
+
+function dateOnly(d){return new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()));}
+function diffDays(a,b){return Math.round((dateOnly(a)-dateOnly(b))/(86400*1000));}
+
+// For each patient build nextDate = lastDate + interval
+let allPatients = Object.values(pMap).map((p,i)=>{
+  const nextDate = new Date(p.date.getTime()+p.interval*86400*1000);
+  const history = records.filter(r=>r.name===p.name).sort((a,b)=>b.serial-a.serial);
+  const daysUntil = diffDays(nextDate, TODAY);
+  return {...p, id:i, nextDate, daysUntil, history};
+}).sort((a,b)=>a.daysUntil-b.daysUntil);
+
+// ─── HELPERS ────────────────────────────────────────────────
+function daysChip(d){
+  if(d<0)return{cls:'overdue',label:`เกินนัด ${Math.abs(d)} วัน`};
+  if(d===0)return{cls:'today',label:'วันนี้'};
+  if(d<=3)return{cls:'soon',label:`อีก ${d} วัน`};
+  return{cls:'upcoming',label:`อีก ${d} วัน`};
+}
+function groupColor(g){
+  if(g==='red')return'red';
+  if(g==='yellow')return'yellow';
+  return'green';
+}
+function groupLabel(g){
+  if(g==='red')return'กลุ่มสีแดง';
+  if(g==='yellow')return'กลุ่มสีเหลือง';
+  return'กลุ่มสีเขียว';
+}
+
+// SVG icons
+const Icons={
+  home:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  users:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>,
+  calendar:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  settings:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+  bell:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,
+  search:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+  x:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  chevron:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>,
+  syringe:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 2l4 4-1 1-4-4z"/><path d="M15.5 4.5l4 4"/><path d="M14 6l-9 9 1 4 4 1 9-9z"/><path d="M5 19l-3 3"/></svg>,
+  plus:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  check:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>,
+  alert:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><triangle points="10.29 3.86 1.82 18 22.18 18 10.29 3.86"/><path d="M10.29 3.86L1.82 18h20.36zM12 9v4M12 17h.01"/></svg>,
+  map:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>,
+  chart:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
+  house:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  clipboard:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>,
+  tweak:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg>,
+};
+
+// ─── PATIENT MODAL ───────────────────────────────────────────
+function PatientModal({patient,onClose,onRecorded}){
+  const [showForm,setShowForm]=useState(false);
+  const [formDate,setFormDate]=useState('');
+  const [formNote,setFormNote]=useState('');
+  const [formInterval,setFormInterval]=useState(patient.intervalStr||'1 เดือน');
+  const chip=daysChip(patient.daysUntil);
+  return(
+    <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="modal-sheet fade-up">
+        <div className="modal-handle"/>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:12}}>
+          <div>
+            <div className="modal-name">{patient.name}</div>
+            <div className="modal-village">{patient.village} · รพ.สต.สองคอน</div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text3)',padding:4}}>{Icons.x}</button>
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
+          <span className={`badge ${groupColor(patient.group)}`}><span className="badge-dot"/>{groupLabel(patient.group)}</span>
+          <span className={`days-chip ${chip.cls}`}>{chip.label}</span>
+        </div>
+        <div style={{background:'var(--bg)',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+          <div style={{fontSize:12,color:'var(--text3)',marginBottom:2}}>วันนัดครั้งต่อไป</div>
+          <div style={{fontSize:16,fontWeight:700,color:'var(--primary)'}}>{thDateFull(patient.nextDate)}</div>
+          <div style={{fontSize:12,color:'var(--text3)',marginTop:2}}>รอบการฉีดยา: {patient.intervalStr||'1 เดือน'}</div>
+        </div>
+        {patient.note&&<div style={{background:'var(--yellow-lt)',border:'1px solid var(--yellow-bd)',borderRadius:8,padding:'8px 12px',marginBottom:16,fontSize:12,color:'#92400e'}}>📋 {patient.note}</div>}
+
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div style={{fontSize:13,fontWeight:700,color:'var(--text)'}}>ประวัติการฉีดยา ({patient.history.length} ครั้ง)</div>
+          <button onClick={()=>setShowForm(!showForm)} style={{background:'var(--primary)',color:'#fff',border:'none',borderRadius:6,padding:'5px 10px',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
+            <span style={{width:14,height:14,display:'inline-flex'}}>{Icons.plus}</span> บันทึก
+          </button>
+        </div>
+
+        {showForm&&(
+          <div style={{background:'var(--primary-lt)',borderRadius:10,padding:14,marginBottom:12,border:'1px solid rgba(10,126,164,.2)'}}>
+            <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:'var(--primary)'}}>บันทึกการฉีดยา</div>
+            <div className="form-group">
+              <label>วันที่ฉีดยา</label>
+              <input type="date" value={formDate} onChange={e=>setFormDate(e.target.value)}/>
+            </div>
+            <div className="form-group">
+              <label>รอบนัดต่อไป</label>
+              <select value={formInterval} onChange={e=>setFormInterval(e.target.value)}>
+                <option>2สัปดาห์</option><option>3 สัปดาห์</option>
+                <option>4สัปดาห์</option><option>1 เดือน</option><option>3 เดือน</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>หมายเหตุ</label>
+              <input type="text" value={formNote} onChange={e=>setFormNote(e.target.value)} placeholder="ผลการฉีดยา, อาการ..."/>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button className="btn btn-primary" style={{flex:1}} onClick={()=>{
+                if(formDate){onRecorded&&onRecorded(patient,formDate,formInterval,formNote);setShowForm(false);}
+              }}>บันทึก</button>
+              <button className="btn btn-outline" onClick={()=>setShowForm(false)}>ยกเลิก</button>
+            </div>
+          </div>
+        )}
+
+        <div>
+          {patient.history.slice(0,8).map((h,i)=>{
+            const isLast=i===0;
+            return(
+              <div key={h.idx} className="history-item">
+                <div className={`history-dot`} style={{background:isLast?'var(--primary)':'var(--border)',marginTop:5}}/>
+                <div>
+                  <div className="history-date">{thDate(h.date)} {isLast&&<span style={{fontSize:10,background:'var(--primary-lt)',color:'var(--primary)',padding:'1px 6px',borderRadius:4,fontWeight:700,marginLeft:4}}>ล่าสุด</span>}</div>
+                  <div style={{fontSize:11,color:'var(--text3)',marginTop:1}}>{h.groupLabel} · {h.intervalStr}</div>
+                  {h.note&&<div className="history-note" style={{maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{h.note}</div>}
+                </div>
+              </div>
+            );
+          })}
+          {patient.history.length>8&&<div style={{fontSize:12,color:'var(--text3)',textAlign:'center',paddingTop:8}}>+ {patient.history.length-8} รายการก่อนหน้า</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PATIENT CARD ─────────────────────────────────────────────
+function PatientCard({p,onClick}){
+  const chip=daysChip(p.daysUntil);
+  const isOverdue=p.daysUntil<0;
+  return(
+    <div className={`patient-card ${groupColor(p.group)} ${isOverdue?'overdue':''} fade-up`} onClick={()=>onClick(p)}>
+      <div className="pc-top">
+        <div>
+          <div className="pc-name">{p.name}</div>
+          <div className="pc-village">{p.village}</div>
+        </div>
+        <span className={`days-chip ${chip.cls}`}>{chip.label}</span>
+      </div>
+      <div className="pc-meta">
+        <span className={`badge ${groupColor(p.group)}`}><span className="badge-dot"/>{groupLabel(p.group)}</span>
+        <span className="pc-date" style={{fontSize:12,color:'var(--text3)'}}>
+          <span style={{width:12,height:12,display:'inline-flex'}}>{Icons.syringe}</span>
+          นัด {thDate(p.nextDate)}
+        </span>
+      </div>
+      {p.note&&<div className="pc-note">{p.note}</div>}
+    </div>
+  );
+}
+
+// ─── DASHBOARD PAGE ───────────────────────────────────────────
+function DashboardPage({patients,onSelectPatient,onSelectPage}){
+  const today=patients.filter(p=>p.daysUntil===0);
+  const overdue=patients.filter(p=>p.daysUntil<0);
+  const soon=patients.filter(p=>p.daysUntil>0&&p.daysUntil<=7);
+  const redCount=patients.filter(p=>p.group==='red').length;
+  const yellowCount=patients.filter(p=>p.group==='yellow').length;
+  const greenCount=patients.filter(p=>p.group==='green').length;
+  const thDayName=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+  const todayLabel=`วัน${thDayName[TODAY.getUTCDay()]}ที่ ${thDateFull(TODAY)}`;
+
+  return(
+    <div className="page">
+      <div className="today-strip">
+        <div style={{fontSize:11,opacity:.75,marginBottom:4,fontWeight:600,letterSpacing:.5}}>รพ.สต.สองคอน · JitHome</div>
+        <h2>{todayLabel}</h2>
+        <p>ระบบติดตามผู้ป่วยจิตเวช อสม.</p>
+        <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}}>
+          <button onClick={()=>onSelectPage('patients')} style={{background:'rgba(255,255,255,.22)',border:'1.5px solid rgba(255,255,255,.5)',color:'#fff',borderRadius:24,padding:'6px 16px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:"'Sarabun',sans-serif",display:'flex',alignItems:'center',gap:6,transition:'.15s'}}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.35)'}
+            onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,.22)'}>
+            👥 ผู้ป่วยทั้งหมด <span style={{background:'#fff',color:'var(--primary)',borderRadius:20,padding:'1px 8px',fontWeight:800,fontSize:13}}>{patients.length}</span> ราย
+          </button>
+          {overdue.length>0&&<button onClick={()=>onSelectPage('timeline')} style={{background:'rgba(239,68,68,.25)',border:'1.5px solid rgba(255,180,180,.6)',color:'#fff',borderRadius:24,padding:'6px 16px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:"'Sarabun',sans-serif",display:'flex',alignItems:'center',gap:6}}>
+            ⚠️ เกินนัด <span style={{background:'#ef4444',borderRadius:20,padding:'1px 8px',fontWeight:800,fontSize:13}}>{overdue.length}</span> ราย
+          </button>}
+          {today.length>0&&<button onClick={()=>onSelectPage('timeline')} style={{background:'rgba(255,255,255,.15)',border:'1.5px solid rgba(255,255,255,.4)',color:'#fff',borderRadius:24,padding:'6px 16px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:"'Sarabun',sans-serif",display:'flex',alignItems:'center',gap:6}}>
+            📅 วันนี้ <span style={{background:'rgba(255,255,255,.9)',color:'var(--primary)',borderRadius:20,padding:'1px 8px',fontWeight:800,fontSize:13}}>{today.length}</span> ราย
+          </button>}
+          <button onClick={()=>onSelectPage('timeline')} style={{background:'rgba(99,211,99,.2)',border:'1.5px solid rgba(167,243,208,.6)',color:'#fff',borderRadius:24,padding:'6px 16px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:"'Sarabun',sans-serif",display:'flex',alignItems:'center',gap:6,
+            transition:'.15s'}}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(99,211,99,.35)'}
+            onMouseLeave={e=>e.currentTarget.style.background='rgba(99,211,99,.2)'}>
+            🗓️ สัปดาห์นี้ <span style={{background:'rgba(255,255,255,.9)',color:'#059669',borderRadius:20,padding:'1px 8px',fontWeight:800,fontSize:13}}>{patients.filter(p=>p.daysUntil>=0&&p.daysUntil<=7).length}</span> ราย
+          </button>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card" style={{background:'var(--red-lt)',border:'1.5px solid var(--red-bd)'}}>
+          <div className="stat-icon" style={{background:'var(--red-bd)'}}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+          <div className="stat-num" style={{color:'var(--red)'}}>{overdue.length}</div>
+          <div className="stat-label">เกินวันนัด</div>
+        </div>
+        <div className="stat-card" style={{background:'#fffbeb',border:'1.5px solid #fde68a'}}>
+          <div className="stat-icon" style={{background:'#fde68a'}}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+          <div className="stat-num" style={{color:'var(--yellow)'}}>{today.length + soon.filter(p=>p.daysUntil<=3).length}</div>
+          <div className="stat-label">นัดภายใน 3 วัน</div>
+        </div>
+        <div className="stat-card" style={{border:'1.5px solid var(--red-bd)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'var(--red)',display:'inline-block'}}/><span style={{fontSize:13,fontWeight:600,color:'var(--red)'}}>สีแดง</span></div>
+          <div className="stat-num" style={{color:'var(--red)'}}>{redCount}</div>
+          <div className="stat-label">ผู้ป่วยกลุ่มวิกฤต</div>
+        </div>
+        <div className="stat-card" style={{border:'1.5px solid var(--yellow-bd)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'var(--yellow)',display:'inline-block'}}/><span style={{fontSize:13,fontWeight:600,color:'var(--yellow)'}}>สีเหลือง</span></div>
+          <div className="stat-num" style={{color:'var(--yellow)'}}>{yellowCount}</div>
+          <div className="stat-label">ผู้ป่วยเฝ้าระวัง</div>
+        </div>
+        <div className="stat-card wide" style={{border:'1.5px solid var(--green-bd)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'var(--green)',display:'inline-block'}}/><span style={{fontSize:13,fontWeight:600,color:'var(--green)'}}>สีเขียว</span></div>
+            <div className="stat-num" style={{color:'var(--green)'}}>{greenCount} <span style={{fontSize:14}}>ราย</span></div>
+          </div>
+          <div className="stat-label">ผู้ป่วยอาการคงที่</div>
+        </div>
+      </div>
+
+      {overdue.length>0&&(
+        <>
+          <div className="section-hd"><h3 style={{color:'var(--red)'}}>⚠️ เกินวันนัด</h3></div>
+          {overdue.slice(0,3).map(p=><PatientCard key={p.id} p={p} onClick={onSelectPatient}/>)}
+        </>
+      )}
+
+      {today.length>0&&(
+        <>
+          <div className="section-hd"><h3 style={{color:'var(--primary)'}}>📅 วันนี้</h3></div>
+          {today.map(p=><PatientCard key={p.id} p={p} onClick={onSelectPatient}/>)}
+        </>
+      )}
+
+      {soon.length>0&&(
+        <>
+          <div className="section-hd"><h3>นัดใน 7 วัน</h3><span style={{fontSize:12,color:'var(--text3)'}}>{soon.length} ราย</span></div>
+          {soon.slice(0,5).map(p=><PatientCard key={p.id} p={p} onClick={onSelectPatient}/>)}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── PATIENTS PAGE ─────────────────────────────────────────────
+function PatientsPage({patients,onSelectPatient}){
+  const [q,setQ]=useState('');
+  const [groupF,setGroupF]=useState('all');
+  const [villageF,setVillageF]=useState('all');
+
+  const villages=['all',...new Set(patients.map(p=>p.village).filter(Boolean).sort())];
+  const filtered=useMemo(()=>patients.filter(p=>{
+    if(q&&!p.name.includes(q)&&!p.village.includes(q))return false;
+    if(groupF!=='all'&&p.group!==groupF)return false;
+    if(villageF!=='all'&&p.village!==villageF)return false;
+    return true;
+  }),[patients,q,groupF,villageF]);
+
+  return(
+    <div className="page">
+      <div className="page-title">ผู้ป่วยทั้งหมด</div>
+      <div className="page-sub">{filtered.length} รายการ จากทั้งหมด {patients.length} ราย</div>
+      <div className="search-wrap">
+        <span className="search-icon">{Icons.search}</span>
+        <input placeholder="ค้นหาชื่อ หรือ หมู่บ้าน..." value={q} onChange={e=>setQ(e.target.value)}/>
+      </div>
+      <div className="filter-row">
+        {['all','red','yellow','green'].map(g=>(
+          <button key={g} className={`filter-chip ${g!=='all'?g:''} ${groupF===g?'active':''}`} onClick={()=>setGroupF(g)}>
+            {g==='all'?'ทั้งหมด':g==='red'?'🔴 สีแดง':g==='yellow'?'🟡 สีเหลือง':'🟢 สีเขียว'}
+          </button>
+        ))}
+      </div>
+      <div className="filter-row" style={{marginTop:-6}}>
+        {villages.map(v=>(
+          <button key={v} className={`filter-chip ${villageF===v?'active':''}`} onClick={()=>setVillageF(v)}>
+            {v==='all'?'ทุกหมู่บ้าน':v}
+          </button>
+        ))}
+      </div>
+      {filtered.length===0?(
+        <div className="empty">{Icons.users}<p>ไม่พบรายการ</p></div>
+      ):(
+        filtered.map(p=><PatientCard key={p.id} p={p} onClick={onSelectPatient}/>)
+      )}
+    </div>
+  );
+}
+
+// ─── TIMELINE PAGE ─────────────────────────────────────────────
+function TimelinePage({patients,onSelectPatient}){
+  const upcoming=useMemo(()=>[...patients].sort((a,b)=>a.nextDate-b.nextDate),[patients]);
+  const groups={};
+  upcoming.forEach(p=>{
+    const key=p.nextDate.toISOString().slice(0,10);
+    if(!groups[key])groups[key]=[];
+    groups[key].push(p);
+  });
+  const todayKey=TODAY.toISOString().slice(0,10);
+  return(
+    <div className="page">
+      <div className="page-title">ตารางนัดหมาย</div>
+      <div className="page-sub">เรียงตามวันนัดฉีดยา</div>
+      {Object.entries(groups).map(([dateStr,pts])=>{
+        const d=new Date(dateStr+'T00:00:00Z');
+        const isToday=dateStr===todayKey;
+        const isPast=dateStr<todayKey;
+        return(
+          <div key={dateStr}>
+            <div className={`tl-date-hd ${isToday?'today-hd':''}`} style={{color:isPast?'var(--red)':isToday?'var(--primary)':'var(--text3)'}}>
+              {isPast?'⚠️ ':isToday?'📅 ':''}{thDateFull(d)}{isToday?' — วันนี้':''}
+              <span style={{marginLeft:6,background:isPast?'var(--red-lt)':isToday?'var(--primary-lt)':'var(--bg)',color:isPast?'var(--red)':isToday?'var(--primary)':'var(--text3)',padding:'1px 8px',borderRadius:20,fontSize:11}}>{pts.length} ราย</span>
+            </div>
+            {pts.map(p=><PatientCard key={p.id} p={p} onClick={onSelectPatient}/>)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── ADMIN PAGE ────────────────────────────────────────────────
+function AdminPage({patients,onAddRecord}){
+  const [form,setForm]=useState({name:'',village:'หมู่ 1',group:'สีเหลือง',date:'',interval:'1 เดือน',note:''});
+  const [saved,setSaved]=useState(false);
+  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  const stats={
+    total:patients.length,
+    red:patients.filter(p=>p.group==='red').length,
+    yellow:patients.filter(p=>p.group==='yellow').length,
+    green:patients.filter(p=>p.group==='green').length,
+    overdue:patients.filter(p=>p.daysUntil<0).length,
+    today:patients.filter(p=>p.daysUntil===0).length,
+  };
+
+  return(
+    <div className="page">
+      <div className="page-title">แอดมิน</div>
+      <div className="page-sub">จัดการข้อมูลและตั้งค่าระบบ</div>
+
+      <div className="form-section">
+        <h3>📊 สรุปภาพรวม</h3>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+          {[['ทั้งหมด',stats.total,'var(--primary)'],['เกินนัด',stats.overdue,'var(--red)'],['วันนี้',stats.today,'#0d9488']].map(([l,n,c])=>(
+            <div key={l} style={{textAlign:'center',padding:10,background:'var(--bg)',borderRadius:8}}>
+              <div style={{fontSize:22,fontWeight:700,color:c}}>{n}</div>
+              <div style={{fontSize:11,color:'var(--text3)',marginTop:2}}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:10}}>
+          {[['สีแดง',stats.red,'var(--red)'],['สีเหลือง',stats.yellow,'var(--yellow)'],['สีเขียว',stats.green,'var(--green)']].map(([l,n,c])=>(
+            <div key={l} style={{flex:1,background:'var(--bg)',borderRadius:8,padding:8,textAlign:'center'}}>
+              <div style={{width:10,height:10,borderRadius:'50%',background:c,margin:'0 auto 4px'}}/>
+              <div style={{fontSize:16,fontWeight:700,color:c}}>{n}</div>
+              <div style={{fontSize:10,color:'var(--text3)'}}>{l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="form-section">
+        <h3>💉 บันทึกนัดฉีดยา</h3>
+        <div className="form-group">
+          <label>ชื่อ-นามสกุล</label>
+          <input list="name-list" value={form.name} onChange={e=>f('name',e.target.value)} placeholder="พิมพ์หรือเลือกชื่อผู้ป่วย"/>
+          <datalist id="name-list">{patients.map(p=><option key={p.id} value={p.name}/>)}</datalist>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div className="form-group">
+            <label>หมู่บ้าน</label>
+            <select value={form.village} onChange={e=>f('village',e.target.value)}>
+              {['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=><option key={v}>{v}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>กลุ่มสี</label>
+            <select value={form.group} onChange={e=>f('group',e.target.value)}>
+              <option>สีแดง</option><option>สีเหลือง</option><option>สีเขียว</option>
+            </select>
+          </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <div className="form-group">
+            <label>วันที่ฉีดยา</label>
+            <input type="date" value={form.date} onChange={e=>f('date',e.target.value)}/>
+          </div>
+          <div className="form-group">
+            <label>รอบนัดต่อไป</label>
+            <select value={form.interval} onChange={e=>f('interval',e.target.value)}>
+              <option>2สัปดาห์</option><option>3 สัปดาห์</option><option>4สัปดาห์</option><option>1 เดือน</option><option>3 เดือน</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-group">
+          <label>หมายเหตุ (ถ้ามี)</label>
+          <textarea rows="3" value={form.note} onChange={e=>f('note',e.target.value)} placeholder="ชนิดยา อาการ หรือหมายเหตุ..." style={{resize:'vertical',minHeight:70,fontFamily:"'Sarabun',sans-serif"}}/>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+            {['ฉีดยา Invega 100 mg','DEPO-A ฉีดทุก 3 เดือน','FLUPENTIXOL 40MG/2ML','อาการคงที่','ไม่มา','ส่งต่อ รพ.'].map(preset=>(
+              <button key={preset} type="button" onClick={()=>f('note',form.note?form.note+' · '+preset:preset)}
+                style={{fontSize:11,padding:'3px 9px',borderRadius:20,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sarabun',sans-serif",fontWeight:600}}>
+                + {preset}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button className="btn btn-primary btn-block" onClick={()=>{
+          if(form.name&&form.date){onAddRecord(form);setSaved(true);setTimeout(()=>setSaved(false),2500);setForm({name:'',village:'หมู่ 1',group:'สีเหลือง',date:'',interval:'1 เดือน',note:''});}
+        }}>
+          {saved?'✅ บันทึกสำเร็จ':'บันทึกนัดหมาย'}
+        </button>
+      </div>
+
+      <div className="form-section">
+        <h3>⚙️ ตั้งค่าการแจ้งเตือน</h3>
+        <div className="settings-row">
+          <div><div className="settings-label">ข้อความแจ้งเตือน</div><div className="settings-val">แจ้งเตือนนัดฉีดยา ที่ รพ.สต.สองคอน</div></div>
+          <span style={{width:16,height:16,display:'inline-flex',color:'var(--text3)'}}>{Icons.chevron}</span>
+        </div>
+        <div className="settings-row">
+          <div><div className="settings-label">แจ้งเตือนล่วงหน้า</div><div className="settings-val">1 วัน</div></div>
+          <span style={{width:16,height:16,display:'inline-flex',color:'var(--text3)'}}>{Icons.chevron}</span>
+        </div>
+        <div className="settings-row">
+          <div><div className="settings-label">ส่งผ่าน Telegram Bot</div><div className="settings-val">แจ้งเตือนนัดฉีดยาจิตเวช</div></div>
+          <label className="toggle"><input type="checkbox" defaultChecked/><span className="toggle-slider"/></label>
+        </div>
+        <div className="settings-row">
+          <div><div className="settings-label">ส่งรูปภาพพร้อมแจ้งเตือน</div><div className="settings-val">ปิด</div></div>
+          <label className="toggle"><input type="checkbox"/><span className="toggle-slider"/></label>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <h3>🔗 เชื่อมต่อข้อมูล</h3>
+        <div style={{fontSize:12,color:'var(--text3)',marginBottom:12,marginTop:-4}}>นำเข้า/ส่งออก และเชื่อมข้อมูลกับระบบภายนอก</div>
+
+        {/* Quick action grid */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
+          <button onClick={()=>alert('นำเข้าไฟล์ Excel/CSV (.xlsx, .csv)')} style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:4,padding:'12px 14px',background:'#ecfdf5',border:'1.5px solid #a7f3d0',borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:"'Sarabun',sans-serif"}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:18}}>📥</span>
+              <span style={{fontSize:13,fontWeight:700,color:'#059669'}}>นำเข้าไฟล์</span>
+            </div>
+            <div style={{fontSize:10,color:'var(--text3)'}}>Excel / CSV (.xlsx, .csv)</div>
+          </button>
+          <button onClick={()=>alert('ส่งออกข้อมูลทั้งหมด')} style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:4,padding:'12px 14px',background:'var(--primary-lt)',border:'1.5px solid rgba(10,126,164,.25)',borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:"'Sarabun',sans-serif"}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:18}}>📤</span>
+              <span style={{fontSize:13,fontWeight:700,color:'var(--primary)'}}>ส่งออกข้อมูล</span>
+            </div>
+            <div style={{fontSize:10,color:'var(--text3)'}}>Excel / PDF / JSON</div>
+          </button>
+        </div>
+
+        {/* Google Sheets */}
+        <div style={{background:'var(--bg)',borderRadius:10,padding:'12px 14px',marginBottom:10,border:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:32,height:32,background:'#0f9d58',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:13}}>G</div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700}}>Google Sheets</div>
+                <div style={{fontSize:11,color:'var(--text3)'}}>ซิงค์อัตโนมัติ · เชื่อมต่อแล้ว</div>
+              </div>
+            </div>
+            <span style={{fontSize:10,background:'var(--green-lt)',color:'var(--green)',padding:'2px 8px',borderRadius:20,fontWeight:700}}>● Active</span>
+          </div>
+          <input type="text" defaultValue="https://docs.google.com/spreadsheets/d/1AbC.../edit" style={{width:'100%',padding:'7px 10px',fontSize:11,border:'1px solid var(--border)',borderRadius:6,background:'#fff',color:'var(--text2)',fontFamily:'monospace'}}/>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8,fontSize:11,color:'var(--text3)'}}>
+            <span>อัปเดตล่าสุด: 25 เม.ย. 2569 09:14</span>
+            <button style={{background:'none',border:'none',color:'var(--primary)',fontWeight:700,cursor:'pointer',fontFamily:"'Sarabun',sans-serif",fontSize:11}}>ซิงค์เลย ↻</button>
+          </div>
+        </div>
+
+        {/* HOSxP / JHCIS */}
+        <div style={{background:'var(--bg)',borderRadius:10,padding:'12px 14px',marginBottom:10,border:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:32,height:32,background:'#0a7ea4',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:11}}>H</div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700}}>HOSxP / JHCIS</div>
+                <div style={{fontSize:11,color:'var(--text3)'}}>ระบบฐานข้อมูล รพ.สต.</div>
+              </div>
+            </div>
+            <label className="toggle"><input type="checkbox" defaultChecked/><span className="toggle-slider"/></label>
+          </div>
+        </div>
+
+        {/* LINE OA */}
+        <div style={{background:'var(--bg)',borderRadius:10,padding:'12px 14px',marginBottom:10,border:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:32,height:32,background:'#06c755',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:13}}>L</div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700}}>LINE Notify / OA</div>
+                <div style={{fontSize:11,color:'var(--text3)'}}>แจ้งเตือนผ่าน LINE กลุ่ม อสม.</div>
+              </div>
+            </div>
+            <label className="toggle"><input type="checkbox" defaultChecked/><span className="toggle-slider"/></label>
+          </div>
+          <input type="text" placeholder="LINE Access Token" defaultValue="••••••••••••••••XK9p" style={{width:'100%',padding:'7px 10px',fontSize:11,border:'1px solid var(--border)',borderRadius:6,background:'#fff',color:'var(--text2)',fontFamily:'monospace'}}/>
+        </div>
+
+        {/* Telegram Bot */}
+        <div style={{background:'var(--bg)',borderRadius:10,padding:'12px 14px',marginBottom:10,border:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:32,height:32,background:'#0088cc',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:13}}>T</div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700}}>Telegram Bot</div>
+                <div style={{fontSize:11,color:'var(--text3)'}}>@JitHomeBot · กลุ่มแจ้งเตือน</div>
+              </div>
+            </div>
+            <label className="toggle"><input type="checkbox" defaultChecked/><span className="toggle-slider"/></label>
+          </div>
+          <input type="text" placeholder="Chat ID" defaultValue="-1001234567890" style={{width:'100%',padding:'7px 10px',fontSize:11,border:'1px solid var(--border)',borderRadius:6,background:'#fff',color:'var(--text2)',fontFamily:'monospace'}}/>
+        </div>
+
+        {/* API / Webhook */}
+        <div style={{background:'var(--bg)',borderRadius:10,padding:'12px 14px',marginBottom:10,border:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:32,height:32,background:'#6366f1',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:14}}>⚡</div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700}}>REST API / Webhook</div>
+                <div style={{fontSize:11,color:'var(--text3)'}}>สำหรับนักพัฒนา · เชื่อมต่อระบบอื่น</div>
+              </div>
+            </div>
+            <span style={{fontSize:10,background:'var(--bg)',color:'var(--text3)',padding:'2px 8px',borderRadius:20,fontWeight:700,border:'1px solid var(--border)'}}>○ Inactive</span>
+          </div>
+          <input type="text" placeholder="https://your-endpoint.com/webhook" style={{width:'100%',padding:'7px 10px',fontSize:11,border:'1px solid var(--border)',borderRadius:6,background:'#fff',color:'var(--text2)',fontFamily:'monospace'}}/>
+        </div>
+
+        {/* Cloud Backup */}
+        <div style={{background:'var(--bg)',borderRadius:10,padding:'12px 14px',border:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:32,height:32,background:'#0ea5e9',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:14}}>☁️</div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700}}>Cloud Backup</div>
+                <div style={{fontSize:11,color:'var(--text3)'}}>สำรองข้อมูลอัตโนมัติทุก 24 ชม.</div>
+              </div>
+            </div>
+            <label className="toggle"><input type="checkbox" defaultChecked/><span className="toggle-slider"/></label>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <h3>👥 อสม. ผู้ดูแล</h3>
+        {[['หมู่ 1-3','นางสาวสมจิต พิมพ์สวย','เข้าสู่ระบบ'],['หมู่ 4-6','นายสมศักดิ์ ใจดี','เข้าสู่ระบบ'],['หมู่ 7-9','นางมาลี รักษ์ดี','เข้าสู่ระบบ']].map(([area,name,status])=>(
+          <div key={area} className="settings-row">
+            <div><div className="settings-label">{name}</div><div className="settings-val">รับผิดชอบ {area}</div></div>
+            <span style={{fontSize:11,background:'var(--green-lt)',color:'var(--green)',padding:'2px 8px',borderRadius:20,fontWeight:700}}>{status}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── OVERVIEW PAGE ────────────────────────────────────────────
+function DonutChart({red,yellow,green,size=120}){
+  const total=red+yellow+green||1;
+  const r=40,cx=60,cy=60,circ=2*Math.PI*r;
+  const redPct=red/total,yellowPct=yellow/total,greenPct=green/total;
+  const redDash=redPct*circ,yellowDash=yellowPct*circ,greenDash=greenPct*circ;
+  const redOffset=0,yellowOffset=-redDash,greenOffset=-(redDash+yellowDash);
+  return(
+    <svg width={size} height={size} viewBox="0 0 120 120" style={{transform:'rotate(-90deg)'}}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border)" strokeWidth="16"/>
+      {red>0&&<circle cx={cx} cy={cy} r={r} fill="none" stroke="#dc2626" strokeWidth="16" strokeDasharray={`${redDash} ${circ}`} strokeDashoffset={redOffset}/>}
+      {yellow>0&&<circle cx={cx} cy={cy} r={r} fill="none" stroke="#d97706" strokeWidth="16" strokeDasharray={`${yellowDash} ${circ}`} strokeDashoffset={yellowOffset}/>}
+      {green>0&&<circle cx={cx} cy={cy} r={r} fill="none" stroke="#059669" strokeWidth="16" strokeDasharray={`${greenDash} ${circ}`} strokeDashoffset={greenOffset}/>}
+    </svg>
+  );
+}
+
+function HBar({value,max,color,label,count}){
+  const pct=max>0?(value/max)*100:0;
+  return(
+    <div style={{marginBottom:10}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+        <span style={{fontSize:13,fontWeight:500,color:'var(--text)'}}>{label}</span>
+        <span style={{fontSize:13,fontWeight:700,color}}>{count} ราย</span>
+      </div>
+      <div style={{background:'var(--border)',borderRadius:6,height:10,overflow:'hidden'}}>
+        <div style={{width:`${pct}%`,background:color,height:'100%',borderRadius:6,transition:'width .5s ease'}}/>
+      </div>
+    </div>
+  );
+}
+
+function OverviewPage({patients}){
+  const red=patients.filter(p=>p.group==='red');
+  const yellow=patients.filter(p=>p.group==='yellow');
+  const green=patients.filter(p=>p.group==='green');
+  const total=patients.length;
+
+  // By village
+  const villageMap={};
+  patients.forEach(p=>{
+    const v=p.village||'ไม่ระบุ';
+    if(!villageMap[v])villageMap[v]={name:v,red:0,yellow:0,green:0,total:0};
+    villageMap[v][p.group]++;
+    villageMap[v].total++;
+  });
+  const villages=Object.values(villageMap).sort((a,b)=>b.total-a.total);
+  const maxVillage=Math.max(...villages.map(v=>v.total),1);
+
+  // Status summary
+  const overdue=patients.filter(p=>p.daysUntil<0).length;
+  const todayPts=patients.filter(p=>p.daysUntil===0).length;
+  const soon=patients.filter(p=>p.daysUntil>0&&p.daysUntil<=7).length;
+  const ok=patients.filter(p=>p.daysUntil>7).length;
+
+  // Interval distribution
+  const intervalCounts={'2สัปดาห์':0,'3 สัปดาห์':0,'4สัปดาห์':0,'1 เดือน':0,'3 เดือน':0};
+  patients.forEach(p=>{
+    const k=p.intervalStr?.trim();
+    if(/3\s*เดือน/.test(k))intervalCounts['3 เดือน']++;
+    else if(/1\s*เดือน/.test(k))intervalCounts['1 เดือน']++;
+    else if(/4\s*สัปดาห์?/.test(k))intervalCounts['4สัปดาห์']++;
+    else if(/3\s*สัปดาห์?/.test(k))intervalCounts['3 สัปดาห์']++;
+    else if(/2\s*สัปดาห์?/.test(k))intervalCounts['2สัปดาห์']++;
+    else intervalCounts['1 เดือน']++;
+  });
+  const maxInterval=Math.max(...Object.values(intervalCounts),1);
+
+  return(
+    <div className="page">
+      <div className="page-title">ภาพรวมผู้ป่วย</div>
+      <div className="page-sub">สรุปข้อมูล รพ.สต.สองคอน · {total} ราย</div>
+
+      {/* Donut + group summary */}
+      <div style={{background:'var(--card)',borderRadius:'var(--radius)',padding:16,boxShadow:'var(--shadow)',marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:'var(--text)'}}>จำแนกตามกลุ่มสี</div>
+        <div style={{display:'flex',alignItems:'center',gap:16}}>
+          <div style={{position:'relative',flexShrink:0}}>
+            <DonutChart red={red.length} yellow={yellow.length} green={green.length}/>
+            <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+              <div style={{fontSize:22,fontWeight:800,color:'var(--text)'}}>{total}</div>
+              <div style={{fontSize:10,color:'var(--text3)'}}>ราย</div>
+            </div>
+          </div>
+          <div style={{flex:1}}>
+            {[['red','สีแดง','var(--red)',red.length],['yellow','สีเหลือง','var(--yellow)',yellow.length],['green','สีเขียว','var(--green)',green.length]].map(([g,label,color,count])=>(
+              <div key={g} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:10,height:10,borderRadius:'50%',background:color}}/>
+                  <span style={{fontSize:13,fontWeight:500}}>{label}</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:60,height:6,background:'var(--border)',borderRadius:3,overflow:'hidden'}}>
+                    <div style={{width:`${total>0?(count/total*100):0}%`,height:'100%',background:color,borderRadius:3}}/>
+                  </div>
+                  <span style={{fontSize:13,fontWeight:700,color,width:28,textAlign:'right'}}>{count}</span>
+                </div>
+              </div>
+            ))}
+            <div style={{fontSize:11,color:'var(--text3)',marginTop:8,textAlign:'right'}}>
+              คิดเป็น {total>0?Math.round(red.length/total*100):0}% / {total>0?Math.round(yellow.length/total*100):0}% / {total>0?Math.round(green.length/total*100):0}%
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Status chips */}
+      <div style={{background:'var(--card)',borderRadius:'var(--radius)',padding:16,boxShadow:'var(--shadow)',marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:12,color:'var(--text)'}}>สถานะการนัดหมาย</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {[
+            ['เกินวันนัด',overdue,'var(--red)','var(--red-lt)','var(--red-bd)','⚠️'],
+            ['วันนี้',todayPts,'var(--primary)','var(--primary-lt)','rgba(10,126,164,.2)','📅'],
+            ['ภายใน 7 วัน',soon,'var(--yellow)','var(--yellow-lt)','var(--yellow-bd)','🔔'],
+            ['ปกติ',ok,'var(--green)','var(--green-lt)','var(--green-bd)','✅'],
+          ].map(([label,count,color,bg,bd,icon])=>(
+            <div key={label} style={{background:bg,border:`1px solid ${bd}`,borderRadius:10,padding:'12px 14px'}}>
+              <div style={{fontSize:20}}>{icon}</div>
+              <div style={{fontSize:22,fontWeight:800,color,marginTop:4}}>{count}</div>
+              <div style={{fontSize:11,color,fontWeight:600,opacity:.8}}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* By village */}
+      <div style={{background:'var(--card)',borderRadius:'var(--radius)',padding:16,boxShadow:'var(--shadow)',marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:'var(--text)'}}>จำแนกตามหมู่บ้าน</div>
+        {villages.map(v=>(
+          <div key={v.name} style={{marginBottom:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+              <span style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{v.name}</span>
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                {v.red>0&&<span style={{fontSize:11,fontWeight:700,color:'var(--red)',background:'var(--red-lt)',padding:'1px 6px',borderRadius:20}}>แดง {v.red}</span>}
+                {v.yellow>0&&<span style={{fontSize:11,fontWeight:700,color:'var(--yellow)',background:'var(--yellow-lt)',padding:'1px 6px',borderRadius:20}}>เหลือง {v.yellow}</span>}
+                {v.green>0&&<span style={{fontSize:11,fontWeight:700,color:'var(--green)',background:'var(--green-lt)',padding:'1px 6px',borderRadius:20}}>เขียว {v.green}</span>}
+              </div>
+            </div>
+            {/* Stacked bar */}
+            <div style={{display:'flex',height:10,borderRadius:6,overflow:'hidden',background:'var(--border)'}}>
+              {v.red>0&&<div style={{flex:v.red,background:'var(--red)',transition:'flex .5s'}}/>}
+              {v.yellow>0&&<div style={{flex:v.yellow,background:'var(--yellow)',transition:'flex .5s'}}/>}
+              {v.green>0&&<div style={{flex:v.green,background:'var(--green)',transition:'flex .5s'}}/>}
+            </div>
+            <div style={{fontSize:11,color:'var(--text3)',marginTop:3}}>รวม {v.total} ราย</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Village × Group table */}
+      <div style={{background:'var(--card)',borderRadius:'var(--radius)',padding:16,boxShadow:'var(--shadow)',marginBottom:12,overflowX:'auto'}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:'var(--text)'}}>ตารางสรุป หมู่บ้าน × กลุ่มสี</div>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+          <thead>
+            <tr style={{background:'var(--bg)'}}>
+              <th style={{padding:'8px 10px',textAlign:'left',fontWeight:700,color:'var(--text2)',borderRadius:'6px 0 0 6px'}}>หมู่บ้าน</th>
+              <th style={{padding:'8px 6px',textAlign:'center',color:'var(--red)',fontWeight:700}}>🔴 แดง</th>
+              <th style={{padding:'8px 6px',textAlign:'center',color:'var(--yellow)',fontWeight:700}}>🟡 เหลือง</th>
+              <th style={{padding:'8px 6px',textAlign:'center',color:'var(--green)',fontWeight:700}}>🟢 เขียว</th>
+              <th style={{padding:'8px 10px',textAlign:'center',fontWeight:700,color:'var(--text2)',borderRadius:'0 6px 6px 0'}}>รวม</th>
+            </tr>
+          </thead>
+          <tbody>
+            {villages.map((v,i)=>(
+              <tr key={v.name} style={{borderBottom:'1px solid var(--border)',background:i%2===0?'transparent':'rgba(0,0,0,.01)'}}>
+                <td style={{padding:'9px 10px',fontWeight:600}}>{v.name}</td>
+                <td style={{padding:'9px 6px',textAlign:'center',color:v.red>0?'var(--red)':'var(--text3)',fontWeight:v.red>0?700:400}}>{v.red||'—'}</td>
+                <td style={{padding:'9px 6px',textAlign:'center',color:v.yellow>0?'var(--yellow)':'var(--text3)',fontWeight:v.yellow>0?700:400}}>{v.yellow||'—'}</td>
+                <td style={{padding:'9px 6px',textAlign:'center',color:v.green>0?'var(--green)':'var(--text3)',fontWeight:v.green>0?700:400}}>{v.green||'—'}</td>
+                <td style={{padding:'9px 10px',textAlign:'center',fontWeight:700,color:'var(--text)'}}>{v.total}</td>
+              </tr>
+            ))}
+            <tr style={{background:'var(--bg)',fontWeight:700}}>
+              <td style={{padding:'9px 10px',fontWeight:800}}>รวมทั้งหมด</td>
+              <td style={{padding:'9px 6px',textAlign:'center',color:'var(--red)'}}>{red.length}</td>
+              <td style={{padding:'9px 6px',textAlign:'center',color:'var(--yellow)'}}>{yellow.length}</td>
+              <td style={{padding:'9px 6px',textAlign:'center',color:'var(--green)'}}>{green.length}</td>
+              <td style={{padding:'9px 10px',textAlign:'center',color:'var(--primary)',fontSize:14}}>{total}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Injection interval */}
+      <div style={{background:'var(--card)',borderRadius:'var(--radius)',padding:16,boxShadow:'var(--shadow)',marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:14,color:'var(--text)'}}>รอบการฉีดยา</div>
+        {Object.entries(intervalCounts).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]).map(([k,n])=>(
+          <HBar key={k} label={k} count={n} value={n} max={maxInterval} color="var(--primary)"/>
+        ))}
+      </div>
+
+      {/* LINE CHART — monthly appointment trend */}
+      <LineChart records={records}/>
+    </div>
+  );
+}
+
+function LineChart({records}){
+  // Count appointments per month from raw records (Excel serial → month)
+  const monthData={};
+  records.forEach(r=>{
+    if(!r.name||r.name==='ทดสอบ')return;
+    const d=r.date;
+    const key=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;
+    if(!monthData[key])monthData[key]={total:0,red:0,yellow:0,green:0};
+    monthData[key].total++;
+    monthData[key][r.group]++;
+  });
+  // Take last 9 months with data
+  const sorted=Object.entries(monthData).sort((a,b)=>a[0].localeCompare(b[0]));
+  const last9=sorted.slice(-9);
+  if(last9.length<2)return null;
+
+  const thMonths=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const labels=last9.map(([k])=>{const[,m]=k.split('-');return thMonths[parseInt(m)];});
+  const totals=last9.map(([,v])=>v.total);
+  const reds=last9.map(([,v])=>v.red);
+  const yellows=last9.map(([,v])=>v.yellow);
+  const greens=last9.map(([,v])=>v.green);
+
+  const W=320,H=130,padL=28,padR=12,padT=12,padB=28;
+  const chartW=W-padL-padR,chartH=H-padT-padB;
+  const maxVal=Math.max(...totals,1);
+  const n=last9.length;
+
+  function pts(arr,color){
+    const points=arr.map((v,i)=>[
+      padL+i*(chartW/(n-1)),
+      padT+chartH-(v/maxVal)*chartH
+    ]);
+    const d='M'+points.map(p=>p.join(',')).join(' L');
+    // area fill
+    const areaD=d+` L${points[points.length-1][0]},${padT+chartH} L${points[0][0]},${padT+chartH} Z`;
+    const dotId=color.replace('#','');
+    return(
+      <g key={color}>
+        <path d={areaD} fill={color} fillOpacity="0.08" stroke="none"/>
+        <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+        {points.map(([x,y],i)=>(
+          <circle key={i} cx={x} cy={y} r="3.5" fill={color} stroke="#fff" strokeWidth="1.5"/>
+        ))}
+      </g>
+    );
+  }
+
+  // Y-axis labels
+  const yTicks=[0,Math.round(maxVal/2),maxVal];
+
+  return(
+    <div style={{background:'var(--card)',borderRadius:'var(--radius)',padding:16,boxShadow:'var(--shadow)',marginBottom:12}}>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:4,color:'var(--text)'}}>แนวโน้มการนัดหมายรายเดือน</div>
+      <div style={{fontSize:12,color:'var(--text3)',marginBottom:12}}>จำนวนนัดฉีดยา จำแนกตามกลุ่มสี</div>
+
+      {/* Legend */}
+      <div style={{display:'flex',gap:14,marginBottom:10,flexWrap:'wrap'}}>
+        {[['#0a7ea4','รวมทั้งหมด'],['#dc2626','สีแดง'],['#d97706','สีเหลือง'],['#059669','สีเขียว']].map(([c,l])=>(
+          <div key={l} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--text2)',fontWeight:600}}>
+            <div style={{width:20,height:3,background:c,borderRadius:2}}/>
+            <div style={{width:6,height:6,borderRadius:'50%',background:c}}/>
+            {l}
+          </div>
+        ))}
+      </div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',overflow:'visible'}}>
+        {/* Grid lines + Y labels */}
+        {yTicks.map(v=>{
+          const y=padT+chartH-(v/maxVal)*chartH;
+          return(
+            <g key={v}>
+              <line x1={padL} y1={y} x2={W-padR} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="3,3"/>
+              <text x={padL-4} y={y+4} textAnchor="end" fontSize="8" fill="var(--text3)">{v}</text>
+            </g>
+          );
+        })}
+        {/* X labels */}
+        {labels.map((l,i)=>(
+          <text key={i} x={padL+i*(chartW/(n-1))} y={H-4} textAnchor="middle" fontSize="9" fill="var(--text3)">{l}</text>
+        ))}
+        {/* Lines */}
+        {pts(totals,'#0a7ea4')}
+        {pts(reds,'#dc2626')}
+        {pts(yellows,'#d97706')}
+        {pts(greens,'#059669')}
+        {/* Highlight last month */}
+        <line x1={padL+(n-1)*(chartW/(n-1))} y1={padT} x2={padL+(n-1)*(chartW/(n-1))} y2={padT+chartH} stroke="var(--primary)" strokeWidth="1" strokeDasharray="4,3" strokeOpacity="0.4"/>
+        <text x={padL+(n-1)*(chartW/(n-1))} y={padT-2} textAnchor="middle" fontSize="8" fill="var(--primary)" fontWeight="700">ปัจจุบัน</text>
+      </svg>
+
+      {/* Summary row */}
+      <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+        {last9.slice(-3).map(([k,v],i)=>{
+          const[yr,m]=k.split('-');
+          const label=thMonths[parseInt(m)]+' '+(parseInt(yr)+0);
+          return(
+            <div key={k} style={{flex:1,minWidth:80,background:'var(--bg)',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
+              <div style={{fontSize:10,color:'var(--text3)',marginBottom:2}}>{label}</div>
+              <div style={{fontSize:18,fontWeight:800,color:'var(--primary)'}}>{v.total}</div>
+              <div style={{display:'flex',justifyContent:'center',gap:4,marginTop:3}}>
+                {v.red>0&&<span style={{fontSize:9,background:'var(--red-lt)',color:'var(--red)',padding:'1px 4px',borderRadius:10,fontWeight:700}}>แดง {v.red}</span>}
+                {v.yellow>0&&<span style={{fontSize:9,background:'var(--yellow-lt)',color:'var(--yellow)',padding:'1px 4px',borderRadius:10,fontWeight:700}}>เหลือง {v.yellow}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── HOME VISIT PAGE ──────────────────────────────────────────
+const STAFF_CHECKLIST=[
+  {id:'s1',label:'ประเมินสุขภาพจิต (MINI / HoNOS)'},
+  {id:'s2',label:'ตรวจวัดสัญญาณชีพ (BP, PR, T)'},
+  {id:'s3',label:'ประเมินการรับประทานยา / ฉีดยา'},
+  {id:'s4',label:'ประเมินความเสี่ยงต่อการทำร้ายตนเอง/ผู้อื่น'},
+  {id:'s5',label:'ประเมินสิ่งแวดล้อม / ความปลอดภัยในบ้าน'},  
+  {id:'s6',label:'ให้คำปรึกษาครอบครัว'},
+  {id:'s7',label:'ประเมิน ADL (กิจวัตรประจำวัน)'},
+  {id:'s8',label:'นัดหมายครั้งต่อไป / ส่งต่อ'},
+];
+const AOSOMO_CHECKLIST=[
+  {id:'a1',label:'ผู้ป่วยอยู่บ้าน พบตัวได้'},
+  {id:'a2',label:'ผู้ป่วยกินยาสม่ำเสมอ'},
+  {id:'a3',label:'อาการสงบ ไม่กระสับกระส่าย'},
+  {id:'a4',label:'มีผู้ดูแลในบ้าน'},
+  {id:'a5',label:'ไม่มีพฤติกรรมก้าวร้าว / เสี่ยง'},
+  {id:'a6',label:'บ้านสะอาด สภาพแวดล้อมปลอดภัย'},
+  {id:'a7',label:'ผู้ป่วยรู้จักวันนัดครั้งต่อไป'},
+];
+
+const INIT_VISITS=[
+  {id:1,type:'staff',patientName:'นายอุทัย แสงงาม',village:'หมู่ 5',date:'2026-04-10',visitor:'นางสาวสมจิต',score:6,note:'อาการคงที่ ครอบครัวให้ความร่วมมือดี',refer:false,checks:['s1','s2','s3','s5','s6']},
+  {id:2,type:'aosomo',patientName:'นายศักดา เรืองสา',village:'หมู่ 8',date:'2026-04-18',visitor:'นายวีระ อสม.',score:5,note:'กินยาสม่ำเสมอ อาการดีขึ้น',refer:false,checks:['a1','a2','a3','a4','a6']},
+  {id:3,type:'aosomo',patientName:'นายอุุดร ไชยพันโท',village:'หมู่ 9',date:'2026-04-20',visitor:'นางมาลี อสม.',score:3,note:'ไม่พบตัว ครอบครัวแจ้งออกไปข้างนอก',refer:true,checks:['a1']},
+  {id:4,type:'staff',patientName:'นายสุรชัย พิมพ์สอน',village:'หมู่ 6',date:'2026-04-22',visitor:'นางสาวสมจิต',score:7,note:'อาการปกติ ยาเพียงพอ นัดฉีดยา 20 พ.ค.',refer:false,checks:['s1','s2','s3','s4','s5','s6','s8']},
+];
+
+function ChecklistItem({item,checked,onToggle}){
+  return(
+    <div className="check-item" onClick={()=>onToggle(item.id)}>
+      <div className={`check-box ${checked?'checked':''}`}>
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <span className="check-label">{item.label}</span>
+    </div>
+  );
+}
+
+function ScoreColor(s,max){
+  const pct=s/max;
+  if(pct>=0.8)return{bg:'var(--green-lt)',color:'var(--green)',label:'ปกติดี'};
+  if(pct>=0.5)return{bg:'var(--yellow-lt)',color:'var(--yellow)',label:'พอใช้'};
+  return{bg:'var(--red-lt)',color:'var(--red)',label:'ต้องติดตาม'};
+}
+
+function VisitFormModal({patients,type,onClose,onSave}){
+  const checklist=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST;
+  const [form,setForm]=useState({patientName:'',village:'หมู่ 1',date:new Date().toISOString().slice(0,10),visitor:'',note:'',refer:false});
+  const [checks,setChecks]=useState([]);
+  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const toggle=(id)=>setChecks(c=>c.includes(id)?c.filter(x=>x!==id):[...c,id]);
+  const score=checks.length;
+  const sc=ScoreColor(score,checklist.length);
+
+  return(
+    <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="modal-sheet fade-up" style={{maxHeight:'92vh'}}>
+        <div className="modal-handle"/>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+          <div>
+            <div style={{fontSize:17,fontWeight:700}}>{type==='staff'?'🏥 บันทึกเยี่ยมบ้าน (เจ้าหน้าที่)':'🏡 บันทึกเยี่ยมบ้าน (อสม.)'}</div>
+            <div style={{fontSize:12,color:'var(--text3)',marginTop:2}}>{type==='staff'?'แบบประเมินสำหรับเจ้าหน้าที่สาธารณสุข':'แบบประเมินสำหรับ อสม.'}</div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text3)'}}>{Icons.x}</button>
+        </div>
+
+        <div className="form-group">
+          <label>ชื่อผู้ป่วย</label>
+          <input list="visit-name-list" value={form.patientName} onChange={e=>{
+            f('patientName',e.target.value);
+            const pt=patients.find(p=>p.name===e.target.value);
+            if(pt)f('village',pt.village);
+          }} placeholder="เลือกหรือพิมพ์ชื่อ"/>
+          <datalist id="visit-name-list">{patients.map(p=><option key={p.id} value={p.name}/>)}</datalist>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+          <div className="form-group" style={{marginBottom:0}}>
+            <label>หมู่บ้าน</label>
+            <select value={form.village} onChange={e=>f('village',e.target.value)}>
+              {['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=><option key={v}>{v}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{marginBottom:0}}>
+            <label>วันที่เยี่ยม</label>
+            <input type="date" value={form.date} onChange={e=>f('date',e.target.value)}/>
+          </div>
+        </div>
+        <div className="form-group">
+          <label>{type==='staff'?'ผู้ออกเยี่ยม (เจ้าหน้าที่)':'อสม. ผู้ออกเยี่ยม'}</label>
+          <input type="text" value={form.visitor} onChange={e=>f('visitor',e.target.value)} placeholder={type==='staff'?'ชื่อเจ้าหน้าที่...':'ชื่อ อสม....'}/>
+        </div>
+
+        <div style={{background:'var(--bg)',borderRadius:10,padding:'10px 14px',marginBottom:14}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+            <div style={{fontSize:13,fontWeight:700}}>รายการตรวจสอบ</div>
+            <span className="score-badge" style={{background:sc.bg,color:sc.color}}>{score}/{checklist.length} · {sc.label}</span>
+          </div>
+          {checklist.map(item=>(
+            <ChecklistItem key={item.id} item={item} checked={checks.includes(item.id)} onToggle={toggle}/>
+          ))}
+        </div>
+
+        <div className="form-group">
+          <label>บันทึกเพิ่มเติม / สังเกตพฤติกรรม</label>
+          <textarea rows="3" value={form.note} onChange={e=>f('note',e.target.value)} placeholder="อาการ สิ่งที่พบ ข้อสังเกต..." style={{resize:'none'}}/>
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'var(--red-lt)',border:'1px solid var(--red-bd)',borderRadius:8,marginBottom:14}}>
+          <div><div style={{fontSize:13,fontWeight:700,color:'var(--red)'}}>ต้องการส่งต่อ / รายงานเร่งด่วน</div><div style={{fontSize:11,color:'var(--text3)'}}>กรณีพบความเสี่ยงสูง หรืออาการกำเริบ</div></div>
+          <label className="toggle"><input type="checkbox" checked={form.refer} onChange={e=>f('refer',e.target.checked)}/><span className="toggle-slider"/></label>
+        </div>
+
+        <div style={{background:'var(--primary-lt)',border:'1.5px solid rgba(10,126,164,.25)',borderRadius:10,padding:'12px 14px',marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:'var(--primary)',marginBottom:8}}>📅 วันนัดครั้งต่อไป</div>
+          <input type="date" value={form.nextAppt||''} onChange={e=>f('nextAppt',e.target.value)}
+            style={{width:'100%',padding:'9px 12px',border:`1.5px solid ${form.nextAppt?'var(--primary)':'var(--border)'}`,borderRadius:'var(--radius-sm)',fontFamily:"'Sarabun',sans-serif",fontSize:14,color:'var(--text)',background:'#fff',outline:'none'}}/>
+          {form.nextAppt&&<div style={{fontSize:11,color:'var(--primary)',marginTop:5,fontWeight:600}}>✅ กำหนดนัด {new Date(form.nextAppt+'T00:00:00Z').toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'})}</div>}
+        </div>
+
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn btn-primary" style={{flex:1}} onClick={()=>{
+            if(!form.patientName||!form.date)return;
+            onSave({...form,type,checks,score,id:Date.now()});
+          }}>บันทึกการเยี่ยม</button>
+          <button className="btn btn-outline" onClick={onClose}>ยกเลิก</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HomeVisitPage({patients}){
+  const [tab,setTab]=useState('all');
+  const [showForm,setShowForm]=useState(null); // 'staff' | 'aosomo'
+  const [visits,setVisits]=useState(INIT_VISITS);
+
+  const filtered=tab==='all'?visits:visits.filter(v=>v.type===tab);
+  const staffCount=visits.filter(v=>v.type==='staff').length;
+  const aosomoCount=visits.filter(v=>v.type==='aosomo').length;
+  const referCount=visits.filter(v=>v.refer).length;
+
+  const saveVisit=(data)=>{
+    setVisits(v=>[data,...v]);
+    setShowForm(null);
+  };
+
+  return(
+    <div className="page">
+      <div className="page-title">เยี่ยมบ้าน</div>
+      <div className="page-sub">บันทึกและติดตามการเยี่ยมผู้ป่วยจิตเวช</div>
+
+      {/* Summary */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
+        {[['ทั้งหมด',visits.length,'var(--primary)','var(--primary-lt)','📋'],['เจ้าหน้าที่',staffCount,'#0d9488','#ccfbf1','🏥'],['อสม.',aosomoCount,'#7c3aed','#ede9fe','🏡']].map(([l,n,c,bg,icon])=>(
+          <div key={l} style={{background:bg,borderRadius:10,padding:'10px 12px',textAlign:'center'}}>
+            <div style={{fontSize:18}}>{icon}</div>
+            <div style={{fontSize:20,fontWeight:800,color:c,marginTop:2}}>{n}</div>
+            <div style={{fontSize:11,color:c,fontWeight:600,opacity:.8}}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {referCount>0&&(
+        <div style={{background:'var(--red-lt)',border:'1px solid var(--red-bd)',borderRadius:10,padding:'10px 14px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:20}}>⚠️</span>
+          <div><div style={{fontSize:13,fontWeight:700,color:'var(--red)'}}>มี {referCount} ราย ที่ต้องส่งต่อ/รายงานเร่งด่วน</div><div style={{fontSize:11,color:'var(--text3)'}}>กรุณาตรวจสอบและดำเนินการ</div></div>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+        <button className="btn btn-primary" style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px'}} onClick={()=>setShowForm('staff')}>
+          <span style={{width:18,height:18,display:'inline-flex'}}>{Icons.clipboard}</span> เจ้าหน้าที่เยี่ยม
+        </button>
+        <button style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px',border:'2px solid #7c3aed',background:'#faf5ff',color:'#7c3aed',borderRadius:'var(--radius-sm)',fontFamily:"'Sarabun',sans-serif",fontSize:14,fontWeight:700,cursor:'pointer'}} onClick={()=>setShowForm('aosomo')}>
+          <span style={{width:18,height:18,display:'inline-flex'}}>{Icons.house}</span> อสม. เยี่ยม
+        </button>
+      </div>
+
+      {/* Tab filter */}
+      <div className="tab-bar">
+        {[['all','ทั้งหมด'],['staff','🏥 เจ้าหน้าที่'],['aosomo','🏡 อสม.'],['refer','⚠️ ส่งต่อ']].map(([v,l])=>(
+          <button key={v} className={`tab-btn ${tab===v?'active':''}`} onClick={()=>setTab(v)}>{l}</button>
+        ))}
+      </div>
+
+      {/* Visit list */}
+      {(tab==='refer'?visits.filter(v=>v.refer):filtered).length===0?(
+        <div className="empty">{Icons.clipboard}<p style={{marginTop:8}}>ยังไม่มีรายการเยี่ยมบ้าน</p></div>
+      ):(
+        (tab==='refer'?visits.filter(v=>v.refer):filtered).map(v=>{
+          const checklist=v.type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST;
+          const sc=ScoreColor(v.score,checklist.length);
+          const d=new Date(v.date+'T00:00:00Z');
+          return(
+            <div key={v.id} className={`visit-card ${v.type==='aosomo'?'aosomo':''}`}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700}}>{v.patientName}</div>
+                  <div style={{fontSize:12,color:'var(--text3)',marginTop:1}}>{v.village} · {thDate(d)}</div>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
+                  <span style={{fontSize:11,background:v.type==='staff'?'#ccfbf1':'#ede9fe',color:v.type==='staff'?'#0d9488':'#7c3aed',padding:'2px 8px',borderRadius:20,fontWeight:700}}>
+                    {v.type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'}
+                  </span>
+                  {v.refer&&<span style={{fontSize:11,background:'var(--red-lt)',color:'var(--red)',padding:'2px 8px',borderRadius:20,fontWeight:700}}>⚠️ ส่งต่อ</span>}
+                </div>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:v.note?8:0}}>
+                <span className="score-badge" style={{background:sc.bg,color:sc.color,fontSize:11}}>ผล {v.score}/{checklist.length} · {sc.label}</span>
+                <span style={{fontSize:12,color:'var(--text3)'}}>โดย {v.visitor}</span>
+              </div>
+              {v.note&&<div style={{fontSize:12,color:'var(--text2)',paddingTop:8,borderTop:'1px solid var(--border)',marginTop:4}}>{v.note}</div>}
+              {/* progress bar */}
+              <div style={{height:4,background:'var(--border)',borderRadius:2,marginTop:8,overflow:'hidden'}}>
+                <div style={{width:`${checklist.length>0?(v.score/checklist.length*100):0}%`,height:'100%',background:sc.color,borderRadius:2}}/>
+              </div>
+            </div>
+          );
+        })
+      )}
+
+      {showForm&&<VisitFormModal patients={patients} type={showForm} onClose={()=>setShowForm(null)} onSave={saveVisit}/>}
+    </div>
+  );
+}
+
+// ─── TWEAKS PANEL ─────────────────────────────────────────────
+function TweaksPanel({show,onClose,tweaks,setTweaks}){
+  if(!show)return null;
+  const t=(k,v)=>{
+    const next={...tweaks,[k]:v};
+    setTweaks(next);
+    window.parent.postMessage({type:'__edit_mode_set_keys',edits:next},'*');
+  };
+  return(
+    <div className="tweaks-panel">
+      <div className="tweaks-title">Tweaks <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text3)',display:'flex',padding:0}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+      <div className="tweak-row">
+        <label>ชื่อโรงพยาบาล</label>
+        <input type="text" value={tweaks.hospitalName} onChange={e=>t('hospitalName',e.target.value)}/>
+      </div>
+      <div className="tweak-row">
+        <label>แสดงกลุ่ม</label>
+        <select value={tweaks.defaultFilter} onChange={e=>t('defaultFilter',e.target.value)}>
+          <option value="all">ทั้งหมด</option>
+          <option value="red">สีแดงเท่านั้น</option>
+          <option value="yellow">สีเหลืองเท่านั้น</option>
+          <option value="green">สีเขียวเท่านั้น</option>
+        </select>
+      </div>
+      <div className="tweak-row">
+        <label>แจ้งเตือนล่วงหน้า (วัน)</label>
+        <input type="number" min="1" max="14" value={tweaks.alertDays} onChange={e=>t('alertDays',parseInt(e.target.value)||1)}/>
+      </div>
+      <div className="tweak-row" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <label style={{marginBottom:0}}>Dark mode</label>
+        <label className="toggle"><input type="checkbox" checked={tweaks.dark} onChange={e=>t('dark',e.target.checked)}/><span className="toggle-slider"/></label>
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ROOT ─────────────────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "hospitalName": "รพ.สต.สองคอน",
+  "defaultFilter": "all",
+  "alertDays": 1,
+  "dark": false
+}/*EDITMODE-END*/;
+
+function App(){
+  const [page,setPage]=useState('dashboard');
+  const [selected,setSelected]=useState(null);
+  const [tweaks,setTweaks]=useState(TWEAK_DEFAULTS);
+  const [showTweaks,setShowTweaks]=useState(false);
+  const [patients,setPatients]=useState(allPatients);
+
+  useEffect(()=>{
+    window.addEventListener('message',e=>{
+      if(e.data?.type==='__activate_edit_mode')setShowTweaks(true);
+      if(e.data?.type==='__deactivate_edit_mode')setShowTweaks(false);
+    });
+    window.parent.postMessage({type:'__edit_mode_available'},'*');
+  },[]);
+
+  // Apply dark mode
+  useEffect(()=>{
+    if(tweaks.dark){
+      document.documentElement.style.setProperty('--bg','#0f172a');
+      document.documentElement.style.setProperty('--card','#1e293b');
+      document.documentElement.style.setProperty('--text','#f1f5f9');
+      document.documentElement.style.setProperty('--text2','#94a3b8');
+      document.documentElement.style.setProperty('--text3','#64748b');
+      document.documentElement.style.setProperty('--border','#334155');
+    } else {
+      document.documentElement.style.setProperty('--bg','#f2f6f9');
+      document.documentElement.style.setProperty('--card','#ffffff');
+      document.documentElement.style.setProperty('--text','#1a2332');
+      document.documentElement.style.setProperty('--text2','#4a5568');
+      document.documentElement.style.setProperty('--text3','#8a9ab0');
+      document.documentElement.style.setProperty('--border','#e2eaf2');
+    }
+  },[tweaks.dark]);
+
+  const handleAddRecord=(form)=>{
+    // Add to patients list dynamically
+    const dateJs=new Date(form.date+'T00:00:00Z');
+    const serial=Math.round(dateJs.getTime()/(86400*1000))+25569;
+    const grp=form.group.includes('แดง')?'red':form.group.includes('เหลือง')?'yellow':'green';
+    const interval=parseInterval(form.interval);
+    const nextDate=new Date(dateJs.getTime()+interval*86400*1000);
+    setPatients(prev=>{
+      const existing=prev.find(p=>p.name===form.name);
+      const newRec={idx:records.length,serial,date:dateJs,group:grp,groupLabel:`สุขภาพจิต กลุ่ม ${form.group}`,name:form.name,village:form.village,intervalStr:form.interval,interval,note:form.note};
+      if(existing){
+        return prev.map(p=>{
+          if(p.name!==form.name)return p;
+          const daysUntil=diffDays(nextDate,TODAY);
+          return{...p,serial,date:dateJs,group:grp,intervalStr:form.interval,interval,note:form.note,nextDate,daysUntil,history:[newRec,...p.history]};
+        }).sort((a,b)=>a.daysUntil-b.daysUntil);
+      } else {
+        const daysUntil=diffDays(nextDate,TODAY);
+        const newPt={...newRec,id:prev.length,nextDate,daysUntil,history:[newRec]};
+        return[...prev,newPt].sort((a,b)=>a.daysUntil-b.daysUntil);
+      }
+    });
+  };
+
+  const todayCount=patients.filter(p=>p.daysUntil===0).length;
+  const overdueCount=patients.filter(p=>p.daysUntil<0).length;
+
+  const navItems=[
+    {id:'dashboard',label:'หน้าหลัก',icon:Icons.home},
+    {id:'patients',label:'ผู้ป่วย',icon:Icons.users},
+    {id:'timeline',label:'ตารางนัด',icon:Icons.calendar},
+    {id:'overview',label:'ภาพรวม',icon:Icons.chart},
+    {id:'visit',label:'เยี่ยมบ้าน',icon:Icons.house},
+    {id:'admin',label:'แอดมิน',icon:Icons.settings},
+  ];
+
+  return(
+    <>
+      {/* Desktop sidebar */}
+      <div className="sidebar">
+        <div className="sidebar-logo">
+          <div style={{fontSize:18,fontWeight:800,color:'var(--primary)'}}>JitHome</div>
+          <div style={{fontSize:11,color:'var(--text3)',marginTop:2}}>{tweaks.hospitalName}</div>
+        </div>
+        <div className="sidebar-nav">
+          {navItems.map(n=>(
+            <div key={n.id} className={`sidebar-nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}>
+              <span style={{width:18,height:18,display:'inline-flex'}}>{n.icon}</span>
+              {n.label}
+              {n.id==='dashboard'&&overdueCount>0&&<span style={{marginLeft:'auto',background:'var(--red)',color:'#fff',fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:20}}>{overdueCount}</span>}
+            </div>
+          ))}
+        </div>
+        {/* Quick shortcuts */}
+        <div style={{padding:'8px 12px',display:'flex',flexDirection:'column',gap:8}}>
+          <button onClick={()=>setPage('visit')} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'linear-gradient(135deg,#ecfeff,#f0f9ff)',border:'1.5px solid rgba(10,126,164,.25)',borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:"'Sarabun',sans-serif"}}>
+            <div style={{width:32,height:32,borderRadius:8,background:'var(--primary)',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:16,flexShrink:0}}>🏥</div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:'var(--text)'}}>เยี่ยมบ้านวันนี้</div>
+              <div style={{fontSize:10,color:'var(--text3)'}}>เริ่มบันทึกเยี่ยม →</div>
+            </div>
+          </button>
+          <button onClick={()=>setPage('overview')} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'linear-gradient(135deg,#f0fdf4,#ecfdf5)',border:'1.5px solid var(--green-bd)',borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:"'Sarabun',sans-serif"}}>
+            <div style={{width:32,height:32,borderRadius:8,background:'var(--green)',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:16,flexShrink:0}}>📊</div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:'var(--text)'}}>รายงานสรุป</div>
+              <div style={{fontSize:10,color:'var(--text3)'}}>ดูภาพรวม รพ.สต.</div>
+            </div>
+          </button>
+        </div>
+
+        {/* Flag tip card */}
+        <div style={{margin:'4px 12px 12px',position:'relative',background:'linear-gradient(135deg,#fef2f2,#fff7f7)',border:'1px solid var(--red-bd)',borderRadius:10,padding:'10px 12px 10px 28px',overflow:'visible'}}>
+          <svg style={{position:'absolute',left:-6,top:8,width:22,height:28}} viewBox="0 0 22 28" fill="none">
+            <line x1="4" y1="2" x2="4" y2="28" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M4 3 L20 8 L4 14 Z" fill="#dc2626" stroke="#991b1b" strokeWidth="0.8" strokeLinejoin="round"/>
+          </svg>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--red)',marginBottom:2}}>ต้องติดตาม</div>
+          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.4}}>มีผู้ป่วยเกินวันนัด {overdueCount} ราย</div>
+          <button onClick={()=>setPage('timeline')} style={{marginTop:6,background:'var(--red)',color:'#fff',border:'none',borderRadius:6,padding:'4px 10px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:"'Sarabun',sans-serif"}}>ดูรายการ →</button>
+        </div>
+        <div style={{padding:12,borderTop:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,padding:10,borderRadius:8,background:'var(--bg)'}}>
+            <div style={{width:30,height:30,borderRadius:'50%',background:'var(--primary)',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:12,fontWeight:700}}>อ</div>
+            <div><div style={{fontSize:12,fontWeight:600}}>อสม. ผู้ดูแล</div><div style={{fontSize:10,color:'var(--text3)'}}>สองคอน</div></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="app-main">
+        <div className="app-header">
+          <div>
+            <div className="header-title">JitHome</div>
+            <div className="header-sub">{tweaks.hospitalName} · ระบบติดตามจิตเวช</div>
+          </div>
+          <div className="header-right">
+            <button className="notif-btn" onClick={()=>setPage('timeline')}>
+              {Icons.bell}
+              {(todayCount+overdueCount)>0&&<span className="notif-badge">{todayCount+overdueCount}</span>}
+            </button>
+            <div className="avatar">อ</div>
+          </div>
+        </div>
+
+        {page==='dashboard'&&<DashboardPage patients={patients} onSelectPatient={setSelected} onSelectPage={setPage}/>}
+        {page==='patients'&&<PatientsPage patients={patients} onSelectPatient={setSelected}/>}
+        {page==='timeline'&&<TimelinePage patients={patients} onSelectPatient={setSelected}/>}
+        {page==='overview'&&<OverviewPage patients={patients}/>}
+        {page==='visit'&&<HomeVisitPage patients={patients}/>}
+        {page==='admin'&&<AdminPage patients={patients} onAddRecord={handleAddRecord}/>}
+      </div>
+
+      {/* Bottom nav (mobile) */}
+      <nav className="bottom-nav">
+        {navItems.map(n=>(
+          <button key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}>
+            {n.icon}
+            <span>{n.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* Patient modal */}
+      {selected&&<PatientModal patient={selected} onClose={()=>setSelected(null)} onRecorded={(p,date,interval,note)=>{
+        handleAddRecord({name:p.name,village:p.village,group:p.groupLabel?.replace('สุขภาพจิต กลุ่ม ','').trim()||'สีเหลือง',date,interval,note});
+        setSelected(null);
+      }}/>}
+
+      {/* Tweaks */}
+      <TweaksPanel show={showTweaks} onClose={()=>{setShowTweaks(false);window.parent.postMessage({type:'__edit_mode_dismissed'},'*');}} tweaks={tweaks} setTweaks={setTweaks}/>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

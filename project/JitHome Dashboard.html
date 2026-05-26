@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JitHome — ระบบติดตามผู้ป่วยจิตเวช</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sarabun',sans-serif;background:#e8f4fd;min-height:100vh;color:#1a2332;-webkit-font-smoothing:antialiased}
+
+/* ─── HEADER ─── */
+.app-header{background:linear-gradient(135deg,#0284c7 0%,#0ea5e9 60%,#38bdf8 100%);padding:0 28px;display:flex;align-items:center;justify-content:space-between;min-height:88px;position:sticky;top:0;z-index:20;box-shadow:0 2px 12px rgba(2,132,199,.3)}
+.header-brand{display:flex;align-items:center;gap:18px}
+.logo-box{width:70px;height:70px;background:#fff;border-radius:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.15);flex-shrink:0}
+.logo-inner{width:54px;height:54px;background:linear-gradient(135deg,#0ea5e9,#0284c7);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.logo-text-wrap{display:flex;flex-direction:column}
+.logo-th{font-size:22px;font-weight:800;color:#fff;letter-spacing:.5px;line-height:1.1;text-shadow:0 1px 3px rgba(0,0,0,.2)}
+.logo-en{font-size:16px;font-weight:700;color:rgba(255,255,255,.85);letter-spacing:2px;margin-top:2px}
+.header-login{background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.6);color:#fff;padding:8px 20px;border-radius:8px;font-family:'Sarabun',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.15s;white-space:nowrap}
+.header-login:hover{background:rgba(255,255,255,.25)}
+
+/* ─── NAV TABS ─── */
+.nav-bar{background:linear-gradient(135deg,#0284c7,#0369a1);padding:0 28px;display:flex;align-items:flex-end;gap:2px;overflow-x:auto;scrollbar-width:none}
+.nav-bar::-webkit-scrollbar{display:none}
+.nav-tab{padding:11px 18px;font-size:13px;font-weight:600;color:rgba(255,255,255,.75);cursor:pointer;border-radius:8px 8px 0 0;border:none;background:none;font-family:'Sarabun',sans-serif;white-space:nowrap;transition:.15s;border-bottom:3px solid transparent}
+.nav-tab:hover{color:#fff;background:rgba(255,255,255,.1)}
+.nav-tab.active{background:#fff;color:#0284c7;border-bottom:3px solid #0284c7}
+
+/* ─── MAIN CONTENT ─── */
+.main{padding:18px 20px;max-width:1400px;margin:0 auto}
+
+/* ─── YEAR SELECTOR ─── */
+.year-bar{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.year-select{padding:6px 12px;border:2px solid #bae6fd;border-radius:8px;font-family:'Sarabun',sans-serif;font-size:14px;font-weight:700;color:#0284c7;background:#fff;cursor:pointer;outline:none}
+.year-label{font-size:13px;color:#64748b;font-weight:500}
+
+/* ─── 3-COL GRID ─── */
+.dashboard-grid{display:grid;grid-template-columns:240px 1fr 340px;gap:14px;align-items:start}
+@media(max-width:1100px){.dashboard-grid{grid-template-columns:220px 1fr 300px}}
+@media(max-width:860px){.dashboard-grid{grid-template-columns:1fr;gap:12px}}
+
+/* ─── CARD ─── */
+.card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.07),0 1px 3px rgba(0,0,0,.05)}
+.card-title{font-size:13px;font-weight:700;color:#fff;background:#0284c7;border-radius:8px 8px 0 0;padding:8px 14px;margin:-18px -18px 14px;letter-spacing:.3px}
+.card-title.purple{background:#7c3aed}
+.card-title.teal{background:#0d9488}
+
+/* ─── LEFT PANEL ─── */
+.total-box{text-align:center;padding-bottom:12px;border-bottom:1px dashed #e2e8f0;margin-bottom:12px}
+.total-label{font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+.total-num{font-size:30px;font-weight:800;color:#f59e0b;line-height:1.1;margin:4px 0 2px}
+.total-unit{font-size:12px;color:#94a3b8}
+.gender-row{display:flex;gap:10px;margin-bottom:14px}
+.gender-box{flex:1;background:#f0f9ff;border-radius:10px;padding:10px;text-align:center;border:1.5px solid #bae6fd}
+.gender-num{font-size:18px;font-weight:800;margin:4px 0 2px;line-height:1}
+.gender-label{font-size:11px;color:#64748b;font-weight:600}
+.age-row{margin-bottom:8px}
+.age-label{display:flex;justify-content:space-between;font-size:12px;color:#475569;margin-bottom:3px;font-weight:500}
+.age-bar{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden}
+.age-fill{height:100%;border-radius:4px;transition:width .6s ease}
+
+/* ─── MIDDLE PANEL ─── */
+.section-sub{font-size:12px;color:#64748b;margin-bottom:14px;line-height:1.6;font-weight:500}
+.adl-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;margin-bottom:8px;border:1.5px solid transparent}
+.adl-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px}
+.adl-name{font-size:13px;font-weight:700;flex:1}
+.adl-count{font-size:16px;font-weight:800;color:#0f172a}
+.adl-unit{font-size:11px;color:#94a3b8;margin-left:2px}
+.adl-pct{font-size:13px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+
+.screened-box{background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.screened-num{font-size:18px;font-weight:800;color:#0284c7}
+.screened-pct{font-size:13px;color:#64748b}
+.cov-pill{background:#0284c7;color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700}
+
+/* ─── RIGHT PANEL ─── */
+.coverage-bar-wrap{margin-bottom:14px}
+.coverage-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.coverage-pct{font-size:22px;font-weight:800;color:#f59e0b}
+.coverage-detail{font-size:11px;color:#94a3b8}
+.progress-main{height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden;margin-bottom:12px}
+.progress-fill{height:100%;background:linear-gradient(90deg,#0284c7,#38bdf8);border-radius:5px;transition:width .8s ease}
+
+.screen-table{width:100%;border-collapse:collapse;font-size:12px}
+.screen-table th{padding:7px 8px;font-weight:700;font-size:11px;text-align:center;color:#64748b;background:#f8fafc;border-bottom:2px solid #e2e8f0}
+.screen-table th:first-child{text-align:left;padding-left:6px}
+.screen-table td{padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:500}
+.screen-table td:first-child{text-align:left;font-size:11.5px;color:#334155;padding-left:6px;font-weight:600}
+.screen-table tr:last-child td{border-bottom:none}
+.screen-table tr:hover td{background:#f8fafc}
+.num-ok{color:#16a34a;font-weight:700}
+.num-risk{color:#dc2626;font-weight:700}
+
+/* ─── BOTTOM ROW ─── */
+.bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+@media(max-width:700px){.bottom-grid{grid-template-columns:1fr}}
+
+.village-table{width:100%;border-collapse:collapse;font-size:12px}
+.village-table th{padding:7px 10px;font-size:11px;font-weight:700;color:#64748b;background:#f8fafc;border-bottom:2px solid #e2e8f0;text-align:center}
+.village-table th:first-child{text-align:left}
+.village-table td{padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:center}
+.village-table td:first-child{text-align:left;font-weight:600;color:#334155}
+.village-table tr:last-child td{border-bottom:none;font-weight:800;background:#f0f9ff}
+
+.trend-row{display:flex;align-items:flex-end;gap:4px;height:60px;padding:0 4px}
+.trend-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.trend-bar{width:100%;border-radius:4px 4px 0 0;min-height:4px;transition:height .6s ease}
+.trend-label{font-size:9px;color:#94a3b8;white-space:nowrap}
+
+/* ─── MINI CHIPS ─── */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.chip.red{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.chip.yellow{background:#fffbeb;color:#d97706;border:1px solid #fde68a}
+.chip.green{background:#ecfdf5;color:#16a34a;border:1px solid #bbf7d0}
+
+/* ─── NOTIFICATION BAR ─── */
+.notif-bar{background:linear-gradient(90deg,#fef3c7,#fde68a);border:1.5px solid #fbbf24;border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;font-size:13px;color:#92400e;font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="app-header">
+  <div class="header-brand">
+    <div class="logo-box">
+      <div class="logo-inner">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+      </div>
+    </div>
+    <div class="logo-text-wrap">
+      <div class="logo-th">ระบบติดตามผู้ป่วยจิตเวช</div>
+      <div class="logo-en">JitHome APPLICATION</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div style="font-size:12px;color:rgba(255,255,255,.75);text-align:right">รพ.สต.สองคอน<br><span style="font-weight:700">ปี 2569</span></div>
+    <button class="header-login">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      เข้าสู่ระบบ
+    </button>
+  </div>
+</div>
+
+<!-- NAV TABS -->
+<div class="nav-bar">
+  <button class="nav-tab active" onclick="setTab(this)">ภาพรวม</button>
+  <button class="nav-tab" onclick="setTab(this)">รายงานการฉีดยา</button>
+  <button class="nav-tab" onclick="setTab(this)">การคัดกรอง</button>
+  <button class="nav-tab" onclick="setTab(this)">ประวัติผู้ป่วย</button>
+  <button class="nav-tab" onclick="setTab(this)">เยี่ยมบ้าน</button>
+  <button class="nav-tab" onclick="setTab(this)">รายงาน อสม.</button>
+  <button class="nav-tab" onclick="setTab(this)">ข้อมูลชมรม</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- Year bar -->
+  <div class="year-bar">
+    <select class="year-select" id="yearSel" onchange="updateYear()">
+      <option>ปี 2569</option>
+      <option>ปี 2568</option>
+      <option>ปี 2567</option>
+    </select>
+    <span class="year-label">ข้อมูล ณ วันที่ 25 เมษายน 2569 · รพ.สต.สองคอน</span>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <span class="chip red">⚠️ เกินนัด 3 ราย</span>
+      <span class="chip yellow">🔔 วันนี้ 2 ราย</span>
+    </div>
+  </div>
+
+  <!-- Notification -->
+  <div class="notif-bar">
+    <span>🔔</span>
+    มีผู้ป่วยจิตเวชนัดฉีดยา <strong>วันนี้ 2 ราย</strong> และ <strong>เกินนัด 3 ราย</strong> — กรุณาตรวจสอบและประสาน อสม. ในพื้นที่
+  </div>
+
+  <!-- 3-col grid -->
+  <div class="dashboard-grid">
+
+    <!-- LEFT: Population stats -->
+    <div class="card">
+      <div class="card-title">ผู้ป่วยจิตเวชในเขตพื้นที่</div>
+      <div class="total-box">
+        <div class="total-label">ผู้ป่วยทั้งหมด</div>
+        <div class="total-num" id="totalNum">24</div>
+        <div class="total-unit">ราย</div>
+      </div>
+
+      <div class="gender-row">
+        <div class="gender-box">
+          <div style="font-size:22px">👨</div>
+          <div class="gender-num" style="color:#0284c7" id="maleNum">20</div>
+          <div class="gender-label">ชาย</div>
+        </div>
+        <div class="gender-box">
+          <div style="font-size:22px">👩</div>
+          <div class="gender-num" style="color:#ec4899" id="femaleNum">4</div>
+          <div class="gender-label">หญิง</div>
+        </div>
+      </div>
+
+      <!-- By group color -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">กลุ่มสี</div>
+        <div class="age-row">
+          <div class="age-label"><span>🔴 กลุ่มสีแดง</span><span style="font-weight:700;color:#dc2626" id="redCount">7 ราย</span></div>
+          <div class="age-bar"><div class="age-fill" id="redBar" style="background:#dc2626;width:29%"></div></div>
+          <div style="font-size:10px;color:#94a3b8;text-align:right;margin-top:1px" id="redPct">29.17%</div>
+        </div>
+        <div class="age-row" style="margin-top:8px">
+          <div class="age-label"><span>🟡 กลุ่มสีเหลือง</span><span style="font-weight:700;color:#d97706" id="yellowCount">13 ราย</span></div>
+          <div class="age-bar"><div class="age-fill" id="yellowBar" style="background:#d97706;width:54%"></div></div>
+          <div style="font-size:10px;color:#94a3b8;text-align:right;margin-top:1px" id="yellowPct">54.17%</div>
+        </div>
+        <div class="age-row" style="margin-top:8px">
+          <div class="age-label"><span>🟢 กลุ่มสีเขียว</span><span style="font-weight:700;color:#16a34a" id="greenCount">4 ราย</span></div>
+          <div class="age-bar"><div class="age-fill" id="greenBar" style="background:#16a34a;width:17%"></div></div>
+          <div style="font-size:10px;color:#94a3b8;text-align:right;margin-top:1px" id="greenPct">16.67%</div>
+        </div>
+      </div>
+
+      <!-- By village -->
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">จำแนกตามหมู่บ้าน</div>
+      <div id="villageBreakdown"></div>
+    </div>
+
+    <!-- MIDDLE: ADL-style group breakdown -->
+    <div class="card">
+      <div class="card-title teal">กลุ่มผู้ป่วยจิตเวช ตามการประเมินความสามารถในการดำเนินชีวิตประจำวัน (ADL)</div>
+
+      <div class="screened-box">
+        <div>
+          <div style="font-size:11px;color:#64748b;font-weight:600">ผู้ป่วยที่ได้รับการคัดกรอง</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+            <span class="screened-num" id="screenedNum">24</span>
+            <span style="font-size:12px;color:#94a3b8">ราย</span>
+            <span class="cov-pill" id="coveragePill">ครอบคลุม 100%</span>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:#64748b">ปีงบประมาณ</div>
+          <div style="font-size:16px;font-weight:800;color:#0284c7">2569</div>
+        </div>
+      </div>
+
+      <!-- ADL groups -->
+      <div class="adl-row" style="background:#ecfdf5;border-color:#bbf7d0">
+        <div class="adl-icon" style="background:#bbf7d0;font-size:24px">🟢</div>
+        <div style="flex:1">
+          <div class="adl-name" style="color:#16a34a">กลุ่มอาการคงที่ (สีเขียว)</div>
+          <div style="font-size:11px;color:#64748b">ดูแลตัวเองได้ อาการคงที่</div>
+        </div>
+        <div style="text-align:right">
+          <span class="adl-count" id="stableCount">4</span><span class="adl-unit">ราย</span><br>
+          <span class="adl-pct" style="background:#ecfdf5;color:#16a34a" id="stablePct">16.67%</span>
+        </div>
+      </div>
+
+      <div class="adl-row" style="background:#fffbeb;border-color:#fde68a">
+        <div class="adl-icon" style="background:#fde68a;font-size:24px">🟡</div>
+        <div style="flex:1">
+          <div class="adl-name" style="color:#d97706">กลุ่มเฝ้าระวัง (สีเหลือง)</div>
+          <div style="font-size:11px;color:#64748b">ต้องติดตามอย่างใกล้ชิด</div>
+        </div>
+        <div style="text-align:right">
+          <span class="adl-count" id="watchCount">13</span><span class="adl-unit">ราย</span><br>
+          <span class="adl-pct" style="background:#fffbeb;color:#d97706" id="watchPct">54.17%</span>
+        </div>
+      </div>
+
+      <div class="adl-row" style="background:#fef2f2;border-color:#fecaca">
+        <div class="adl-icon" style="background:#fecaca;font-size:24px">🔴</div>
+        <div style="flex:1">
+          <div class="adl-name" style="color:#dc2626">กลุ่มวิกฤต (สีแดง)</div>
+          <div style="font-size:11px;color:#64748b">เสี่ยงสูง ต้องดูแลต่อเนื่อง</div>
+        </div>
+        <div style="text-align:right">
+          <span class="adl-count" id="critCount">7</span><span class="adl-unit">ราย</span><br>
+          <span class="adl-pct" style="background:#fef2f2;color:#dc2626" id="critPct">29.17%</span>
+        </div>
+      </div>
+
+      <!-- Trend chart -->
+      <div style="margin-top:18px">
+        <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:10px">แนวโน้มรายเดือน (ผู้ป่วยตามนัด)</div>
+        <div style="display:flex;align-items:flex-end;gap:4px;height:70px;padding:0 4px;border-bottom:2px solid #e2e8f0;border-left:2px solid #e2e8f0;margin-bottom:6px">
+          <div id="trendBars" style="display:flex;align-items:flex-end;gap:6px;width:100%;height:100%;padding-bottom:4px"></div>
+        </div>
+        <div id="trendLabels" style="display:flex;gap:6px;padding:0 4px"></div>
+      </div>
+
+      <!-- Compliance rate -->
+      <div style="margin-top:16px;padding:12px 14px;background:#f0f9ff;border-radius:10px;border:1.5px solid #bae6fd">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:700;color:#0284c7">อัตราการมาตามนัด</div>
+          <span style="font-size:18px;font-weight:800;color:#f59e0b">78.3%</span>
+        </div>
+        <div style="height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden">
+          <div style="width:78.3%;height:100%;background:linear-gradient(90deg,#0284c7,#38bdf8);border-radius:4px"></div>
+        </div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:4px">เป้าหมาย: ≥ 80% · ขาดนัด 21.7%</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Screening results -->
+    <div class="card">
+      <div class="card-title purple">ผลการคัดกรองกลุ่มอาการผู้ป่วยจิตเวช</div>
+
+      <div class="coverage-bar-wrap">
+        <div class="coverage-row">
+          <div>
+            <div style="font-size:11px;color:#64748b;font-weight:600">ปี 2569 · คัดกรองแล้ว</div>
+            <div style="font-size:12px;color:#94a3b8">24/24 ราย</div>
+          </div>
+          <div class="coverage-pct">100%</div>
+        </div>
+        <div class="progress-main">
+          <div class="progress-fill" style="width:100%"></div>
+        </div>
+      </div>
+
+      <table class="screen-table">
+        <thead>
+          <tr>
+            <th style="width:55%">ความถนัดทางสุขภาพจิต</th>
+            <th>ปกติ</th>
+            <th>เสี่ยง/ป่วย</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1. ด้านอารมณ์ (PHQ-9)</td>
+            <td class="num-ok">18</td>
+            <td class="num-risk">6</td>
+          </tr>
+          <tr>
+            <td>2. ด้านการรับประทานยาสม่ำเสมอ</td>
+            <td class="num-ok">16</td>
+            <td class="num-risk">8</td>
+          </tr>
+          <tr>
+            <td>3. ด้านพฤติกรรมก้าวร้าว</td>
+            <td class="num-ok">20</td>
+            <td class="num-risk">4</td>
+          </tr>
+          <tr>
+            <td>4. ด้านการนอนหลับ</td>
+            <td class="num-ok">14</td>
+            <td class="num-risk">10</td>
+          </tr>
+          <tr>
+            <td>5. ด้านการดูแลตนเอง (ADL)</td>
+            <td class="num-ok">19</td>
+            <td class="num-risk">5</td>
+          </tr>
+          <tr>
+            <td>6. ด้านการสนับสนุนทางสังคม</td>
+            <td class="num-ok">17</td>
+            <td class="num-risk">7</td>
+          </tr>
+          <tr>
+            <td>7. ด้านความเสี่ยงต่อการทำร้ายตนเอง</td>
+            <td class="num-ok">21</td>
+            <td class="num-risk">3</td>
+          </tr>
+          <tr>
+            <td>8. ด้านการมีงานทำ/กิจกรรม</td>
+            <td class="num-ok">12</td>
+            <td class="num-risk">12</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:12px;padding:10px 12px;background:#faf5ff;border-radius:8px;border:1px solid #e9d5ff">
+        <div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:6px">สรุปอัตราความเสี่ยง</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="text-align:center;background:#fff;border-radius:6px;padding:6px">
+            <div style="font-size:18px;font-weight:800;color:#dc2626">33.3%</div>
+            <div style="font-size:10px;color:#94a3b8">ไม่กินยาสม่ำเสมอ</div>
+          </div>
+          <div style="text-align:center;background:#fff;border-radius:6px;padding:6px">
+            <div style="font-size:18px;font-weight:800;color:#d97706">12.5%</div>
+            <div style="font-size:10px;color:#94a3b8">เสี่ยงทำร้ายตนเอง</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM ROW -->
+  <div class="bottom-grid">
+
+    <!-- Village breakdown table -->
+    <div class="card">
+      <div class="card-title">ตารางสรุปผู้ป่วยจำแนกตามหมู่บ้าน</div>
+      <table class="village-table" id="villageTable">
+        <thead>
+          <tr>
+            <th>หมู่บ้าน</th>
+            <th style="color:#dc2626">🔴 แดง</th>
+            <th style="color:#d97706">🟡 เหลือง</th>
+            <th style="color:#16a34a">🟢 เขียว</th>
+            <th>รวม</th>
+            <th>%</th>
+          </tr>
+        </thead>
+        <tbody id="villageTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Appointment status + Action stats -->
+    <div class="card">
+      <div class="card-title" style="background:#0369a1">สถานะการนัดหมายและการดำเนินงาน ปี 2569</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div style="text-align:center;padding:14px 10px;background:#fef2f2;border-radius:10px;border:1.5px solid #fecaca">
+          <div style="font-size:28px;font-weight:800;color:#dc2626">3</div>
+          <div style="font-size:11px;color:#dc2626;font-weight:600">เกินวันนัด</div>
+        </div>
+        <div style="text-align:center;padding:14px 10px;background:#f0f9ff;border-radius:10px;border:1.5px solid #bae6fd">
+          <div style="font-size:28px;font-weight:800;color:#0284c7">2</div>
+          <div style="font-size:11px;color:#0284c7;font-weight:600">นัดวันนี้</div>
+        </div>
+        <div style="text-align:center;padding:14px 10px;background:#fffbeb;border-radius:10px;border:1.5px solid #fde68a">
+          <div style="font-size:28px;font-weight:800;color:#d97706">5</div>
+          <div style="font-size:11px;color:#d97706;font-weight:600">ใน 7 วัน</div>
+        </div>
+        <div style="text-align:center;padding:14px 10px;background:#ecfdf5;border-radius:10px;border:1.5px solid #bbf7d0">
+          <div style="font-size:28px;font-weight:800;color:#16a34a">14</div>
+          <div style="font-size:11px;color:#16a34a;font-weight:600">ปกติ</div>
+        </div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:10px">ผลการดำเนินงาน อสม. และเจ้าหน้าที่</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8fafc;border-radius:8px">
+          <span style="font-size:12px;font-weight:600">🏡 เยี่ยมบ้านโดย อสม.</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:80px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="width:83%;height:100%;background:#7c3aed;border-radius:3px"></div></div>
+            <span style="font-size:12px;font-weight:700;color:#7c3aed">20/24</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8fafc;border-radius:8px">
+          <span style="font-size:12px;font-weight:600">🏥 เยี่ยมบ้านโดยเจ้าหน้าที่</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:80px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="width:58%;height:100%;background:#0d9488;border-radius:3px"></div></div>
+            <span style="font-size:12px;font-weight:700;color:#0d9488">14/24</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8fafc;border-radius:8px">
+          <span style="font-size:12px;font-weight:600">💉 ฉีดยาตามนัด</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:80px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="width:79%;height:100%;background:#0284c7;border-radius:3px"></div></div>
+            <span style="font-size:12px;font-weight:700;color:#0284c7">19/24</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">
+          <span style="font-size:12px;font-weight:600">⚠️ ส่งต่อ/รายงานเร่งด่วน</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:80px;height:6px;background:#fecaca;border-radius:3px;overflow:hidden"><div style="width:13%;height:100%;background:#dc2626;border-radius:3px"></div></div>
+            <span style="font-size:12px;font-weight:700;color:#dc2626">3 ราย</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Tab nav
+function setTab(el){
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// Village data
+const villages=[
+  {name:'หมู่ 1',red:2,yellow:7,green:2},
+  {name:'หมู่ 2',red:0,yellow:1,green:1},
+  {name:'หมู่ 3',red:0,yellow:3,green:0},
+  {name:'หมู่ 4',red:0,yellow:4,green:0},
+  {name:'หมู่ 5',red:3,yellow:2,green:1},
+  {name:'หมู่ 6',red:1,yellow:1,green:0},
+  {name:'หมู่ 7',red:0,yellow:2,green:0},
+  {name:'หมู่ 8',red:1,yellow:1,green:0},
+  {name:'หมู่ 9',red:1,yellow:1,green:0},
+];
+const total=24;
+
+// Village breakdown in left panel
+const vbEl=document.getElementById('villageBreakdown');
+villages.forEach(v=>{
+  const t=v.red+v.yellow+v.green;
+  if(t===0)return;
+  const pct=(t/total*100).toFixed(1);
+  vbEl.innerHTML+=`<div style="margin-bottom:7px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;margin-bottom:2px;font-weight:600">
+      <span>${v.name}</span><span style="color:#0284c7">${t} ราย (${pct}%)</span>
+    </div>
+    <div style="display:flex;height:7px;border-radius:4px;overflow:hidden;background:#e2e8f0">
+      ${v.red>0?`<div style="flex:${v.red};background:#dc2626"></div>`:''}
+      ${v.yellow>0?`<div style="flex:${v.yellow};background:#d97706"></div>`:''}
+      ${v.green>0?`<div style="flex:${v.green};background:#16a34a"></div>`:''}
+    </div>
+  </div>`;
+});
+
+// Village table
+const tbody=document.getElementById('villageTableBody');
+villages.forEach(v=>{
+  const t=v.red+v.yellow+v.green;
+  if(t===0)return;
+  const pct=(t/total*100).toFixed(1);
+  tbody.innerHTML+=`<tr>
+    <td>${v.name}</td>
+    <td style="color:${v.red>0?'#dc2626':'#94a3b8'};font-weight:${v.red>0?700:400}">${v.red||'—'}</td>
+    <td style="color:${v.yellow>0?'#d97706':'#94a3b8'};font-weight:${v.yellow>0?700:400}">${v.yellow||'—'}</td>
+    <td style="color:${v.green>0?'#16a34a':'#94a3b8'};font-weight:${v.green>0?700:400}">${v.green||'—'}</td>
+    <td style="font-weight:700">${t}</td>
+    <td style="font-size:11px;color:#64748b">${pct}%</td>
+  </tr>`;
+});
+// Total row
+tbody.innerHTML+=`<tr>
+  <td>รวมทั้งหมด</td>
+  <td style="color:#dc2626;font-size:14px">7</td>
+  <td style="color:#d97706;font-size:14px">13</td>
+  <td style="color:#16a34a;font-size:14px">4</td>
+  <td style="color:#0284c7;font-size:14px">24</td>
+  <td style="color:#0284c7">100%</td>
+</tr>`;
+
+// Trend chart (monthly appointment adherence)
+const months=['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.'];
+const vals=[18,21,16,20,19,22,24];
+const maxV=Math.max(...vals);
+const barsEl=document.getElementById('trendBars');
+const labelsEl=document.getElementById('trendLabels');
+months.forEach((m,i)=>{
+  const h=Math.round((vals[i]/maxV)*54);
+  const isLast=i===months.length-1;
+  barsEl.innerHTML+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px">
+    <div style="font-size:9px;color:#94a3b8">${vals[i]}</div>
+    <div style="width:100%;height:${h}px;background:${isLast?'#f59e0b':'#0284c7'};border-radius:3px 3px 0 0;opacity:${isLast?1:0.7}"></div>
+  </div>`;
+  labelsEl.innerHTML+=`<div style="flex:1;text-align:center;font-size:10px;color:${isLast?'#f59e0b':'#94a3b8'};font-weight:${isLast?700:400}">${m}</div>`;
+});
+
+// Year selector (demo)
+function updateYear(){
+  const y=document.getElementById('yearSel').value;
+  document.querySelector('.year-label').textContent=`ข้อมูล ณ วันที่ 25 เมษายน ${y} · รพ.สต.สองคอน`;
+}
+</script>
+</body>
+</html>
