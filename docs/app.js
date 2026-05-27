@@ -455,7 +455,12 @@ async function renderAdmin(el) {
         </div>
         <span style="font-size:10px;background:var(--green-lt);color:var(--green);padding:2px 8px;border-radius:20px;font-weight:700">● Active</span>
       </div>
-      <input type="text" value="${esc(settings.sheets_url||'')}" placeholder="https://docs.google.com/spreadsheets/d/..." style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace">
+      <input type="text" id="sheets-url-input" value="${esc(settings.sheets_url||'')}" placeholder="https://docs.google.com/spreadsheets/d/..." style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
+      <div style="display:flex;gap:8px">
+        <button id="sheets-save-btn" onclick="saveSheetURL()" style="flex:1;padding:7px;background:#0f9d58;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก URL</button>
+        <button id="sheets-import-btn" onclick="importFromSheets()" style="flex:1;padding:7px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📥 นำเข้าข้อมูล</button>
+      </div>
+      <div id="sheets-status" style="font-size:11px;color:var(--text3);margin-top:6px;min-height:16px"></div>
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -501,6 +506,110 @@ async function renderAdmin(el) {
 
 async function toggleSetting(key,val){
   await sb.from('app_settings').upsert({setting_key:key,setting_value:val?'1':'0'},{onConflict:'setting_key'})
+}
+
+async function saveSheetURL(){
+  const inp=document.getElementById('sheets-url-input')
+  const btn=document.getElementById('sheets-save-btn')
+  const status=document.getElementById('sheets-status')
+  const val=(inp?.value||'').trim()
+  if(!val){status.textContent='❌ กรุณากรอก URL';return}
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  try{
+    const{error}=await sb.from('app_settings').upsert({setting_key:'sheets_url',setting_value:val},{onConflict:'setting_key'})
+    if(error)throw error
+    status.style.color='var(--green)';status.textContent='✅ บันทึก URL สำเร็จ'
+    btn.textContent='✅ บันทึกแล้ว'
+    setTimeout(()=>{btn.textContent='💾 บันทึก URL';btn.disabled=false;status.textContent=''},2500)
+  }catch(e){status.style.color='var(--red)';status.textContent='❌ '+e.message;btn.textContent='💾 บันทึก URL';btn.disabled=false}
+}
+
+async function importFromSheets(){
+  const inp=document.getElementById('sheets-url-input')
+  const btn=document.getElementById('sheets-import-btn')
+  const status=document.getElementById('sheets-status')
+  let url=(inp?.value||'').trim()
+  if(!url){status.textContent='❌ กรุณากรอก URL ก่อน';return}
+  // Extract sheet ID
+  const m=url.match(/\/d\/([a-zA-Z0-9_-]{20,})/)
+  if(!m){status.style.color='var(--red)';status.textContent='❌ URL ไม่ถูกต้อง';return}
+  const sheetId=m[1]
+  btn.disabled=true;btn.textContent='⏳ กำลังโหลด...'
+  status.style.color='var(--text3)';status.textContent='กำลังดึงข้อมูลจาก Google Sheets...'
+  try{
+    const resp=await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`)
+    if(!resp.ok)throw new Error('ไม่สามารถเข้าถึง Sheet ได้ (ตรวจสอบว่า Sheet เป็น Public)')
+    const text=await resp.text()
+    const json=JSON.parse(text.replace(/^[^(]+\(/,'').replace(/\);?\s*$/,''))
+    const cols=json.table.cols.map(c=>(c.label||c.id||'').toLowerCase().trim())
+    const rows=json.table.rows||[]
+    if(!rows.length)throw new Error('ไม่พบข้อมูลใน Sheet')
+    // Map columns → find name, village, group, date, interval, note
+    const ci={
+      name: cols.findIndex(c=>c.includes('ชื่อ')||c.includes('name')),
+      village: cols.findIndex(c=>c.includes('หมู่')||c.includes('village')||c.includes('บ้าน')),
+      group: cols.findIndex(c=>c.includes('กลุ่ม')||c.includes('group')||c.includes('สี')),
+      date: cols.findIndex(c=>c.includes('วัน')||c.includes('date')||c.includes('ฉีด')),
+      interval: cols.findIndex(c=>c.includes('รอบ')||c.includes('interval')||c.includes('นัด')),
+      note: cols.findIndex(c=>c.includes('หมาย')||c.includes('note')||c.includes('บันทึก')),
+    }
+    // Fallback by position if no Thai header found
+    if(ci.name<0) ci.name=0
+    if(ci.village<0) ci.village=1
+    if(ci.group<0) ci.group=2
+    if(ci.date<0) ci.date=3
+    if(ci.interval<0) ci.interval=4
+    if(ci.note<0) ci.note=5
+    const getVal=(row,i)=>{if(i<0||!row.c||!row.c[i])return '';const v=row.c[i];return v.f||v.v||''}
+    let inserted=0,skipped=0,errors=[]
+    btn.textContent=`⏳ 0/${rows.length}`
+    for(let i=0;i<rows.length;i++){
+      const row=rows[i]
+      const name=String(getVal(row,ci.name)).trim()
+      if(!name||name==='ชื่อ'||name==='name'){skipped++;continue}
+      const village=String(getVal(row,ci.village)).trim()||'หมู่ 1'
+      const groupStr=String(getVal(row,ci.group)).trim()
+      const dateRaw=String(getVal(row,ci.date)).trim()
+      const intervalStr=String(getVal(row,ci.interval)).trim()||'1 เดือน'
+      const note=String(getVal(row,ci.note)).trim()
+      // Parse date — may be Thai BE (พ.ศ.) or ISO
+      let dateISO=''
+      if(/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)){
+        dateISO=dateRaw
+      } else if(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(dateRaw)){
+        const pts2=dateRaw.split(/[\/\-]/)
+        let yr=parseInt(pts2[2])
+        if(yr>2400)yr=yr-543
+        dateISO=`${yr}-${String(pts2[1]).padStart(2,'0')}-${String(pts2[0]).padStart(2,'0')}`
+      } else if(/^\d{1,2}\s+\S+\s+\d{4}$/.test(dateRaw)){
+        // Thai format like "15 มิ.ย. 2566"
+        const TH_M={'ม.ค.':1,'ก.พ.':2,'มี.ค.':3,'เม.ย.':4,'พ.ค.':5,'มิ.ย.':6,'ก.ค.':7,'ส.ค.':8,'ก.ย.':9,'ต.ค.':10,'พ.ย.':11,'ธ.ค.':12,'มกราคม':1,'กุมภาพันธ์':2,'มีนาคม':3,'เมษายน':4,'พฤษภาคม':5,'มิถุนายน':6,'กรกฎาคม':7,'สิงหาคม':8,'กันยายน':9,'ตุลาคม':10,'พฤศจิกายน':11,'ธันวาคม':12}
+        const dp=dateRaw.split(/\s+/)
+        const mm=TH_M[dp[1]]||1
+        let yr=parseInt(dp[2]);if(yr>2400)yr=yr-543
+        dateISO=`${yr}-${String(mm).padStart(2,'0')}-${String(dp[0]).padStart(2,'0')}`
+      }
+      if(!dateISO){skipped++;continue}
+      try{
+        const gc=parseGroupColor(groupStr)
+        const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
+        await sb.from('patients').upsert({name,village},{onConflict:'name'})
+        const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
+        if(!found)throw new Error('patient not found')
+        await sb.from('injection_records').insert({patient_id:found.id,injection_date:dateISO,group_color:gc,group_label:gl,interval_str:intervalStr,interval_days:parseInterval(intervalStr),note})
+        inserted++
+      }catch(e){errors.push(name+': '+e.message)}
+      if((i+1)%5===0)btn.textContent=`⏳ ${i+1}/${rows.length}`
+    }
+    allPatients=await getPatients()
+    status.style.color='var(--green)'
+    status.textContent=`✅ นำเข้าสำเร็จ ${inserted} รายการ${skipped?` · ข้ามไป ${skipped}`:''}`
+    if(errors.length)status.textContent+=` · ผิดพลาด ${errors.length} รายการ`
+    btn.textContent='📥 นำเข้าข้อมูล';btn.disabled=false
+  }catch(e){
+    status.style.color='var(--red)';status.textContent='❌ '+e.message
+    btn.textContent='📥 นำเข้าข้อมูล';btn.disabled=false
+  }
 }
 
 function appendNote(text){const ta=document.getElementById('adm-note');if(ta)ta.value=ta.value?ta.value+' · '+text:text}
