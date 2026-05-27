@@ -435,11 +435,72 @@ async function renderAdmin(el) {
     <button class="btn btn-primary" style="width:auto;padding:9px 20px" id="settings-btn" onclick="saveSettings()">บันทึกการตั้งค่า</button>
   </div>
   <div class="form-section">
-    <h3>📥 ส่งออกข้อมูล</h3>
-    <button onclick="exportCSV()" class="btn btn-outline btn-block" style="margin-bottom:8px">📄 ดาวน์โหลด CSV</button>
-    <button onclick="exportJSON()" class="btn btn-outline btn-block">📦 ดาวน์โหลด JSON</button>
+    <h3>🔗 เชื่อมต่อข้อมูล</h3>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">นำเข้า/ส่งออก และเชื่อมข้อมูลกับระบบภายนอก</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <button onclick="exportCSV()" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:10px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
+        <div style="display:flex;align-items:center;gap:6px"><span style="font-size:18px">📥</span><span style="font-size:13px;font-weight:700;color:#059669">ส่งออกข้อมูล</span></div>
+        <div style="font-size:10px;color:var(--text3)">CSV / JSON</div>
+      </button>
+      <button onclick="exportJSON()" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:var(--primary-lt);border:1.5px solid rgba(10,126,164,.25);border-radius:10px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
+        <div style="display:flex;align-items:center;gap:6px"><span style="font-size:18px">📦</span><span style="font-size:13px;font-weight:700;color:var(--primary)">JSON Export</span></div>
+        <div style="font-size:10px;color:var(--text3)">ข้อมูลแบบ JSON</div>
+      </button>
+    </div>
+    <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:#0f9d58;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px">G</div>
+          <div><div style="font-size:13px;font-weight:700">Google Sheets</div><div style="font-size:11px;color:var(--text3)">ซิงค์อัตโนมัติ</div></div>
+        </div>
+        <span style="font-size:10px;background:var(--green-lt);color:var(--green);padding:2px 8px;border-radius:20px;font-weight:700">● Active</span>
+      </div>
+      <input type="text" value="${esc(settings.sheets_url||'')}" placeholder="https://docs.google.com/spreadsheets/d/..." style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace">
+    </div>
+    <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:#0a7ea4;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px">H</div>
+          <div><div style="font-size:13px;font-weight:700">HOSxP / JHCIS</div><div style="font-size:11px;color:var(--text3)">ระบบฐานข้อมูล รพ.สต.</div></div>
+        </div>
+        <label class="toggle"><input type="checkbox" ${settings.hosxp_enabled==='1'?'checked':''} onchange="toggleSetting('hosxp_enabled',this.checked)"><span class="toggle-slider"></span></label>
+      </div>
+    </div>
+    <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:#06c755;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px">L</div>
+          <div><div style="font-size:13px;font-weight:700">LINE Notify / OA</div><div style="font-size:11px;color:var(--text3)">แจ้งเตือนผ่าน LINE กลุ่ม อสม.</div></div>
+        </div>
+        <label class="toggle"><input type="checkbox" ${settings.line_enabled==='1'?'checked':''} onchange="toggleSetting('line_enabled',this.checked)"><span class="toggle-slider"></span></label>
+      </div>
+      <input type="text" value="${esc(settings.line_token||'')}" placeholder="LINE Access Token" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace">
+    </div>
+    <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:#0088cc;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px">T</div>
+          <div><div style="font-size:13px;font-weight:700">Telegram Bot</div><div style="font-size:11px;color:var(--text3)">${esc(settings.telegram_bot||'@JitHomeBot')} · กลุ่มแจ้งเตือน</div></div>
+        </div>
+        <label class="toggle"><input type="checkbox" ${settings.telegram_enabled==='1'?'checked':''} onchange="toggleSetting('telegram_enabled',this.checked)"><span class="toggle-slider"></span></label>
+      </div>
+      <input type="text" value="${esc(settings.telegram_chatid||'')}" placeholder="Chat ID เช่น -1001234567890" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace">
+    </div>
+    <div style="background:var(--bg);border-radius:10px;padding:12px 14px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:#0ea5e9;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px">☁️</div>
+          <div><div style="font-size:13px;font-weight:700">Cloud Backup</div><div style="font-size:11px;color:var(--text3)">สำรองข้อมูลอัตโนมัติทุก 24 ชม.</div></div>
+        </div>
+        <label class="toggle"><input type="checkbox" ${settings.cloud_backup==='1'?'checked':''} onchange="toggleSetting('cloud_backup',this.checked)"><span class="toggle-slider"></span></label>
+      </div>
+    </div>
   </div>
   </div>`
+}
+
+async function toggleSetting(key,val){
+  await sb.from('app_settings').upsert({setting_key:key,setting_value:val?'1':'0'},{onConflict:'setting_key'})
 }
 
 function appendNote(text){const ta=document.getElementById('adm-note');if(ta)ta.value=ta.value?ta.value+' · '+text:text}
