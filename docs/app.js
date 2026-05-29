@@ -495,7 +495,8 @@ async function renderAdmin(el) {
         </div>
         <label class="toggle"><input type="checkbox" ${settings.line_enabled==='1'?'checked':''} onchange="toggleSetting('line_enabled',this.checked)"><span class="toggle-slider"></span></label>
       </div>
-      <input type="text" value="${esc(settings.line_token||'')}" placeholder="LINE Access Token" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace">
+      <input id="line-token-input" type="text" value="${esc(settings.line_token||'')}" placeholder="LINE Access Token" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
+      <button onclick="saveTokenSetting('line_token','line-token-input','line-save-btn')" id="line-save-btn" style="padding:6px 14px;background:#06c755;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก Token</button>
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -505,7 +506,8 @@ async function renderAdmin(el) {
         </div>
         <label class="toggle"><input type="checkbox" ${settings.telegram_enabled==='1'?'checked':''} onchange="toggleSetting('telegram_enabled',this.checked)"><span class="toggle-slider"></span></label>
       </div>
-      <input type="text" value="${esc(settings.telegram_chatid||'')}" placeholder="Chat ID เช่น -1001234567890" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace">
+      <input id="telegram-chatid-input" type="text" value="${esc(settings.telegram_chatid||'')}" placeholder="Chat ID เช่น -1001234567890" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
+      <button onclick="saveTokenSetting('telegram_chatid','telegram-chatid-input','tg-save-btn')" id="tg-save-btn" style="padding:6px 14px;background:#0088cc;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก Chat ID</button>
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -562,6 +564,16 @@ async function changeMemberRole(userId,role){
 
 async function toggleSetting(key,val){
   await sb.from('app_settings').upsert({setting_key:key,setting_value:val?'1':'0'},{onConflict:'setting_key'})
+}
+
+async function saveTokenSetting(key,inputId,btnId){
+  const val=(document.getElementById(inputId)?.value||'').trim()
+  const btn=document.getElementById(btnId)
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  const{error}=await sb.from('app_settings').upsert({setting_key:key,setting_value:val},{onConflict:'setting_key'})
+  if(error){btn.textContent='❌ ผิดพลาด';btn.disabled=false;return}
+  btn.textContent='✅ บันทึกแล้ว'
+  setTimeout(()=>{btn.textContent=btn.id==='line-save-btn'?'💾 บันทึก Token':'💾 บันทึก Chat ID';btn.disabled=false},2000)
 }
 
 async function saveSheetURL(){
