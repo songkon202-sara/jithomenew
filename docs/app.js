@@ -34,6 +34,7 @@ let hospitalName = 'รพ.สต.สองคอน'
 let allPatients  = []
 let _visitChecks = []
 let _visitType   = 'aosomo'
+let currentUser  = null
 
 // ─── Helpers ─────────────────────────────────────────────────────
 function thDate(d) {
@@ -211,8 +212,10 @@ function renderPatients(el) {
   const villages=[...new Set(pts.map(p=>p.village).filter(Boolean))].sort()
   window._gf='all'; window._vf='all'
   el.innerHTML=`<div class="page">
-  <div class="page-title">ผู้ป่วยทั้งหมด</div>
-  <div class="page-sub">${pts.length} ราย · ${esc(hospitalName)}</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+    <div><div class="page-title" style="margin-bottom:2px">ผู้ป่วยทั้งหมด</div><div class="page-sub">${pts.length} ราย · ${esc(hospitalName)}</div></div>
+    <button onclick="openAddPatient()" style="display:flex;align-items:center;gap:6px;background:var(--primary);color:#fff;border:none;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>เพิ่มผู้ป่วย</button>
+  </div>
   <div class="search-wrap">
     <div class="search-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
     <input id="pt-search" placeholder="ค้นหาชื่อ..." oninput="filterPts()" autocomplete="off">
@@ -808,18 +811,181 @@ async function saveVisitRecord(){
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
 }
 
+// ─── Auth ────────────────────────────────────────────────────────
+function showAuthWall(mode='login'){
+  const wall=document.getElementById('auth-wall')
+  const ct=document.getElementById('auth-content')
+  wall.style.display='flex'
+  if(mode==='login'){
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:40px;margin-bottom:6px">🏥</div>
+      <div style="font-size:22px;font-weight:800;color:var(--primary)">JitHome</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">ระบบติดตามผู้ป่วยจิตเวช</div>
+    </div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text1)">เข้าสู่ระบบ</div>
+    <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="example@email.com" autocomplete="email"></div>
+    <div class="form-group"><label>รหัสผ่าน</label><input type="password" id="auth-password" placeholder="รหัสผ่าน" onkeydown="if(event.key==='Enter')loginUser()"></div>
+    <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="auth-btn" onclick="loginUser()">เข้าสู่ระบบ</button>
+    <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)">ยังไม่มีบัญชี? <a href="#" onclick="showAuthWall('register');return false" style="color:var(--primary);font-weight:700">สมัครสมาชิก</a></div>`
+  } else {
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:40px;margin-bottom:6px">🏥</div>
+      <div style="font-size:22px;font-weight:800;color:var(--primary)">JitHome</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">ระบบติดตามผู้ป่วยจิตเวช</div>
+    </div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text1)">สมัครสมาชิก</div>
+    <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="example@email.com" autocomplete="email"></div>
+    <div class="form-group"><label>รหัสผ่าน</label><input type="password" id="auth-password" placeholder="อย่างน้อย 6 ตัวอักษร"></div>
+    <div class="form-group"><label>ยืนยันรหัสผ่าน</label><input type="password" id="auth-password2" placeholder="พิมพ์รหัสผ่านอีกครั้ง" onkeydown="if(event.key==='Enter')registerUser()"></div>
+    <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="auth-btn" onclick="registerUser()">สมัครสมาชิก</button>
+    <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)">มีบัญชีแล้ว? <a href="#" onclick="showAuthWall('login');return false" style="color:var(--primary);font-weight:700">เข้าสู่ระบบ</a></div>`
+  }
+}
+
+function hideAuthWall(){
+  const wall=document.getElementById('auth-wall')
+  if(wall)wall.style.display='none'
+}
+
+async function loginUser(){
+  const email=(document.getElementById('auth-email')?.value||'').trim()
+  const password=document.getElementById('auth-password')?.value||''
+  const btn=document.getElementById('auth-btn')
+  const err=document.getElementById('auth-error')
+  if(!email||!password){err.textContent='กรุณากรอก Email และรหัสผ่าน';return}
+  btn.disabled=true;btn.textContent='กำลังเข้าสู่ระบบ...'
+  const{data,error}=await sb.auth.signInWithPassword({email,password})
+  if(error){err.textContent='❌ '+(error.message==='Invalid login credentials'?'Email หรือรหัสผ่านไม่ถูกต้อง':error.message);btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return}
+  currentUser=data.user
+  hideAuthWall()
+  updateUserUI()
+  await loadAndNav()
+}
+
+async function registerUser(){
+  const email=(document.getElementById('auth-email')?.value||'').trim()
+  const password=document.getElementById('auth-password')?.value||''
+  const password2=document.getElementById('auth-password2')?.value||''
+  const btn=document.getElementById('auth-btn')
+  const err=document.getElementById('auth-error')
+  if(!email||!password){err.textContent='กรุณากรอก Email และรหัสผ่าน';return}
+  if(password.length<6){err.textContent='รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';return}
+  if(password!==password2){err.textContent='รหัสผ่านไม่ตรงกัน';return}
+  btn.disabled=true;btn.textContent='กำลังสมัคร...'
+  const{data,error}=await sb.auth.signUp({email,password})
+  if(error){err.textContent='❌ '+error.message;btn.disabled=false;btn.textContent='สมัครสมาชิก';return}
+  if(data.user&&!data.session){
+    err.style.color='var(--green)';err.textContent='✅ สมัครสำเร็จ! กรุณายืนยัน Email ก่อนเข้าสู่ระบบ'
+    btn.disabled=false;btn.textContent='สมัครสมาชิก';return
+  }
+  currentUser=data.user
+  hideAuthWall()
+  updateUserUI()
+  await loadAndNav()
+}
+
+async function logoutUser(){
+  await sb.auth.signOut()
+  currentUser=null
+  showAuthWall('login')
+}
+
+function updateUserUI(){
+  const av=document.querySelector('.avatar')
+  if(av&&currentUser?.email){
+    const initials=currentUser.email.slice(0,2).toUpperCase()
+    av.textContent=initials
+    av.title=currentUser.email
+    av.style.cursor='pointer'
+    av.onclick=()=>{if(confirm('ออกจากระบบ?\n'+currentUser.email))logoutUser()}
+  }
+}
+
+// ─── Add Patient ─────────────────────────────────────────────────
+function openAddPatient(){
+  const ov=document.getElementById('addpt-overlay')
+  const ct=document.getElementById('addpt-content')
+  if(!ov||!ct)return
+  ct.innerHTML=`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div style="font-size:17px;font-weight:700">➕ เพิ่มผู้ป่วยใหม่</div>
+    <button onclick="closeAddPatient()" style="background:none;border:none;cursor:pointer;color:var(--text3)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div class="form-group"><label>ชื่อ-นามสกุล *</label><input type="text" id="np-name" placeholder="เช่น นายสมชาย ใจดี"></div>
+  <div class="form-group"><label>หมู่บ้าน</label><select id="np-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+  <div class="form-group"><label>กลุ่มสี</label>
+    <select id="np-group">
+      <option value="yellow">🟡 กลุ่มสีเหลือง</option>
+      <option value="red">🔴 กลุ่มสีแดง</option>
+      <option value="green">🟢 กลุ่มสีเขียว</option>
+    </select>
+  </div>
+  <div class="form-group"><label>วันที่ฉีดยาล่าสุด (ถ้ามี)</label><input type="date" id="np-date" value="${todayISO()}"></div>
+  <div class="form-group"><label>รอบนัดต่อไป</label><select id="np-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
+  <div class="form-group"><label>หมายเหตุ</label><input type="text" id="np-note" placeholder="บันทึกเพิ่มเติม..."></div>
+  <div style="display:flex;gap:10px;margin-top:4px">
+    <button class="btn btn-primary" style="flex:1" id="np-btn" onclick="saveNewPatient()">บันทึกผู้ป่วย</button>
+    <button class="btn btn-outline" onclick="closeAddPatient()">ยกเลิก</button>
+  </div>`
+  ov.style.display='flex'
+  setTimeout(()=>document.getElementById('np-name')?.focus(),100)
+}
+
+function closeAddPatient(){document.getElementById('addpt-overlay').style.display='none'}
+
+async function saveNewPatient(){
+  const name=(document.getElementById('np-name')?.value||'').trim()
+  const village=document.getElementById('np-village')?.value||'หมู่ 1'
+  const gc=document.getElementById('np-group')?.value||'yellow'
+  const date=document.getElementById('np-date')?.value
+  const interval=document.getElementById('np-interval')?.value||'1 เดือน'
+  const note=(document.getElementById('np-note')?.value||'').trim()
+  const btn=document.getElementById('np-btn')
+  if(!name){alert('กรุณากรอกชื่อ-นามสกุล');document.getElementById('np-name')?.focus();return}
+  const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  try{
+    const{error:pe}=await sb.from('patients').insert({name,village})
+    if(pe)throw pe
+    if(date){
+      const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
+      if(found){
+        await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note})
+      }
+    }
+    btn.textContent='✅ บันทึกสำเร็จ'
+    allPatients=await getPatients()
+    setTimeout(()=>{closeAddPatient();navigate('patients')},1200)
+  }catch(e){
+    const msg=e.message?.includes('duplicate')||e.message?.includes('unique')?'มีชื่อนี้ในระบบแล้ว':e.message
+    btn.textContent='❌ '+msg;btn.disabled=false
+  }
+}
+
 // ─── Init ────────────────────────────────────────────────────────
-async function init(){
+async function loadAndNav(){
   try{
     const s=await getSettings()
     if(s.hospital_name){hospitalName=s.hospital_name;document.getElementById('header-sub').textContent=s.hospital_name}
     const{count}=await sb.from('patient_status').select('*',{count:'exact',head:true}).lt('days_until',0)
     if(count){const b=document.getElementById('notif-badge');if(b){b.textContent=count;b.style.display='flex'}}
-  }catch(e){console.warn('init:',e)}
+  }catch(e){console.warn('loadAndNav:',e)}
   const hash=(location.hash||'').slice(1)
   await navigate(PAGES.includes(hash)?hash:'dashboard')
 }
 
+async function init(){
+  const{data:{user}}=await sb.auth.getUser()
+  if(!user){showAuthWall('login');return}
+  currentUser=user
+  updateUserUI()
+  await loadAndNav()
+}
+
 window.addEventListener('hashchange',()=>{const p=(location.hash||'').slice(1);if(PAGES.includes(p))navigate(p)})
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeVisitModal()}})
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeVisitModal();closeAddPatient()}})
 document.addEventListener('DOMContentLoaded',init)
