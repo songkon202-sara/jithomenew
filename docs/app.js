@@ -35,6 +35,19 @@ let allPatients  = []
 let _visitChecks = []
 let _visitType   = 'aosomo'
 let currentUser  = null
+let currentRole  = 'viewer'  // admin | staff | aosomo | viewer
+
+const ROLE_LABEL = {admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',aosomo:'อสม.',viewer:'ผู้สังเกตการณ์'}
+const ROLE_COLOR = {admin:'var(--primary)',staff:'#0d9488',aosomo:'#7c3aed',viewer:'var(--text3)'}
+function canDo(action){
+  const perms={
+    admin:   ['view','record','visit','admin','manage_users'],
+    staff:   ['view','record','visit'],
+    aosomo:  ['view','visit'],
+    viewer:  ['view'],
+  }
+  return (perms[currentRole]||[]).includes(action)
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────
 function thDate(d) {
@@ -504,7 +517,47 @@ async function renderAdmin(el) {
       </div>
     </div>
   </div>
+  ${canDo('manage_users')?`
+  <div class="form-section">
+    <h3>👥 จัดการสมาชิก</h3>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">กำหนดสิทธิ์การเข้าถึงของสมาชิกแต่ละคน</div>
+    <div id="members-list"><div style="text-align:center;padding:20px;color:var(--text3)">⏳ กำลังโหลด...</div></div>
+  </div>`:''}
   </div>`
+
+  if(canDo('manage_users'))loadMembersList()
+}
+
+async function loadMembersList(){
+  const el=document.getElementById('members-list')
+  if(!el)return
+  const{data:profiles}=await sb.from('user_profiles').select('*').order('created_at')
+  if(!profiles?.length){el.innerHTML='<div style="color:var(--text3);font-size:13px">ไม่พบสมาชิก</div>';return}
+  el.innerHTML=profiles.map(p=>`
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--border)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;border-radius:50%;background:${ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${(p.email||'?').slice(0,2).toUpperCase()}</div>
+        <div>
+          <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
+          <div style="font-size:11px;color:var(--text3)">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${ROLE_COLOR[p.role]}22;color:${ROLE_COLOR[p.role]};font-weight:700">${ROLE_LABEL[p.role]||p.role}</span>
+        ${p.id===currentUser?.id?`<span style="font-size:10px;color:var(--text3)">(คุณ)</span>`:
+        `<select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
+          ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
+        </select>`}
+      </div>
+    </div>
+  </div>`).join('')
+}
+
+async function changeMemberRole(userId,role){
+  const{error}=await sb.from('user_profiles').update({role}).eq('id',userId)
+  if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
+  await loadMembersList()
 }
 
 async function toggleSetting(key,val){
@@ -887,6 +940,8 @@ async function loginUser(){
   const{data,error}=await sb.auth.signInWithPassword({email,password})
   if(error){err.textContent='❌ '+(error.message==='Invalid login credentials'?'Email หรือรหัสผ่านไม่ถูกต้อง':error.message);btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return}
   currentUser=data.user
+  await loadProfile(data.user)
+  await updateLastLogin(data.user.id)
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
@@ -909,6 +964,7 @@ async function registerUser(){
     btn.disabled=false;btn.textContent='สมัครสมาชิก';return
   }
   currentUser=data.user
+  await loadProfile(data.user)
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
@@ -916,8 +972,25 @@ async function registerUser(){
 
 async function logoutUser(){
   await sb.auth.signOut()
-  currentUser=null
+  currentUser=null;currentRole='viewer'
   showAuthWall('login')
+}
+
+// ─── Profile / Role ──────────────────────────────────────────────
+async function loadProfile(user){
+  const{data}=await sb.from('user_profiles').select('*').eq('id',user.id).single()
+  if(data){currentRole=data.role;return data}
+  // ถ้ายังไม่มี profile → สร้างใหม่ (คนแรกเป็น admin)
+  const{count}=await sb.from('user_profiles').select('*',{count:'exact',head:true})
+  const role=count===0?'admin':'viewer'
+  const profile={id:user.id,email:user.email,display_name:user.email.split('@')[0],role,last_login:new Date().toISOString()}
+  await sb.from('user_profiles').insert(profile)
+  currentRole=role
+  return profile
+}
+
+async function updateLastLogin(userId){
+  await sb.from('user_profiles').update({last_login:new Date().toISOString()}).eq('id',userId)
 }
 
 async function sendResetEmail(){
@@ -953,10 +1026,15 @@ function updateUserUI(){
   if(av&&currentUser?.email){
     const initials=currentUser.email.slice(0,2).toUpperCase()
     av.textContent=initials
-    av.title=currentUser.email
+    av.title=`${currentUser.email}\nสิทธิ์: ${ROLE_LABEL[currentRole]||currentRole}`
     av.style.cursor='pointer'
-    av.onclick=()=>{if(confirm('ออกจากระบบ?\n'+currentUser.email))logoutUser()}
+    av.style.background=ROLE_COLOR[currentRole]||'var(--primary)'
+    av.onclick=()=>{if(confirm(`ออกจากระบบ?\n${currentUser.email}\nสิทธิ์: ${ROLE_LABEL[currentRole]}`))logoutUser()}
   }
+  // ซ่อนเมนู admin ถ้าไม่ใช่ admin
+  document.querySelectorAll('[data-page="admin"]').forEach(el=>{
+    el.style.display=canDo('admin')?'':'none'
+  })
 }
 
 // ─── Add Patient ─────────────────────────────────────────────────
@@ -1033,7 +1111,6 @@ async function loadAndNav(){
 }
 
 async function init(){
-  // รับ recovery token จาก URL hash (เมื่อคลิกลิงค์รีเซ็ตรหัสผ่านจาก Email)
   const hash=window.location.hash
   if(hash.includes('type=recovery')){
     const{data:{session}}=await sb.auth.getSession()
@@ -1042,6 +1119,8 @@ async function init(){
   const{data:{user}}=await sb.auth.getUser()
   if(!user){showAuthWall('login');return}
   currentUser=user
+  await loadProfile(user)
+  await updateLastLogin(user.id)
   updateUserUI()
   await loadAndNav()
 }
