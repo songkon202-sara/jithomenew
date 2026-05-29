@@ -35,8 +35,10 @@ let allPatients  = []
 let _visitChecks = []
 let _visitType   = 'aosomo'
 let _oasScores   = {s1:0, s2:0, s3:0}  // OAS: ต่อตนเอง, ต่อผู้อื่น, ต่อทรัพย์สิน
-let currentUser  = null
-let currentRole  = 'viewer'  // admin | staff | aosomo | viewer
+let _redFlags    = []                   // 5 Red Flags
+let currentUser        = null
+let currentRole        = 'viewer'  // admin | staff | aosomo | viewer
+let currentDisplayName = ''
 
 const ROLE_LABEL = {admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',aosomo:'อสม.',viewer:'ผู้สังเกตการณ์'}
 const ROLE_COLOR = {admin:'var(--primary)',staff:'#0d9488',aosomo:'#7c3aed',viewer:'var(--text3)'}
@@ -866,7 +868,7 @@ async function saveModalRecord(pid,gc){
 function openVisitForm(type){
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
-  _visitType=type;_visitChecks=[];_oasScores={s1:0,s2:0,s3:0}
+  _visitType=type;_visitChecks=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[]
   const cl=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
   const nameOpts=allPatients.map(p=>`<option value="${esc(p.name)}" data-village="${esc(p.village||'')}">`).join('')
   ct.innerHTML=`
@@ -880,7 +882,7 @@ function openVisitForm(type){
     <div class="form-group" style="margin-bottom:0"><label>หมู่บ้าน</label><select id="v-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
     <div class="form-group" style="margin-bottom:0"><label>วันที่เยี่ยม</label><input type="date" id="v-date" value="${todayISO()}"></div>
   </div>
-  <div class="form-group"><label>${type==='staff'?'ผู้ออกเยี่ยม (เจ้าหน้าที่)':'อสม. ผู้ออกเยี่ยม'}</label><input type="text" id="v-visitor" placeholder="${type==='staff'?'ชื่อเจ้าหน้าที่...':'ชื่อ อสม....'}"></div>
+  <div class="form-group"><label>${type==='staff'?'ผู้ออกเยี่ยม (เจ้าหน้าที่)':'อสม. ผู้ออกเยี่ยม'}</label><input type="text" id="v-visitor" value="${esc(currentDisplayName)}" placeholder="${type==='staff'?'ชื่อเจ้าหน้าที่...':'ชื่อ อสม....'}"></div>
   <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:14px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <div style="font-size:13px;font-weight:700">รายการตรวจสอบ</div>
@@ -923,6 +925,36 @@ function openVisitForm(type){
       </div>
     </div>`).join('')}
     <div id="oas-detail" style="font-size:11px;color:var(--text3);padding:8px 10px;background:#fff;border-radius:6px;border:1px solid var(--border);display:none"></div>
+  </div>`:''}
+  ${type==='aosomo'?`
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700">🚩 แบบประเมิน 5 Red Flags</div>
+      <span id="rf-badge" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ไม่พบความเสี่ยง</span>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">ปัจจัยเสี่ยงอาการทางจิตกำเริบ — กดเลือก "มี" หากพบอาการ</div>
+    ${[
+      ['rf1','ไม่หลับไม่นอน','มีปัญหาการนอน นอนไม่หลับ ไม่ยอมนอน หลับๆตื่นๆ'],
+      ['rf2','เดินไปเดินมา','ผุดลุกผุดนั่ง นั่งไม่ติด เดินไปเดินมา มีพฤติกรรมแปลกๆ'],
+      ['rf3','พูดจาคนเดียว','พูด ยิ้ม หัวเราะคนเดียว'],
+      ['rf4','หงุดหงิดฉุนเฉียว','อารมณ์แปรปรวน เดี๋ยวดีเดี๋ยวร้าย หงุดหงิดง่าย ฉุนเฉียว'],
+      ['rf5','เที่ยวหวาดระแวง','มีอาการหวาดระแวง คิดว่าคนไม่หวังดี นินทาว่าร้าย มีคนคอยติดตามจะทำร้าย'],
+    ].map(([id,title,desc])=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#fff;border-radius:8px;margin-bottom:6px;border:1px solid var(--border)" id="rf-row-${id}">
+      <div style="flex:1;min-width:0;margin-right:10px">
+        <div style="font-size:13px;font-weight:700;color:var(--text1)">${title}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">${desc}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button type="button" id="rf-yes-${id}" onclick="toggleRedFlag('${id}',true)"
+          style="padding:6px 12px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">มี</button>
+        <button type="button" id="rf-no-${id}" onclick="toggleRedFlag('${id}',false)"
+          style="padding:6px 12px;border-radius:6px;border:2px solid var(--primary);background:var(--primary-lt);color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">ไม่มี</button>
+      </div>
+    </div>`).join('')}
+    <div id="rf-alert" style="display:none;margin-top:8px;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:12px;color:#b91c1c;font-weight:600">
+      ⚠️ พบปัจจัยเสี่ยง! แจ้งญาติ/ผู้ดูแลและเจ้าหน้าที่ รพ.สต. ทันที
+    </div>
   </div>`:''}
   <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="v-note" rows="3" style="resize:none;font-family:'Sarabun',sans-serif" placeholder="อาการ สิ่งที่พบ ข้อสังเกต..."></textarea></div>
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:8px;margin-bottom:14px">
@@ -982,6 +1014,37 @@ function updateOASBadge(){
   if(refer&&max>=2)refer.checked=true
 }
 
+function toggleRedFlag(id,found){
+  if(found){
+    if(!_redFlags.includes(id))_redFlags.push(id)
+  }else{
+    _redFlags=_redFlags.filter(x=>x!==id)
+  }
+  const yesBtn=document.getElementById('rf-yes-'+id)
+  const noBtn=document.getElementById('rf-no-'+id)
+  const row=document.getElementById('rf-row-'+id)
+  if(found){
+    if(yesBtn){yesBtn.style.background='#fef2f2';yesBtn.style.borderColor='#f87171';yesBtn.style.color='#b91c1c'}
+    if(noBtn){noBtn.style.background='#f3f4f6';noBtn.style.borderColor='#d1d5db';noBtn.style.color='var(--text2)'}
+    if(row)row.style.borderColor='#f87171'
+  }else{
+    if(yesBtn){yesBtn.style.background='#f3f4f6';yesBtn.style.borderColor='#d1d5db';yesBtn.style.color='var(--text2)'}
+    if(noBtn){noBtn.style.background='var(--primary-lt)';noBtn.style.borderColor='var(--primary)';noBtn.style.color='var(--primary)'}
+    if(row)row.style.borderColor='var(--border)'
+  }
+  const hasRisk=_redFlags.length>0
+  const badge=document.getElementById('rf-badge')
+  const alert=document.getElementById('rf-alert')
+  const refer=document.getElementById('v-refer')
+  if(badge){
+    badge.textContent=hasRisk?`พบ ${_redFlags.length} ปัจจัยเสี่ยง`:'ไม่พบความเสี่ยง'
+    badge.style.background=hasRisk?'#fef2f2':'#f3f4f6'
+    badge.style.color=hasRisk?'#b91c1c':'var(--text3)'
+  }
+  if(alert)alert.style.display=hasRisk?'block':'none'
+  if(refer&&hasRisk)refer.checked=true
+}
+
 function autoFillVillage(name){
   const found=allPatients.find(p=>p.name===name)
   if(found){const sel=document.getElementById('v-village');if(sel)for(const o of sel.options)if(o.value===found.village||o.text===found.village){o.selected=true;break}}
@@ -1002,7 +1065,12 @@ async function saveVisitRecord(){
   const oasText=_visitType==='staff'&&oasMax>0
     ?`\n[OAS=${oasMax}] ต่อตนเอง:${_oasScores.s1} ต่อผู้อื่น:${_oasScores.s2} ต่อทรัพย์สิน:${_oasScores.s3}`
     :''
-  const fullNote=(note+oasText).trim()
+  // รวม Red Flags ลงใน note ถ้าเป็น aosomo
+  const RF_LABELS={rf1:'ไม่หลับไม่นอน',rf2:'เดินไปเดินมา',rf3:'พูดจาคนเดียว',rf4:'หงุดหงิดฉุนเฉียว',rf5:'หวาดระแวง'}
+  const rfText=_visitType==='aosomo'&&_redFlags.length>0
+    ?`\n[5 Red Flags] พบ: ${_redFlags.map(id=>RF_LABELS[id]).join(', ')}`
+    :''
+  const fullNote=(note+oasText+rfText).trim()
   try{
     const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer})
     if(error)throw error
@@ -1126,13 +1194,14 @@ async function logoutUser(){
 // ─── Profile / Role ──────────────────────────────────────────────
 async function loadProfile(user){
   const{data}=await sb.from('user_profiles').select('*').eq('id',user.id).single()
-  if(data){currentRole=data.role;return data}
+  if(data){currentRole=data.role;currentDisplayName=data.display_name||user.email.split('@')[0];return data}
   // ถ้ายังไม่มี profile → สร้างใหม่ (คนแรกเป็น admin)
   const{count}=await sb.from('user_profiles').select('*',{count:'exact',head:true})
   const role=count===0?'admin':'viewer'
-  const profile={id:user.id,email:user.email,display_name:user.email.split('@')[0],role,last_login:new Date().toISOString()}
+  const dn=user.email.split('@')[0]
+  const profile={id:user.id,email:user.email,display_name:dn,role,last_login:new Date().toISOString()}
   await sb.from('user_profiles').insert(profile)
-  currentRole=role
+  currentRole=role;currentDisplayName=dn
   return profile
 }
 
