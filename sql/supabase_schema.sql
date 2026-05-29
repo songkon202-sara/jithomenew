@@ -69,10 +69,8 @@ SELECT
   ir.interval_days,
   ir.note                                                        AS last_note,
   (ir.injection_date + (ir.interval_days || ' days')::INTERVAL)::DATE AS next_date,
-  EXTRACT(DAY FROM
-    (ir.injection_date + (ir.interval_days || ' days')::INTERVAL)::DATE
-    - CURRENT_DATE
-  )::INT                                                         AS days_until
+  ((ir.injection_date + (ir.interval_days || ' days')::INTERVAL)::DATE
+    - CURRENT_DATE)::INT                                         AS days_until
 FROM public.patients p
 LEFT JOIN LATERAL (
   SELECT *
