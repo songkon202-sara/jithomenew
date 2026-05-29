@@ -506,8 +506,15 @@ async function renderAdmin(el) {
         </div>
         <label class="toggle"><input type="checkbox" ${settings.telegram_enabled==='1'?'checked':''} onchange="toggleSetting('telegram_enabled',this.checked)"><span class="toggle-slider"></span></label>
       </div>
-      <input id="telegram-chatid-input" type="text" value="${esc(settings.telegram_chatid||'')}" placeholder="Chat ID เช่น -1001234567890" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
-      <button onclick="saveTokenSetting('telegram_chatid','telegram-chatid-input','tg-save-btn')" id="tg-save-btn" style="padding:6px 14px;background:#0088cc;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก Chat ID</button>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Chat ID</div>
+      <input id="telegram-chatid-input" type="text" value="${esc(settings.telegram_chatid||'')}" placeholder="-1001234567890" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Bot Token <span style="color:var(--red)">*</span> <a href="https://t.me/BotFather" target="_blank" style="color:var(--primary);font-size:10px">สร้าง Bot ที่ @BotFather</a></div>
+      <input id="telegram-token-input" type="text" value="${esc(settings.telegram_token||'')}" placeholder="123456789:AABBCCDDaabbccddeeff" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
+      <div style="display:flex;gap:8px">
+        <button onclick="saveTelegramSettings()" id="tg-save-btn" style="flex:1;padding:7px;background:#0088cc;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก</button>
+        <button onclick="testTelegram()" id="tg-test-btn" style="flex:1;padding:7px;background:#fff;color:#0088cc;border:1.5px solid #0088cc;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📨 ทดสอบส่ง</button>
+      </div>
+      <div id="tg-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -564,6 +571,51 @@ async function changeMemberRole(userId,role){
 
 async function toggleSetting(key,val){
   await sb.from('app_settings').upsert({setting_key:key,setting_value:val?'1':'0'},{onConflict:'setting_key'})
+}
+
+async function saveTelegramSettings(){
+  const chatid=(document.getElementById('telegram-chatid-input')?.value||'').trim()
+  const token=(document.getElementById('telegram-token-input')?.value||'').trim()
+  const btn=document.getElementById('tg-save-btn')
+  const status=document.getElementById('tg-status')
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  const errs=[]
+  if(chatid){const{error}=await sb.from('app_settings').upsert({setting_key:'telegram_chatid',setting_value:chatid},{onConflict:'setting_key'});if(error)errs.push(error.message)}
+  if(token){const{error}=await sb.from('app_settings').upsert({setting_key:'telegram_token',setting_value:token},{onConflict:'setting_key'});if(error)errs.push(error.message)}
+  if(errs.length){status.style.color='var(--red)';status.textContent='❌ '+errs.join(', ');btn.textContent='💾 บันทึก';btn.disabled=false;return}
+  status.style.color='var(--green)';status.textContent='✅ บันทึกสำเร็จ'
+  btn.textContent='✅ บันทึกแล้ว'
+  setTimeout(()=>{btn.textContent='💾 บันทึก';btn.disabled=false;status.textContent=''},2500)
+}
+
+async function testTelegram(){
+  const chatid=(document.getElementById('telegram-chatid-input')?.value||'').trim()
+  const token=(document.getElementById('telegram-token-input')?.value||'').trim()
+  const btn=document.getElementById('tg-test-btn')
+  const status=document.getElementById('tg-status')
+  if(!chatid||!token){status.style.color='var(--red)';status.textContent='❌ กรุณากรอก Chat ID และ Bot Token ก่อน';return}
+  btn.disabled=true;btn.textContent='กำลังส่ง...'
+  status.style.color='var(--text3)';status.textContent='กำลังทดสอบ...'
+  try{
+    const msg=`🏥 *JitHome ทดสอบการแจ้งเตือน*\n\nระบบติดตามผู้ป่วยจิตเวช\nโรงพยาบาล: ${hospitalName}\n\n✅ เชื่อมต่อสำเร็จ!`
+    const res=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chat_id:chatid,text:msg,parse_mode:'Markdown'})
+    })
+    const data=await res.json()
+    if(data.ok){
+      status.style.color='var(--green)';status.textContent='✅ ส่งสำเร็จ! ตรวจสอบกลุ่ม Telegram ได้เลย'
+      btn.textContent='✅ สำเร็จ'
+    } else {
+      status.style.color='var(--red)';status.textContent='❌ '+( data.description||'ส่งไม่สำเร็จ')
+      btn.textContent='📨 ทดสอบส่ง'
+    }
+  }catch(e){
+    status.style.color='var(--red)';status.textContent='❌ '+e.message
+    btn.textContent='📨 ทดสอบส่ง'
+  }
+  btn.disabled=false
 }
 
 async function saveTokenSetting(key,inputId,btnId){
