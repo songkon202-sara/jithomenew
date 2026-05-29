@@ -569,11 +569,16 @@ async function toggleSetting(key,val){
 async function saveTokenSetting(key,inputId,btnId){
   const val=(document.getElementById(inputId)?.value||'').trim()
   const btn=document.getElementById(btnId)
+  const origText=btn.textContent
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   const{error}=await sb.from('app_settings').upsert({setting_key:key,setting_value:val},{onConflict:'setting_key'})
-  if(error){btn.textContent='❌ ผิดพลาด';btn.disabled=false;return}
+  if(error){
+    console.error('saveTokenSetting error:',error)
+    alert('❌ บันทึกไม่สำเร็จ:\n'+error.message)
+    btn.textContent=origText;btn.disabled=false;return
+  }
   btn.textContent='✅ บันทึกแล้ว'
-  setTimeout(()=>{btn.textContent=btn.id==='line-save-btn'?'💾 บันทึก Token':'💾 บันทึก Chat ID';btn.disabled=false},2000)
+  setTimeout(()=>{btn.textContent=origText;btn.disabled=false},2000)
 }
 
 async function saveSheetURL(){
