@@ -34,6 +34,7 @@ let hospitalName = 'รพ.สต.สองคอน'
 let allPatients  = []
 let _visitChecks = []
 let _visitType   = 'aosomo'
+let _oasScores   = {s1:0, s2:0, s3:0}  // OAS: ต่อตนเอง, ต่อผู้อื่น, ต่อทรัพย์สิน
 let currentUser  = null
 let currentRole  = 'viewer'  // admin | staff | aosomo | viewer
 
@@ -865,7 +866,7 @@ async function saveModalRecord(pid,gc){
 function openVisitForm(type){
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
-  _visitType=type;_visitChecks=[]
+  _visitType=type;_visitChecks=[];_oasScores={s1:0,s2:0,s3:0}
   const cl=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
   const nameOpts=allPatients.map(p=>`<option value="${esc(p.name)}" data-village="${esc(p.village||'')}">`).join('')
   ct.innerHTML=`
@@ -887,6 +888,42 @@ function openVisitForm(type){
     </div>
     ${cl.map(([id,lbl])=>`<div class="check-item" onclick="toggleCheck('${id}')"><div class="check-box" id="cb-${id}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><span class="check-label">${esc(lbl)}</span></div>`).join('')}
   </div>
+  ${type==='staff'?`
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700">📊 แบบประเมิน OAS</div>
+      <span id="oas-badge" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ไม่พบพฤติกรรม</span>
+    </div>
+    ${[
+      ['s1','พฤติกรรมก้าวร้าวต่อตนเอง',
+        'ไม่พบ',
+        'ขีดข่วน ตีตนเอง ดึงผม รอยขนาดเล็ก',
+        'ทำร้ายตนเองรุนแรง มีรอยซ้ำ เลือดออก หมดสติ',
+        'ทำร้ายตนเองรุนแรงมาก อวัยวะภายในได้รับอันตราย'],
+      ['s2','พฤติกรรมก้าวร้าวต่อผู้อื่น (คำพูด/การกระทำ)',
+        'ไม่พบ',
+        'ตะโกน ด่าด้วยถ้อยคำไม่รุนแรง',
+        'ด่าหยาบ คุกคาม ผลัก ตี แต่ไม่บาดเจ็บ',
+        'ทำร้ายผู้อื่นจนบาดเจ็บ กระดูกหัก หมดสติ'],
+      ['s3','พฤติกรรมก้าวร้าวต่อทรัพย์สิน',
+        'ไม่พบ',
+        'ปิดประตูเสียงดัง รื้อข้าวของกระจัดกระจาย',
+        'ขว้าง เตะ ทุบวัตถุหรือสิ่งของ',
+        'ทุบกระจก ขว้างมีด จุดไฟเผา สิ่งของแตกหัก'],
+    ].map(([sid,label,l0,l1,l2,l3])=>`
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:6px">${label}</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
+        ${[[0,l0,'#f3f4f6','var(--text3)'],[1,l1,'#fef3c7','#92400e'],[2,l2,'#fee2e2','var(--red)'],[3,l3,'#fecaca','#991b1b']].map(([score,desc,bg,clr])=>`
+        <button type="button" id="oas-${sid}-${score}" onclick="setOAS('${sid}',${score})"
+          style="padding:6px 4px;border-radius:8px;border:2px solid transparent;background:${bg};color:${clr};font-size:10px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;line-height:1.3;text-align:center">
+          <div style="font-size:13px;font-weight:800">${score}</div>
+          <div style="font-size:9px;margin-top:2px;opacity:.85">${desc.length>20?desc.slice(0,18)+'…':desc}</div>
+        </button>`).join('')}
+      </div>
+    </div>`).join('')}
+    <div id="oas-detail" style="font-size:11px;color:var(--text3);padding:8px 10px;background:#fff;border-radius:6px;border:1px solid var(--border);display:none"></div>
+  </div>`:''}
   <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="v-note" rows="3" style="resize:none;font-family:'Sarabun',sans-serif" placeholder="อาการ สิ่งที่พบ ข้อสังเกต..."></textarea></div>
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:8px;margin-bottom:14px">
     <div><div style="font-size:13px;font-weight:700;color:var(--red)">ต้องการส่งต่อ / รายงานเร่งด่วน</div><div style="font-size:11px;color:var(--text3)">กรณีพบความเสี่ยงสูง</div></div>
@@ -910,6 +947,41 @@ function updateScore(){
   if(pct>=0.8){bg='var(--green-lt)';clr='var(--green)';lbl='ปกติดี'}else if(pct>=0.5){bg='var(--yellow-lt)';clr='var(--yellow)';lbl='พอใช้'}else{bg='var(--red-lt)';clr='var(--red)';lbl='ต้องติดตาม'}
   const b=document.getElementById('score-badge');if(b){b.textContent=`${n}/${max} · ${lbl}`;b.style.background=bg;b.style.color=clr}
 }
+function setOAS(sid,score){
+  _oasScores[sid]=score
+  // อัพเดตสไตล์ปุ่มในแถวนั้น
+  for(let i=0;i<=3;i++){
+    const btn=document.getElementById(`oas-${sid}-${i}`)
+    if(btn)btn.style.border=i===score?'2px solid #374151':'2px solid transparent'
+  }
+  updateOASBadge()
+}
+function updateOASBadge(){
+  const max=Math.max(_oasScores.s1,_oasScores.s2,_oasScores.s3)
+  const badge=document.getElementById('oas-badge')
+  const detail=document.getElementById('oas-detail')
+  const LEVELS=[
+    {bg:'#f3f4f6',clr:'var(--text3)',label:'ไม่พบพฤติกรรม',desc:''},
+    {bg:'#fef3c7',clr:'#92400e',label:'OAS=1 กึ่งเร่งด่วน',desc:'ต้องจัดการภายใน 24 ชั่วโมง'},
+    {bg:'#fee2e2',clr:'var(--red)',label:'OAS=2 เร่งด่วน',desc:'ต้องจัดการภายใน 2 ชั่วโมง'},
+    {bg:'#fecaca',clr:'#991b1b',label:'OAS=3 ฉุกเฉิน',desc:'ต้องจัดการทันทีทันใด'},
+  ]
+  const lv=LEVELS[max]||LEVELS[0]
+  if(badge){badge.textContent=lv.label;badge.style.background=lv.bg;badge.style.color=lv.clr}
+  if(detail){
+    if(max>0){
+      detail.style.display='block'
+      detail.innerHTML=`⚠️ <strong>${lv.label}</strong> — ${lv.desc}<br>ต่อตนเอง: ${_oasScores.s1} · ต่อผู้อื่น: ${_oasScores.s2} · ต่อทรัพย์สิน: ${_oasScores.s3}`
+      detail.style.color=lv.clr
+    } else {
+      detail.style.display='none'
+    }
+  }
+  // เปิด toggle ส่งต่ออัตโนมัติถ้า OAS >= 2
+  const refer=document.getElementById('v-refer')
+  if(refer&&max>=2)refer.checked=true
+}
+
 function autoFillVillage(name){
   const found=allPatients.find(p=>p.name===name)
   if(found){const sel=document.getElementById('v-village');if(sel)for(const o of sel.options)if(o.value===found.village||o.text===found.village){o.selected=true;break}}
@@ -925,8 +997,14 @@ async function saveVisitRecord(){
   if(!name||!date){alert('กรุณากรอกชื่อและวันที่');return}
   const found=allPatients.find(p=>p.name===name)
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  // รวม OAS ลงใน note ถ้าเป็น staff
+  const oasMax=Math.max(_oasScores.s1,_oasScores.s2,_oasScores.s3)
+  const oasText=_visitType==='staff'&&oasMax>0
+    ?`\n[OAS=${oasMax}] ต่อตนเอง:${_oasScores.s1} ต่อผู้อื่น:${_oasScores.s2} ต่อทรัพย์สิน:${_oasScores.s3}`
+    :''
+  const fullNote=(note+oasText).trim()
   try{
-    const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note,refer})
+    const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer})
     if(error)throw error
     closeVisitModal()
     if(location.hash==='#visit')navigate('visit')
