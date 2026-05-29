@@ -826,9 +826,35 @@ function showAuthWall(mode='login'){
     <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text1)">เข้าสู่ระบบ</div>
     <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="example@email.com" autocomplete="email"></div>
     <div class="form-group"><label>รหัสผ่าน</label><input type="password" id="auth-password" placeholder="รหัสผ่าน" onkeydown="if(event.key==='Enter')loginUser()"></div>
+    <div style="text-align:right;margin-top:-8px;margin-bottom:10px"><a href="#" onclick="showAuthWall('forgot');return false" style="font-size:12px;color:var(--text3)">ลืมรหัสผ่าน?</a></div>
     <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
     <button class="btn btn-primary btn-block" id="auth-btn" onclick="loginUser()">เข้าสู่ระบบ</button>
     <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)">ยังไม่มีบัญชี? <a href="#" onclick="showAuthWall('register');return false" style="color:var(--primary);font-weight:700">สมัครสมาชิก</a></div>`
+  } else if(mode==='forgot'){
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:40px;margin-bottom:6px">🔑</div>
+      <div style="font-size:22px;font-weight:800;color:var(--primary)">JitHome</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">รีเซ็ตรหัสผ่าน</div>
+    </div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--text1)">ลืมรหัสผ่าน</div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:16px">กรอก Email ที่ใช้สมัคร ระบบจะส่งลิงค์รีเซ็ตรหัสผ่านให้</div>
+    <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="example@email.com" autocomplete="email" onkeydown="if(event.key==='Enter')sendResetEmail()"></div>
+    <div id="auth-error" style="font-size:12px;margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="auth-btn" onclick="sendResetEmail()">ส่งลิงค์รีเซ็ตรหัสผ่าน</button>
+    <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)"><a href="#" onclick="showAuthWall('login');return false" style="color:var(--primary);font-weight:700">← กลับหน้าเข้าสู่ระบบ</a></div>`
+  } else if(mode==='reset'){
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:40px;margin-bottom:6px">🔒</div>
+      <div style="font-size:22px;font-weight:800;color:var(--primary)">JitHome</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">ตั้งรหัสผ่านใหม่</div>
+    </div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text1)">ตั้งรหัสผ่านใหม่</div>
+    <div class="form-group"><label>รหัสผ่านใหม่</label><input type="password" id="auth-password" placeholder="อย่างน้อย 6 ตัวอักษร"></div>
+    <div class="form-group"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" id="auth-password2" placeholder="พิมพ์รหัสผ่านอีกครั้ง" onkeydown="if(event.key==='Enter')resetPassword()"></div>
+    <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="auth-btn" onclick="resetPassword()">บันทึกรหัสผ่านใหม่</button>`
   } else {
     ct.innerHTML=`
     <div style="text-align:center;margin-bottom:24px">
@@ -892,6 +918,34 @@ async function logoutUser(){
   await sb.auth.signOut()
   currentUser=null
   showAuthWall('login')
+}
+
+async function sendResetEmail(){
+  const email=(document.getElementById('auth-email')?.value||'').trim()
+  const btn=document.getElementById('auth-btn')
+  const err=document.getElementById('auth-error')
+  if(!email){err.style.color='var(--red)';err.textContent='กรุณากรอก Email';return}
+  btn.disabled=true;btn.textContent='กำลังส่ง...'
+  const{error}=await sb.auth.resetPasswordForEmail(email,{
+    redirectTo:'https://songkon202-sara.github.io/jithomenew/'
+  })
+  if(error){err.style.color='var(--red)';err.textContent='❌ '+error.message;btn.disabled=false;btn.textContent='ส่งลิงค์รีเซ็ตรหัสผ่าน';return}
+  err.style.color='var(--green)';err.textContent='✅ ส่ง Email สำเร็จ! กรุณาตรวจสอบ Inbox (และ Spam)'
+  btn.textContent='ส่งแล้ว ✅';btn.disabled=true
+}
+
+async function resetPassword(){
+  const password=document.getElementById('auth-password')?.value||''
+  const password2=document.getElementById('auth-password2')?.value||''
+  const btn=document.getElementById('auth-btn')
+  const err=document.getElementById('auth-error')
+  if(password.length<6){err.textContent='รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';return}
+  if(password!==password2){err.textContent='รหัสผ่านไม่ตรงกัน';return}
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  const{error}=await sb.auth.updateUser({password})
+  if(error){err.textContent='❌ '+error.message;btn.disabled=false;btn.textContent='บันทึกรหัสผ่านใหม่';return}
+  err.style.color='var(--green)';err.textContent='✅ เปลี่ยนรหัสผ่านสำเร็จ!'
+  setTimeout(async()=>{hideAuthWall();await loadAndNav()},1500)
 }
 
 function updateUserUI(){
@@ -979,6 +1033,12 @@ async function loadAndNav(){
 }
 
 async function init(){
+  // รับ recovery token จาก URL hash (เมื่อคลิกลิงค์รีเซ็ตรหัสผ่านจาก Email)
+  const hash=window.location.hash
+  if(hash.includes('type=recovery')){
+    const{data:{session}}=await sb.auth.getSession()
+    if(session){showAuthWall('reset');return}
+  }
   const{data:{user}}=await sb.auth.getUser()
   if(!user){showAuthWall('login');return}
   currentUser=user
