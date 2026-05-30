@@ -830,6 +830,7 @@ async function openModal(id){
         <button class="btn btn-primary" style="flex:1" id="edit-pt-save-btn" onclick="saveEditPatient(${p.id})">บันทึกการแก้ไข</button>
         <button class="btn btn-outline" onclick="toggleEditPatient()">ยกเลิก</button>
       </div>
+      ${canDo('admin')?`<button onclick="deletePatient(${p.id},'${esc(p.name)}')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🗑️ ลบผู้ป่วยรายนี้ออกจากระบบ</button>`:''}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
       <span class="badge ${p.group_color}"><span class="badge-dot"></span>${esc(p.group_label)}</span>
@@ -873,6 +874,16 @@ function toggleEditPatient(id,name,village,note){
   if(nEl)nEl.value=name||''
   if(ntEl)ntEl.value=note||''
   if(vEl)for(const o of vEl.options)if(o.value===village||o.text===village){o.selected=true;break}
+}
+async function deletePatient(id,name){
+  if(!confirm(`ลบผู้ป่วย "${name}" ออกจากระบบ?\n\nประวัติการฉีดยาทั้งหมดจะถูกลบด้วย\nไม่สามารถกู้คืนได้!`))return
+  try{
+    const{error}=await sb.from('patients').delete().eq('id',id)
+    if(error)throw error
+    closeModal()
+    allPatients=await getPatients()
+    if(location.hash==='#patients')navigate('patients')
+  }catch(e){alert('❌ ลบไม่สำเร็จ: '+e.message)}
 }
 async function saveEditPatient(id){
   const name=(document.getElementById('edit-pt-name')?.value||'').trim()
