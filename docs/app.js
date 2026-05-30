@@ -816,7 +816,20 @@ async function openModal(id){
     ct.innerHTML=`
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')} · ${esc(hospitalName)}</div></div>
-      <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <div style="display:flex;gap:6px;align-items:center">
+        ${canDo('record')?`<button onclick="toggleEditPatient(${p.id},'${esc(p.name)}','${esc(p.village||'')}','${esc(p.note||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
+        <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+    </div>
+    <div id="edit-patient-wrap" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#166534">✏️ แก้ไขข้อมูลผู้ป่วย</div>
+      <div class="form-group"><label>ชื่อ-นามสกุล</label><input type="text" id="edit-pt-name" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+      <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" id="edit-pt-save-btn" onclick="saveEditPatient(${p.id})">บันทึกการแก้ไข</button>
+        <button class="btn btn-outline" onclick="toggleEditPatient()">ยกเลิก</button>
+      </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
       <span class="badge ${p.group_color}"><span class="badge-dot"></span>${esc(p.group_label)}</span>
@@ -847,6 +860,34 @@ async function openModal(id){
   }catch(e){ct.innerHTML=`<div style="padding:20px;color:var(--red)">เกิดข้อผิดพลาด: ${esc(e.message)}</div>`}
 }
 function closeModal(){document.getElementById('modal-overlay').style.display='none'}
+function toggleEditPatient(id,name,village,note){
+  const w=document.getElementById('edit-patient-wrap')
+  if(!w)return
+  if(!id){w.style.display='none';return}
+  const showing=w.style.display!=='none'
+  if(showing){w.style.display='none';return}
+  w.style.display='block'
+  const nEl=document.getElementById('edit-pt-name')
+  const vEl=document.getElementById('edit-pt-village')
+  const ntEl=document.getElementById('edit-pt-note')
+  if(nEl)nEl.value=name||''
+  if(ntEl)ntEl.value=note||''
+  if(vEl)for(const o of vEl.options)if(o.value===village||o.text===village){o.selected=true;break}
+}
+async function saveEditPatient(id){
+  const name=(document.getElementById('edit-pt-name')?.value||'').trim()
+  const village=document.getElementById('edit-pt-village')?.value||''
+  const note=(document.getElementById('edit-pt-note')?.value||'').trim()
+  const btn=document.getElementById('edit-pt-save-btn')
+  if(!name){alert('กรุณากรอกชื่อผู้ป่วย');return}
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  try{
+    const{error}=await sb.from('patients').update({name,village,note}).eq('id',id)
+    if(error)throw error
+    allPatients=await getPatients()
+    await openModal(id)
+  }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
+}
 function toggleRecordForm(){const w=document.getElementById('record-form-wrap');if(w)w.style.display=w.style.display==='none'?'':'none'}
 
 async function saveModalRecord(pid,gc){
