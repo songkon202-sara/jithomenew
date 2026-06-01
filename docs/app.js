@@ -979,12 +979,29 @@ async function openModal(id){
     const hist=await getHistory(id)
     const chip=daysChip(parseInt(p.days_until))
     const histHtml=hist.slice(0,8).map((h,i)=>`
-    <div class="history-item">
+    <div class="history-item" id="hist-${h.id}">
       <div class="history-dot" style="background:${i===0?'var(--primary)':'var(--border)'};margin-top:5px"></div>
-      <div>
-        <div class="history-date">${esc(h.date_th)}${i===0?` <span style="font-size:10px;background:var(--primary-lt);color:var(--primary);padding:1px 6px;border-radius:4px;font-weight:700">ล่าสุด</span>`:''}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+          <div class="history-date">${esc(h.date_th)}${i===0?` <span style="font-size:10px;background:var(--primary-lt);color:var(--primary);padding:1px 6px;border-radius:4px;font-weight:700">ล่าสุด</span>`:''}</div>
+          ${canDo('record')?`<button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${esc(h.interval_str||'')}','${esc(h.note||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif">✏️</button>`:''}
+        </div>
         <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(h.group_label||'')} · ${esc(h.interval_str||'')}</div>
         ${h.note?`<div class="history-note">${esc(h.note)}</div>`:''}
+        <div id="edit-rec-${h.id}" style="display:none;background:#f0f9ff;border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:10px;margin-top:8px">
+          <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px">แก้ไขรายการฉีดยา</div>
+          <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">วันที่ฉีดยา</label><input type="date" id="er-date-${h.id}" value="${h.injection_date}"></div>
+          <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">รอบนัดต่อไป</label>
+            <select id="er-interval-${h.id}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:'Sarabun',sans-serif;font-size:13px">
+              ${['2 สัปดาห์','3 สัปดาห์','4 สัปดาห์','1 เดือน','3 เดือน'].map(v=>`<option${v===h.interval_str?' selected':''}>${v}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">หมายเหตุ</label><input type="text" id="er-note-${h.id}" value="${esc(h.note||'')}"></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-primary" style="flex:1;font-size:12px;padding:6px" id="er-save-${h.id}" onclick="saveEditRecord(${h.id},${p.id})">บันทึก</button>
+            <button class="btn btn-outline" style="font-size:12px;padding:6px" onclick="toggleEditRecord(${h.id})">ยกเลิก</button>
+          </div>
+        </div>
       </div>
     </div>`).join('')
     ct.innerHTML=`
@@ -1036,6 +1053,36 @@ async function openModal(id){
   }catch(e){ct.innerHTML=`<div style="padding:20px;color:var(--red)">เกิดข้อผิดพลาด: ${esc(e.message)}</div>`}
 }
 function closeModal(){document.getElementById('modal-overlay').style.display='none'}
+
+function toggleEditRecord(id,date,interval,note){
+  const wrap=document.getElementById('edit-rec-'+id)
+  if(!wrap)return
+  if(date===undefined){wrap.style.display='none';return}
+  wrap.style.display=wrap.style.display==='none'?'block':'none'
+}
+
+async function saveEditRecord(id,patientId){
+  const dateEl=document.getElementById('er-date-'+id)
+  const intervalEl=document.getElementById('er-interval-'+id)
+  const noteEl=document.getElementById('er-note-'+id)
+  const btn=document.getElementById('er-save-'+id)
+  const date=dateEl?.value
+  const interval=intervalEl?.value
+  const note=noteEl?.value||''
+  if(!date){alert('กรุณาเลือกวันที่');return}
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  try{
+    const{error}=await sb.from('injection_records').update({
+      injection_date:date,
+      interval_str:interval,
+      interval_days:parseInterval(interval),
+      note
+    }).eq('id',id)
+    if(error)throw error
+    await openModal(patientId)
+  }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
+}
+
 function toggleEditPatient(id,name,village,note){
   const w=document.getElementById('edit-patient-wrap')
   if(!w)return
