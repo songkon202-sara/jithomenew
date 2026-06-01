@@ -190,6 +190,7 @@ async function navigate(page) {
   else if (page==='members')   renderMembers(el)
   else if (page==='guide')     renderGuide(el)
   history.replaceState(null,'','#'+page)
+  updatePreviewHeader()
 }
 
 // ─── Dashboard ───────────────────────────────────────────────────
@@ -628,7 +629,6 @@ function previewAs(role, village){
   _previewOrigVillage = currentVillage
   currentRole    = role
   currentVillage = village || ''
-  showPreviewBanner()
   navigate('dashboard')
 }
 
@@ -637,31 +637,45 @@ function exitPreview(){
   currentVillage = _previewOrigVillage
   _previewOrigRole    = null
   _previewOrigVillage = null
-  const b = document.getElementById('preview-banner')
-  if(b) b.remove()
-  document.querySelector('.app-main').style.paddingTop=''
+  updatePreviewHeader()
   navigate('admin')
 }
 
-function showPreviewBanner(){
-  let b = document.getElementById('preview-banner')
-  if(!b){
-    b = document.createElement('div')
-    b.id = 'preview-banner'
-    document.getElementById('root').prepend(b)
-  }
+function updatePreviewHeader(){
+  const header = document.querySelector('.app-header')
+  if(!header) return
   const roleColor = {admin:'#dc2626',staff:'#0a7ea4',aosomo:'#7c3aed',viewer:'#6b7280'}
   const roleIcon  = {admin:'👑',staff:'👨‍⚕️',aosomo:'🏡',viewer:'👁️'}
   const roleLabel = {admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',aosomo:'อสม.',viewer:'ผู้สังเกตการณ์'}
-  b.style.cssText=`position:fixed;top:0;left:0;right:0;z-index:99999;background:${roleColor[currentRole]};color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:'Sarabun',sans-serif;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.2)`
-  b.innerHTML=`
-    <div style="display:flex;align-items:center;gap:8px">
-      <div style="background:rgba(255,255,255,.2);border-radius:6px;padding:2px 8px;font-size:11px">👁️ โหมดดูตัวอย่าง</div>
-      <span>${roleIcon[currentRole]} กำลังแสดงในฐานะ: <strong>${roleLabel[currentRole]}${currentVillage?' ('+currentVillage+')':''}</strong></span>
-    </div>
-    <button onclick="exitPreview()" style="background:rgba(255,255,255,.25);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✕ ออกจากโหมดนี้</button>`
-  // เลื่อน content ลงเพื่อให้ banner ไม่ทับ
-  document.querySelector('.app-main').style.paddingTop='48px'
+  if(_previewOrigRole){
+    header.style.background = roleColor[currentRole]
+    header.style.color = '#fff'
+    const sub = document.getElementById('header-sub')
+    const rightEl = document.querySelector('.header-right')
+    if(sub){
+      sub.style.color='rgba(255,255,255,.8)'
+      sub.textContent=`👁️ โหมดดูตัวอย่าง: ${roleIcon[currentRole]} ${roleLabel[currentRole]}${currentVillage?' ('+currentVillage+')':''}`
+    }
+    if(rightEl){
+      rightEl.innerHTML=`<button onclick="exitPreview()" style="background:rgba(255,255,255,.25);border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✕ ออกจากโหมดนี้</button>`
+    }
+    const titleEl = document.getElementById('header-title')
+    if(titleEl) titleEl.style.color='#fff'
+  } else {
+    header.style.background = ''
+    header.style.color = ''
+    const titleEl = document.getElementById('header-title')
+    if(titleEl) titleEl.style.color=''
+    const sub = document.getElementById('header-sub')
+    if(sub){ sub.style.color=''; sub.textContent='' }
+    const rightEl = document.querySelector('.header-right')
+    if(rightEl) rightEl.innerHTML=`
+      <div class="notif-btn" onclick="navigate('dashboard')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <div class="notif-badge" id="notif-badge" style="display:none">0</div>
+      </div>
+      <div class="avatar">อส</div>`
+  }
 }
 
 async function renderAdmin(el) {
