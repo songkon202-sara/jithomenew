@@ -415,8 +415,43 @@ function renderMembers(el){
   if(!canDo('admin')){el.innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--text3)">🔒 เฉพาะผู้ดูแลระบบเท่านั้น</div>';return}
   el.innerHTML=`<div class="page">
   <div class="section-hd"><h3>👥 จัดการสมาชิก</h3></div>
-  <p style="font-size:13px;color:var(--text3);margin-bottom:16px">กำหนดสิทธิ์การเข้าถึงข้อมูลของสมาชิกแต่ละคน</p>
-  <div id="members-list"><div style="text-align:center;padding:20px;color:var(--text3)">⏳ กำลังโหลด...</div></div>
+  <p style="font-size:13px;color:var(--text3);margin-bottom:20px">กำหนดสิทธิ์การเข้าถึงข้อมูลของสมาชิกแต่ละคน</p>
+
+  <!-- เจ้าหน้าที่ -->
+  <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <div style="width:32px;height:32px;background:#0d9488;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">🏥</div>
+      <div><div style="font-size:14px;font-weight:700">เจ้าหน้าที่</div><div style="font-size:11px;color:var(--text3)">บันทึกข้อมูล เยี่ยมบ้าน ดูภาพรวม</div></div>
+    </div>
+    <div id="group-staff"><div style="color:var(--text3);font-size:12px;padding:8px">⏳ กำลังโหลด...</div></div>
+  </div>
+
+  <!-- อสม -->
+  <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:32px;height:32px;background:#7c3aed;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">🏡</div>
+        <div><div style="font-size:14px;font-weight:700">อสม.</div><div style="font-size:11px;color:var(--text3)">เยี่ยมบ้าน ดูผู้ป่วยในหมู่บ้านตนเอง</div></div>
+      </div>
+      <button onclick="document.getElementById('aosomo-file-input').click()" style="display:flex;align-items:center;gap:4px;padding:6px 12px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
+        📎 นำเข้ารายชื่อ
+      </button>
+      <input type="file" id="aosomo-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importAosomoFile(this)">
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;padding:6px 10px;background:#f5f3ff;border-radius:6px">
+      📋 นำเข้าจาก Excel/CSV — คอลัมน์: <strong>ชื่อ, หมู่บ้าน, เบอร์โทร</strong> (แถวแรกเป็น header)
+    </div>
+    <div id="group-aosomo"><div style="color:var(--text3);font-size:12px;padding:8px">⏳ กำลังโหลด...</div></div>
+  </div>
+
+  <!-- ผู้สังเกตการณ์ -->
+  <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <div style="width:32px;height:32px;background:var(--text3);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">👁️</div>
+      <div><div style="font-size:14px;font-weight:700">ผู้สังเกตการณ์</div><div style="font-size:11px;color:var(--text3)">ดูข้อมูลได้อย่างเดียว ไม่สามารถแก้ไข</div></div>
+    </div>
+    <div id="group-viewer"><div style="color:var(--text3);font-size:12px;padding:8px">⏳ กำลังโหลด...</div></div>
+  </div>
   </div>`
   loadMembersList()
 }
@@ -561,38 +596,100 @@ async function renderAdmin(el) {
   if(canDo('manage_users'))loadMembersList()
 }
 
-async function loadMembersList(){
-  const el=document.getElementById('members-list')
-  if(!el)return
-  const{data:profiles}=await sb.from('user_profiles').select('*').order('created_at')
-  if(!profiles?.length){el.innerHTML='<div style="color:var(--text3);font-size:13px">ไม่พบสมาชิก</div>';return}
-  el.innerHTML=profiles.map(p=>`
+function memberCard(p,showVillage=false){
+  const isSelf=p.id===currentUser?.id
+  return `
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--border)">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="width:36px;height:36px;border-radius:50%;background:${ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${(p.email||'?').slice(0,2).toUpperCase()}</div>
-        <div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
+        <div style="width:34px;height:34px;border-radius:50%;background:${ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${(p.email||'?').slice(0,2).toUpperCase()}</div>
+        <div style="min-width:0">
           <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
-          <div style="font-size:11px;color:var(--text3)">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
+          <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${ROLE_COLOR[p.role]}22;color:${ROLE_COLOR[p.role]};font-weight:700">${ROLE_LABEL[p.role]||p.role}</span>
-        ${p.id===currentUser?.id?`<span style="font-size:10px;color:var(--text3)">(คุณ)</span>`:`
-        <select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
-          ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
-        </select>`}
-      </div>
-      ${p.role==='aosomo'&&p.id!==currentUser?.id?`
-      <div style="margin-top:8px;display:flex;align-items:center;gap:6px;padding-top:8px;border-top:1px solid var(--border)">
-        <span style="font-size:11px;color:var(--text3);white-space:nowrap">🏡 หมู่บ้านรับผิดชอบ:</span>
-        <select onchange="changeMemberVillage('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif;flex:1">
-          <option value="">— ยังไม่กำหนด —</option>
-          ${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option value="${v}"${p.village===v?' selected':''}>${v}</option>`).join('')}
-        </select>
-      </div>`:''}
+      ${isSelf?`<span style="font-size:10px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">(คุณ)</span>`:`
+      <select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
+        ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
+      </select>`}
     </div>
-  </div>`).join('')
+    ${showVillage&&!isSelf?`
+    <div style="margin-top:8px;display:flex;align-items:center;gap:6px;padding-top:8px;border-top:1px solid var(--border)">
+      <span style="font-size:11px;color:var(--text3);white-space:nowrap">🏡 หมู่บ้าน:</span>
+      <select onchange="changeMemberVillage('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif;flex:1">
+        <option value="">— ยังไม่กำหนด —</option>
+        ${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option value="${v}"${p.village===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>`:''}
+  </div>`
+}
+
+function aosomoDirectoryCard(a){
+  return `
+  <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:6px;border:1px solid #ede9fe;display:flex;align-items:center;justify-content:space-between;gap:8px">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <div style="width:32px;height:32px;border-radius:50%;background:#ede9fe;color:#7c3aed;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${esc((a.name||'?').slice(0,2))}</div>
+      <div>
+        <div style="font-size:13px;font-weight:700">${esc(a.name)}</div>
+        <div style="font-size:11px;color:var(--text3)">${esc(a.village||'—')}${a.phone?` · ${esc(a.phone)}`:''}</div>
+      </div>
+    </div>
+    <button onclick="deleteAosomoDirectory(${a.id})" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
+  </div>`
+}
+
+async function loadMembersList(){
+  const[{data:profiles},{data:aosomoDir}]=await Promise.all([
+    sb.from('user_profiles').select('*').order('created_at'),
+    sb.from('aosomo_directory').select('*').order('village')
+  ])
+  const all=profiles||[]
+  const staffEl=document.getElementById('group-staff')
+  const aosomoEl=document.getElementById('group-aosomo')
+  const viewerEl=document.getElementById('group-viewer')
+  if(!staffEl)return
+
+  const staff=all.filter(p=>p.role==='staff'||p.role==='admin')
+  const aosomo=all.filter(p=>p.role==='aosomo')
+  const viewer=all.filter(p=>p.role==='viewer')
+
+  staffEl.innerHTML=staff.length?staff.map(p=>memberCard(p,false)).join(''):`<div style="color:var(--text3);font-size:12px;padding:8px 0">ยังไม่มีเจ้าหน้าที่</div>`
+
+  const dirHtml=(aosomoDir||[]).length?`
+    <div style="font-size:11px;font-weight:700;color:#7c3aed;margin:12px 0 6px;padding-top:10px;border-top:2px dashed #ede9fe">📋 รายชื่อ อสม. ที่นำเข้า (${aosomoDir.length} คน)</div>
+    ${aosomoDir.map(aosomoDirectoryCard).join('')}`:''
+  aosomoEl.innerHTML=(aosomo.length?aosomo.map(p=>memberCard(p,true)).join(''):'')+dirHtml||`<div style="color:var(--text3);font-size:12px;padding:8px 0">ยังไม่มีรายชื่อ</div>`
+
+  viewerEl.innerHTML=viewer.length?viewer.map(p=>memberCard(p,false)).join(''):`<div style="color:var(--text3);font-size:12px;padding:8px 0">ยังไม่มีผู้สังเกตการณ์</div>`
+}
+
+async function importAosomoFile(input){
+  const file=input.files[0];if(!file)return;input.value=''
+  try{
+    const data=await file.arrayBuffer()
+    const wb=XLSX.read(data)
+    const ws=wb.Sheets[wb.SheetNames[0]]
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1}).filter(r=>r.length>0)
+    if(rows.length<2){alert('ไม่พบข้อมูล (ต้องมีแถว header และข้อมูลอย่างน้อย 1 แถว)');return}
+    const records=rows.slice(1).filter(r=>r[0]).map(r=>({
+      name:String(r[0]||'').trim(),
+      village:String(r[1]||'').trim(),
+      phone:String(r[2]||'').trim(),
+    })).filter(r=>r.name)
+    if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
+    if(!confirm(`นำเข้า ${records.length} รายชื่อ อสม. ใช่หรือไม่?`))return
+    const{error}=await sb.from('aosomo_directory').insert(records)
+    if(error)throw error
+    alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
+    loadMembersList()
+  }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
+}
+
+async function deleteAosomoDirectory(id){
+  if(!confirm('ลบรายชื่อนี้?'))return
+  const{error}=await sb.from('aosomo_directory').delete().eq('id',id)
+  if(error){alert('❌ '+error.message);return}
+  loadMembersList()
 }
 
 async function changeMemberRole(userId,role){
