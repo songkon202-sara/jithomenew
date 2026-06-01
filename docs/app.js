@@ -45,6 +45,7 @@ let _previewOrigVillage= null
 
 const ROLE_LABEL = {admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',aosomo:'อสม.',viewer:'ผู้สังเกตการณ์'}
 const ROLE_COLOR = {admin:'var(--primary)',staff:'#0d9488',aosomo:'#7c3aed',viewer:'var(--text3)'}
+const VIEWER_PAGES = ['overview']
 function canDo(action){
   const perms={
     admin:   ['view','record','visit','admin','manage_users'],
@@ -164,6 +165,8 @@ async function getTrend() {
 // ─── Router ──────────────────────────────────────────────────────
 async function navigate(page) {
   if (!PAGES.includes(page)) page = 'dashboard'
+  // viewer เข้าได้เฉพาะหน้า overview
+  if(currentRole==='viewer' && !_previewOrigRole && !VIEWER_PAGES.includes(page)) page='overview'
   document.querySelectorAll('[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === page))
   const titles = {
     dashboard:['JitHome','ระบบติดตามผู้ป่วยจิตเวช'],
@@ -1823,9 +1826,16 @@ function updateUserUI(){
     av.style.background=ROLE_COLOR[currentRole]||'var(--primary)'
     av.onclick=()=>{if(confirm(`ออกจากระบบ?\n${currentUser.email}\nสิทธิ์: ${ROLE_LABEL[currentRole]}`))logoutUser()}
   }
-  // ซ่อนเมนู admin ถ้าไม่ใช่ admin
+  // ซ่อนเมนูตามสิทธิ์
   document.querySelectorAll('[data-page="admin"]').forEach(el=>{
     el.style.display=canDo('admin')?'':'none'
+  })
+  // viewer เห็นเฉพาะเมนู overview
+  const isViewer = currentRole==='viewer' && !_previewOrigRole
+  ;['dashboard','patients','timeline','visit','members','guide'].forEach(p=>{
+    document.querySelectorAll(`[data-page="${p}"]`).forEach(el=>{
+      el.style.display=isViewer?'none':''
+    })
   })
 }
 
@@ -1935,7 +1945,8 @@ async function loadAndNav(){
     if(count){const b=document.getElementById('notif-badge');if(b){b.textContent=count;b.style.display='flex'}}
   }catch(e){console.warn('loadAndNav:',e)}
   const hash=(location.hash||'').slice(1)
-  await navigate(PAGES.includes(hash)?hash:'dashboard')
+  const startPage = currentRole==='viewer' ? 'overview' : (PAGES.includes(hash)?hash:'dashboard')
+  await navigate(startPage)
 }
 
 async function init(){
