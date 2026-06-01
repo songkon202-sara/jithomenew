@@ -40,6 +40,8 @@ let currentUser        = null
 let currentRole        = 'viewer'  // admin | staff | aosomo | viewer
 let currentDisplayName = ''
 let currentVillage     = ''        // หมู่บ้านที่ อสม. รับผิดชอบ
+let _previewOrigRole   = null      // เก็บ role จริงของ admin ขณะ preview
+let _previewOrigVillage= null
 
 const ROLE_LABEL = {admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',aosomo:'อสม.',viewer:'ผู้สังเกตการณ์'}
 const ROLE_COLOR = {admin:'var(--primary)',staff:'#0d9488',aosomo:'#7c3aed',viewer:'var(--text3)'}
@@ -588,6 +590,49 @@ function renderGuide(el) {
   </div>`
 }
 
+// ─── Preview Mode ─────────────────────────────────────────────────
+function previewAs(role, village){
+  if(!canDo('admin')){alert('เฉพาะแอดมินเท่านั้น');return}
+  _previewOrigRole    = currentRole
+  _previewOrigVillage = currentVillage
+  currentRole    = role
+  currentVillage = village || ''
+  showPreviewBanner()
+  navigate('dashboard')
+}
+
+function exitPreview(){
+  currentRole    = _previewOrigRole
+  currentVillage = _previewOrigVillage
+  _previewOrigRole    = null
+  _previewOrigVillage = null
+  const b = document.getElementById('preview-banner')
+  if(b) b.remove()
+  document.querySelector('.app-main').style.paddingTop=''
+  navigate('admin')
+}
+
+function showPreviewBanner(){
+  let b = document.getElementById('preview-banner')
+  if(!b){
+    b = document.createElement('div')
+    b.id = 'preview-banner'
+    document.getElementById('root').prepend(b)
+  }
+  const roleColor = {admin:'#dc2626',staff:'#0a7ea4',aosomo:'#7c3aed',viewer:'#6b7280'}
+  const roleIcon  = {admin:'👑',staff:'👨‍⚕️',aosomo:'🏡',viewer:'👁️'}
+  const roleLabel = {admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',aosomo:'อสม.',viewer:'ผู้สังเกตการณ์'}
+  b.style.cssText=`position:fixed;top:0;left:0;right:0;z-index:99999;background:${roleColor[currentRole]};color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:'Sarabun',sans-serif;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.2)`
+  b.innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="background:rgba(255,255,255,.2);border-radius:6px;padding:2px 8px;font-size:11px">👁️ โหมดดูตัวอย่าง</div>
+      <span>${roleIcon[currentRole]} กำลังแสดงในฐานะ: <strong>${roleLabel[currentRole]}${currentVillage?' ('+currentVillage+')':''}</strong></span>
+    </div>
+    <button onclick="exitPreview()" style="background:rgba(255,255,255,.25);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✕ ออกจากโหมดนี้</button>`
+  // เลื่อน content ลงเพื่อให้ banner ไม่ทับ
+  document.querySelector('.app-main').style.paddingTop='48px'
+}
+
 async function renderAdmin(el) {
   const settings=await getSettings()
   hospitalName=settings.hospital_name||hospitalName
@@ -598,9 +643,32 @@ async function renderAdmin(el) {
   const over=pts.filter(p=>parseInt(p.days_until)<0).length
   const todayC=pts.filter(p=>parseInt(p.days_until)===0).length
   const nameOpts=pts.map(p=>`<option value="${esc(p.name)}">`).join('')
+  const villages=['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต']
   el.innerHTML=`<div class="page">
   <div class="page-title">แอดมิน</div>
   <div class="page-sub">จัดการข้อมูลและตั้งค่าระบบ</div>
+  <div class="form-section">
+    <h3>👁️ ดูตัวอย่างการแสดงผลตามสิทธิ์</h3>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">เลือกประเภทสมาชิกเพื่อดูว่าเขาจะเห็นหน้าเว็บแบบไหน — กดปุ่ม <strong>ออกจากโหมดนี้</strong> เพื่อกลับสิทธิ์แอดมิน</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button onclick="previewAs('staff')" style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
+        <div style="font-size:18px;margin-bottom:4px">👨‍⚕️</div>
+        <div style="font-size:13px;font-weight:700;color:#0a7ea4">เจ้าหน้าที่</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">บันทึกฉีดยา เยี่ยมบ้าน</div>
+      </button>
+      <button onclick="previewAs('viewer')" style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
+        <div style="font-size:18px;margin-bottom:4px">👁️</div>
+        <div style="font-size:13px;font-weight:700;color:#6b7280">ผู้สังเกตการณ์</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">ดูได้อย่างเดียว</div>
+      </button>
+    </div>
+    <div style="margin-top:8px">
+      <div style="font-size:12px;font-weight:700;color:#7c3aed;margin-bottom:6px">🏡 อสม. — เลือกหมู่บ้าน:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${villages.map(v=>`<button onclick="previewAs('aosomo','${v}')" style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:#7c3aed;cursor:pointer;font-family:'Sarabun',sans-serif">${v}</button>`).join('')}
+      </div>
+    </div>
+  </div>
   <div class="form-section">
     <h3>📊 สรุปภาพรวม</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
