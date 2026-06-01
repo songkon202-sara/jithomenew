@@ -444,9 +444,14 @@ function renderMembers(el){
         <div style="width:32px;height:32px;background:#7c3aed;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">🏡</div>
         <div><div style="font-size:14px;font-weight:700">อสม.</div><div style="font-size:11px;color:var(--text3)">เยี่ยมบ้าน ดูผู้ป่วยในหมู่บ้านตนเอง</div></div>
       </div>
-      <button onclick="document.getElementById('aosomo-file-input').click()" style="display:flex;align-items:center;gap:4px;padding:6px 12px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
-        📎 นำเข้ารายชื่อ
-      </button>
+      <div style="display:flex;gap:6px">
+        <button onclick="downloadTemplate('aosomo')" style="display:flex;align-items:center;gap:4px;padding:6px 10px;background:#fff;color:#7c3aed;border:1px solid #7c3aed;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
+          ⬇️ ดาวน์โหลดตัวอย่าง
+        </button>
+        <button onclick="document.getElementById('aosomo-file-input').click()" style="display:flex;align-items:center;gap:4px;padding:6px 12px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
+          📎 นำเข้ารายชื่อ
+        </button>
+      </div>
       <input type="file" id="aosomo-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importAosomoFile(this)">
     </div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;padding:6px 10px;background:#f5f3ff;border-radius:6px">
@@ -976,6 +981,31 @@ function exportCSV(){
 }
 function exportJSON(){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(allPatients,null,2)],{type:'application/json'}));a.download='jithome.json';a.click()
+}
+
+function downloadTemplate(type){
+  let csv,filename
+  if(type==='aosomo'){
+    csv='ชื่อ-นามสกุล,หมู่บ้าน,เบอร์โทร\n'+
+      'นางสาวมาลี ใจดี,หมู่ 1,0812345678\n'+
+      'นายสมชาย รักษ์ดี,หมู่ 1,0823456789\n'+
+      'นางวิไล สุขสันต์,หมู่ 2,0834567890\n'+
+      'นางสาวอารีย์ แก้วใส,หมู่ 2,0845678901\n'+
+      'นายประสิทธิ์ ทองดี,หมู่ 3,0856789012'
+    filename='ตัวอย่าง_รายชื่ออสม.csv'
+  } else {
+    csv='ชื่อ-นามสกุล,หมู่บ้าน,หมายเหตุ\n'+
+      'นายสมศักดิ์ ใจเย็น,หมู่ 1,โรคจิตเภท ติดตามทุกเดือน\n'+
+      'นางสาวอรุณี สว่างจิต,หมู่ 2,\n'+
+      'นายวิชัย มั่นคง,หมู่ 3,ผู้ดูแลคือนางสมศรี โทร 089-xxx\n'+
+      'นางประภา รุ่งเรือง,หมู่ 1,\n'+
+      'นายธนพล ใจกว้าง,หมู่ 4,แพ้ยา Haloperidol'
+    filename='ตัวอย่าง_รายชื่อผู้ป่วย.csv'
+  }
+  const a=document.createElement('a')
+  a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}))
+  a.download=filename
+  a.click()
 }
 
 // ─── Patient Modal ───────────────────────────────────────────────
@@ -1593,7 +1623,10 @@ function openAddPatient(){
   <div class="form-group"><label>รอบนัดต่อไป</label><select id="np-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
   <div class="form-group"><label>หมายเหตุ</label><input type="text" id="np-note" placeholder="บันทึกเพิ่มเติม..."></div>
   <div class="form-group">
-    <label>📎 แนบไฟล์ (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <label style="margin-bottom:0">📎 แนบไฟล์ (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
+      <button onclick="downloadTemplate('patient')" style="background:none;border:1px solid var(--primary);color:var(--primary);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">⬇️ ไฟล์ตัวอย่าง</button>
+    </div>
     <div id="np-file-wrap" onclick="document.getElementById('np-file').click()"
       style="border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;background:var(--bg);transition:.2s">
       <div style="font-size:24px;margin-bottom:4px">📁</div>
