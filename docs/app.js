@@ -1318,7 +1318,7 @@ async function openModal(id){
     <div id="edit-patient-wrap" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#166534">✏️ แก้ไขข้อมูลผู้ป่วย</div>
       <div class="form-group"><label>ชื่อ-นามสกุล</label><input type="text" id="edit-pt-name" style="width:100%;box-sizing:border-box"></div>
-      <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+      <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village" onchange="refreshAosomoByVillage(this.value)">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
       <div class="form-group"><label>👨‍⚕️ เจ้าหน้าที่รับผิดชอบ</label><select id="edit-pt-staff" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>🏡 อสม. รับผิดชอบ</label><select id="edit-pt-aosomo" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
@@ -1425,18 +1425,21 @@ async function openEditPatient(id,name,village,note,staffResp,aosomoResp){
     if(staffResp&&!(staffList||[]).find(s=>s.display_name===staffResp))
       staffSel.innerHTML+=`<option selected>${esc(staffResp)}</option>`
   }
-  // โหลด dropdown อสม.
+  // โหลด dropdown อสม. — กรองตามหมู่บ้านของผู้ป่วย
+  await refreshAosomoByVillage(village, aosomoResp)
+}
+
+async function refreshAosomoByVillage(village, currentVal){
   const aosomoSel=document.getElementById('edit-pt-aosomo')
-  if(aosomoSel){
-    const{data:aosomoList}=await sb.from('aosomo_directory').select('name,village').order('village').order('name')
-    aosomoSel.innerHTML='<option value="">— ไม่ระบุ —</option>'+
-      (aosomoList||[]).map(a=>{
-        const label=`${a.name}${a.village?' ('+a.village+')':''}`
-        return`<option value="${esc(a.name)}"${a.name===aosomoResp?' selected':''}>${esc(label)}</option>`
-      }).join('')
-    if(aosomoResp&&!(aosomoList||[]).find(a=>a.name===aosomoResp))
-      aosomoSel.innerHTML+=`<option value="${esc(aosomoResp)}" selected>${esc(aosomoResp)}</option>`
-  }
+  if(!aosomoSel)return
+  if(currentVal===undefined) currentVal=aosomoSel.value
+  let q=sb.from('aosomo_directory').select('name,village').order('name')
+  if(village) q=q.eq('village',village)
+  const{data:aosomoList}=await q
+  aosomoSel.innerHTML='<option value="">— ไม่ระบุ —</option>'+
+    (aosomoList||[]).map(a=>`<option value="${esc(a.name)}"${a.name===currentVal?' selected':''}>${esc(a.name)}</option>`).join('')
+  if(currentVal&&!(aosomoList||[]).find(a=>a.name===currentVal))
+    aosomoSel.innerHTML+=`<option value="${esc(currentVal)}" selected>${esc(currentVal)} ⚠️ (ต่างหมู่บ้าน)</option>`
 }
 async function deletePatient(id,name){
   if(!confirm(`ลบผู้ป่วย "${name}" ออกจากระบบ?\n\nประวัติการฉีดยาทั้งหมดจะถูกลบด้วย\nไม่สามารถกู้คืนได้!`))return
