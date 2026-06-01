@@ -1830,12 +1830,17 @@ async function resetPassword(){
 function updateUserUI(){
   const av=document.querySelector('.avatar')
   if(av&&currentUser?.email){
-    const initials=currentUser.email.slice(0,2).toUpperCase()
+    const initials=(currentDisplayName||currentUser.email).slice(0,2).toUpperCase()
     av.textContent=initials
-    av.title=`${currentUser.email}\nสิทธิ์: ${ROLE_LABEL[currentRole]||currentRole}`
-    av.style.cursor='pointer'
+    av.title=`${currentDisplayName||currentUser.email}\nสิทธิ์: ${ROLE_LABEL[currentRole]||currentRole}`
+    av.style.cursor='default'
     av.style.background=ROLE_COLOR[currentRole]||'var(--primary)'
-    av.onclick=()=>{if(confirm(`ออกจากระบบ?\n${currentUser.email}\nสิทธิ์: ${ROLE_LABEL[currentRole]}`))logoutUser()}
+    av.onclick=null
+  }
+  const sideInfo=document.getElementById('sidebar-user-info')
+  if(sideInfo&&currentUser){
+    sideInfo.textContent=`${currentDisplayName||currentUser.email} · ${ROLE_LABEL[currentRole]||currentRole}`
+    sideInfo.title=currentUser.email
   }
   // ซ่อนเมนูตามสิทธิ์
   document.querySelectorAll('[data-page="admin"]').forEach(el=>{
