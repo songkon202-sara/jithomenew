@@ -1433,13 +1433,19 @@ async function refreshAosomoByVillage(village, currentVal){
   const aosomoSel=document.getElementById('edit-pt-aosomo')
   if(!aosomoSel)return
   if(currentVal===undefined) currentVal=aosomoSel.value
-  let q=sb.from('aosomo_directory').select('name,village').order('name')
-  if(village) q=q.eq('village',village)
-  const{data:aosomoList}=await q
+  const{data:allAosomo}=await sb.from('aosomo_directory').select('name,village').order('name')
+  // normalize village สำหรับเปรียบเทียบ เช่น "หมู่ 5" = "หมู่5" = "5"
+  const norm=v=>(v||'').replace(/\s/g,'').replace('หมู่','').trim()
+  const filtered=village
+    ?(allAosomo||[]).filter(a=>norm(a.village)===norm(village))
+    :(allAosomo||[])
   aosomoSel.innerHTML='<option value="">— ไม่ระบุ —</option>'+
-    (aosomoList||[]).map(a=>`<option value="${esc(a.name)}"${a.name===currentVal?' selected':''}>${esc(a.name)}</option>`).join('')
-  if(currentVal&&!(aosomoList||[]).find(a=>a.name===currentVal))
-    aosomoSel.innerHTML+=`<option value="${esc(currentVal)}" selected>${esc(currentVal)} ⚠️ (ต่างหมู่บ้าน)</option>`
+    filtered.map(a=>`<option value="${esc(a.name)}"${a.name===currentVal?' selected':''}>${esc(a.name)}</option>`).join('')
+  if(currentVal&&!filtered.find(a=>a.name===currentVal)){
+    const fromOther=(allAosomo||[]).find(a=>a.name===currentVal)
+    if(fromOther)
+      aosomoSel.innerHTML+=`<option value="${esc(fromOther.name)}" selected>${esc(fromOther.name)} ⚠️ (${esc(fromOther.village||'ต่างหมู่')})</option>`
+  }
 }
 async function deletePatient(id,name){
   if(!confirm(`ลบผู้ป่วย "${name}" ออกจากระบบ?\n\nประวัติการฉีดยาทั้งหมดจะถูกลบด้วย\nไม่สามารถกู้คืนได้!`))return
