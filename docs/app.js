@@ -857,13 +857,17 @@ async function renderAdmin(el) {
 
 function memberCard(p,showVillage=false){
   const isSelf=p.id===currentUser?.id
+  const canEdit=canDo('admin')||isSelf
   return `
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--border)">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
         <div style="width:34px;height:34px;border-radius:50%;background:${ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${(p.email||'?').slice(0,2).toUpperCase()}</div>
-        <div style="min-width:0">
-          <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
+        <div style="min-width:0;flex:1">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
+            ${canEdit?`<button onclick="editMemberName('${p.id}','${esc(p.display_name||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
+          </div>
           <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
         </div>
       </div>
@@ -881,6 +885,19 @@ function memberCard(p,showVillage=false){
       </select>
     </div>`:''}
   </div>`
+}
+async function editMemberName(userId, currentName){
+  const newName=prompt('แก้ไขชื่อ-นามสกุล (แสดงในระบบ):',currentName)
+  if(newName===null)return
+  const trimmed=newName.trim()
+  if(!trimmed){alert('กรุณากรอกชื่อ');return}
+  const{error}=await sb.from('user_profiles').update({display_name:trimmed}).eq('id',userId)
+  if(error){alert('❌ บันทึกไม่สำเร็จ: '+error.message);return}
+  if(userId===currentUser?.id){
+    currentDisplayName=trimmed
+    updateUserUI()
+  }
+  loadMembersList()
 }
 
 function aosomoDirectoryCard(a){
@@ -1320,7 +1337,7 @@ async function openModal(id){
       <div class="form-group"><label>ชื่อ-นามสกุล</label><input type="text" id="edit-pt-name" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village" onchange="refreshAosomoByVillage(this.value)">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
       <div class="form-group"><label>👨‍⚕️ เจ้าหน้าที่รับผิดชอบ</label><select id="edit-pt-staff" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
-      <div class="form-group"><label>🏡 อสม. รับผิดชอบ</label><select id="edit-pt-aosomo" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
+      <div class="form-group"><label>🏡 อสม. รับผิดชอบ <span id="edit-pt-aosomo-village" style="font-size:11px;color:#7c3aed;font-weight:400"></span></label><select id="edit-pt-aosomo" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" style="flex:1" id="edit-pt-save-btn" onclick="saveEditPatient(${p.id})">บันทึกการแก้ไข</button>
@@ -1415,9 +1432,12 @@ async function openEditPatient(id,name,village,note,staffResp,aosomoResp){
   const ntEl=document.getElementById('edit-pt-note')
   if(nEl)nEl.value=name||''
   if(ntEl)ntEl.value=note||''
-  if(vEl)for(const o of vEl.options)if(o.value===village||o.text===village){o.selected=true;break}
-  // อ่าน village จาก dropdown ที่ set แล้ว (รับประกันค่าถูกต้อง)
-  const actualVillage=vEl?vEl.options[vEl.selectedIndex]?.text||village:village
+  // ตั้งค่า dropdown หมู่บ้าน
+  if(vEl){
+    let matched=false
+    for(const o of vEl.options)if(o.value===village||o.text===village){o.selected=true;matched=true;break}
+    if(!matched) vEl.selectedIndex=0
+  }
   // โหลด dropdown เจ้าหน้าที่
   const staffSel=document.getElementById('edit-pt-staff')
   if(staffSel){
@@ -1427,28 +1447,43 @@ async function openEditPatient(id,name,village,note,staffResp,aosomoResp){
     if(staffResp&&!(staffList||[]).find(s=>s.display_name===staffResp))
       staffSel.innerHTML+=`<option selected>${esc(staffResp)}</option>`
   }
-  // โหลด dropdown อสม. — กรองตามหมู่บ้านของผู้ป่วย
-  await refreshAosomoByVillage(actualVillage, aosomoResp)
+  // โหลด dropdown อสม. — ส่ง village ตรงจากข้อมูลผู้ป่วย (ไม่ผ่าน select element)
+  await refreshAosomoByVillage(village, aosomoResp)
 }
 
 async function refreshAosomoByVillage(village, currentVal){
   const aosomoSel=document.getElementById('edit-pt-aosomo')
   if(!aosomoSel)return
   if(currentVal===undefined) currentVal=aosomoSel.value
-  // ถ้า village ว่าง ให้อ่านจาก dropdown หมู่บ้านโดยตรง
+  // ถ้าไม่มี village ให้อ่านจาก dropdown หมู่บ้านโดยตรง
   if(!village){
     const vEl=document.getElementById('edit-pt-village')
-    if(vEl) village=vEl.options[vEl.selectedIndex]?.text||vEl.value||''
+    if(vEl) village=vEl.options[vEl.selectedIndex]?.value||''
   }
-  const{data:allAosomo}=await sb.from('aosomo_directory').select('name,village').order('name')
-  const filtered=(allAosomo||[]).filter(a=>(a.village||'')===(village||''))
+  // แสดง village ที่กำลังกรองใน label
+  const lbl=document.getElementById('edit-pt-aosomo-village')
+  if(lbl) lbl.textContent=village?`(กรอง: ${village})`:'(เลือกหมู่บ้านก่อน)'
+  aosomoSel.innerHTML='<option value="">⏳ กำลังโหลด...</option>'
+  // ดึงข้อมูลโดยกรอง village จาก Supabase โดยตรง
+  let q=sb.from('aosomo_directory').select('name,village').order('name')
+  if(village) q=q.eq('village',village)
+  else{ aosomoSel.innerHTML='<option value="">— ไม่ระบุ —</option>'; return }
+  const{data:list,error}=await q
+  if(error){ aosomoSel.innerHTML='<option value="">❌ โหลดไม่สำเร็จ</option>'; return }
+  if(!list||list.length===0){
+    aosomoSel.innerHTML='<option value="">— ไม่พบ อสม. ใน'+village+' —</option>'
+    // เพิ่มตัวเลือกปัจจุบันไว้ถ้ามี
+    if(currentVal) aosomoSel.innerHTML+=`<option value="${esc(currentVal)}" selected>${esc(currentVal)}</option>`
+    return
+  }
   aosomoSel.innerHTML='<option value="">— ไม่ระบุ —</option>'+
-    filtered.map(a=>`<option value="${esc(a.name)}"${a.name===currentVal?' selected':''}>${esc(a.name)}</option>`).join('')
-  if(currentVal&&!filtered.find(a=>a.name===currentVal)){
-    const fromOther=(allAosomo||[]).find(a=>a.name===currentVal)
-    if(fromOther)
-      aosomoSel.innerHTML+=`<option value="${esc(fromOther.name)}" selected>${esc(fromOther.name)} ⚠️ (${esc(fromOther.village||'ต่างหมู่')})</option>`
-    else
+    list.map(a=>`<option value="${esc(a.name)}"${a.name===currentVal?' selected':''}>${esc(a.name)}</option>`).join('')
+  // ถ้าค่าปัจจุบันไม่อยู่ในรายชื่อ ให้แสดงไว้พร้อมเตือน
+  if(currentVal&&!list.find(a=>a.name===currentVal)){
+    const{data:found}=await sb.from('aosomo_directory').select('name,village').eq('name',currentVal).maybeSingle()
+    if(found)
+      aosomoSel.innerHTML+=`<option value="${esc(found.name)}" selected>${esc(found.name)} ⚠️ (${esc(found.village||'ต่างหมู่')})</option>`
+    else if(currentVal)
       aosomoSel.innerHTML+=`<option value="${esc(currentVal)}" selected>${esc(currentVal)}</option>`
   }
 }
