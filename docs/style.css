@@ -55,6 +55,7 @@ html, body {
   .bottom-nav { display: none !important; }
   .app-main   { flex: 1; min-width: 0; overflow-y: auto; height: 100vh; }
   .app-header { position: sticky; top: 0; z-index: 10; }
+  .header-logout-btn { display: none !important; }
 }
 
 /* ── Sidebar ────────────────────────────────────────────────── */
@@ -128,6 +129,18 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 700;
   cursor: pointer;
+}
+.header-logout-btn {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.35);
+  border-radius: 20px;
+  color: #fff;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  font-family: 'Sarabun', sans-serif;
+  white-space: nowrap;
 }
 
 /* ── Main & page ────────────────────────────────────────────── */
