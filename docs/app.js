@@ -438,9 +438,23 @@ function renderMembers(el){
 
   <!-- เจ้าหน้าที่ -->
   <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-      <div style="width:32px;height:32px;background:#0d9488;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">🏥</div>
-      <div><div style="font-size:14px;font-weight:700">เจ้าหน้าที่</div><div style="font-size:11px;color:var(--text3)">บันทึกข้อมูล เยี่ยมบ้าน ดูภาพรวม</div></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:32px;height:32px;background:#0d9488;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">🏥</div>
+        <div><div style="font-size:14px;font-weight:700">เจ้าหน้าที่</div><div style="font-size:11px;color:var(--text3)">บันทึกข้อมูล เยี่ยมบ้าน ดูภาพรวม</div></div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="downloadTemplate('staff_dir')" style="display:flex;align-items:center;gap:4px;padding:6px 10px;background:#fff;color:#0d9488;border:1px solid #0d9488;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
+          ⬇️ ดาวน์โหลดตัวอย่าง
+        </button>
+        <button onclick="document.getElementById('staff-dir-file-input').click()" style="display:flex;align-items:center;gap:4px;padding:6px 12px;background:#0d9488;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
+          📎 นำเข้ารายชื่อ
+        </button>
+      </div>
+      <input type="file" id="staff-dir-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importStaffDirFile(this)">
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;padding:6px 10px;background:#f0fdfa;border-radius:6px">
+      📋 นำเข้าจาก Excel/CSV — คอลัมน์: <strong>ชื่อ, ตำแหน่ง, เบอร์โทร</strong> (แถวแรกเป็น header)
     </div>
     <div id="group-staff"><div style="color:var(--text3);font-size:12px;padding:8px">⏳ กำลังโหลด...</div></div>
   </div>
@@ -900,6 +914,20 @@ async function editMemberName(userId, currentName){
   loadMembersList()
 }
 
+function staffDirectoryCard(s){
+  return `
+  <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:6px;border:1px solid #ccfbf1;display:flex;align-items:center;justify-content:space-between;gap:8px">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <div style="width:32px;height:32px;border-radius:50%;background:#ccfbf1;color:#0d9488;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${esc((s.name||'?').slice(0,2))}</div>
+      <div>
+        <div style="font-size:13px;font-weight:700">${esc(s.name)}</div>
+        <div style="font-size:11px;color:var(--text3)">${esc(s.position||'—')}${s.phone?` · ${esc(s.phone)}`:''}</div>
+      </div>
+    </div>
+    <button onclick="deleteStaffDirectory(${s.id})" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
+  </div>`
+}
+
 function aosomoDirectoryCard(a){
   return `
   <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:6px;border:1px solid #ede9fe;display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -915,9 +943,10 @@ function aosomoDirectoryCard(a){
 }
 
 async function loadMembersList(){
-  const[{data:profiles},{data:aosomoDir}]=await Promise.all([
+  const[{data:profiles},{data:aosomoDir},{data:staffDir}]=await Promise.all([
     sb.from('user_profiles').select('*').order('created_at'),
-    sb.from('aosomo_directory').select('*').order('village')
+    sb.from('aosomo_directory').select('*').order('village'),
+    sb.from('staff_directory').select('*').order('name')
   ])
   const all=profiles||[]
   const staffEl=document.getElementById('group-staff')
@@ -929,7 +958,10 @@ async function loadMembersList(){
   const aosomo=all.filter(p=>p.role==='aosomo')
   const viewer=all.filter(p=>p.role==='viewer')
 
-  staffEl.innerHTML=staff.length?staff.map(p=>memberCard(p,false)).join(''):`<div style="color:var(--text3);font-size:12px;padding:8px 0">ยังไม่มีเจ้าหน้าที่</div>`
+  const staffDirHtml=(staffDir||[]).length?`
+    <div style="font-size:11px;font-weight:700;color:#0d9488;margin:12px 0 6px;padding-top:10px;border-top:2px dashed #ccfbf1">📋 รายชื่อเจ้าหน้าที่ที่นำเข้า (${staffDir.length} คน)</div>
+    ${(staffDir||[]).map(staffDirectoryCard).join('')}`:''
+  staffEl.innerHTML=(staff.length?staff.map(p=>memberCard(p,false)).join(''):'')+staffDirHtml||`<div style="color:var(--text3);font-size:12px;padding:8px 0">ยังไม่มีเจ้าหน้าที่</div>`
 
   const dirHtml=(aosomoDir||[]).length?`
     <div style="font-size:11px;font-weight:700;color:#7c3aed;margin:12px 0 6px;padding-top:10px;border-top:2px dashed #ede9fe">📋 รายชื่อ อสม. ที่นำเข้า (${aosomoDir.length} คน)</div>
@@ -964,6 +996,35 @@ async function importAosomoFile(input){
 async function deleteAosomoDirectory(id){
   if(!confirm('ลบรายชื่อนี้?'))return
   const{error}=await sb.from('aosomo_directory').delete().eq('id',id)
+  if(error){alert('❌ '+error.message);return}
+  loadMembersList()
+}
+
+async function importStaffDirFile(input){
+  const file=input.files[0];if(!file)return;input.value=''
+  try{
+    const data=await file.arrayBuffer()
+    const wb=XLSX.read(data)
+    const ws=wb.Sheets[wb.SheetNames[0]]
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1}).filter(r=>r.length>0)
+    if(rows.length<2){alert('ไม่พบข้อมูล (ต้องมีแถว header และข้อมูลอย่างน้อย 1 แถว)');return}
+    const records=rows.slice(1).filter(r=>r[0]).map(r=>({
+      name:String(r[0]||'').trim(),
+      position:String(r[1]||'').trim(),
+      phone:String(r[2]||'').trim(),
+    })).filter(r=>r.name)
+    if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
+    if(!confirm(`นำเข้า ${records.length} รายชื่อเจ้าหน้าที่ ใช่หรือไม่?`))return
+    const{error}=await sb.from('staff_directory').insert(records)
+    if(error)throw error
+    alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
+    loadMembersList()
+  }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
+}
+
+async function deleteStaffDirectory(id){
+  if(!confirm('ลบรายชื่อนี้?'))return
+  const{error}=await sb.from('staff_directory').delete().eq('id',id)
   if(error){alert('❌ '+error.message);return}
   loadMembersList()
 }
@@ -1245,7 +1306,13 @@ function exportJSON(){
 
 function downloadTemplate(type){
   let csv,filename
-  if(type==='aosomo'){
+  if(type==='staff_dir'){
+    csv='ชื่อ-นามสกุล,ตำแหน่ง,เบอร์โทร\n'+
+      'นายสมชาย ใจดี,พยาบาลวิชาชีพ,0812345678\n'+
+      'นางสาวอรุณี สว่างจิต,เจ้าพนักงานสาธารณสุข,0823456789\n'+
+      'นายวิชัย มั่นคง,นักวิชาการสาธารณสุข,0834567890'
+    filename='ตัวอย่าง_รายชื่อเจ้าหน้าที่.csv'
+  } else if(type==='aosomo'){
     csv='ชื่อ-นามสกุล,หมู่บ้าน,เบอร์โทร\n'+
       'นางสาวมาลี ใจดี,หมู่ 1,0812345678\n'+
       'นายสมชาย รักษ์ดี,หมู่ 1,0823456789\n'+
@@ -1438,14 +1505,23 @@ async function openEditPatient(id,name,village,note,staffResp,aosomoResp){
     for(const o of vEl.options)if(o.value===village||o.text===village){o.selected=true;matched=true;break}
     if(!matched) vEl.selectedIndex=0
   }
-  // โหลด dropdown เจ้าหน้าที่
+  // โหลด dropdown เจ้าหน้าที่ (user_profiles + staff_directory)
   const staffSel=document.getElementById('edit-pt-staff')
   if(staffSel){
-    const{data:staffList}=await sb.from('user_profiles').select('display_name').in('role',['admin','staff']).order('display_name')
+    const[{data:staffList},{data:staffDir}]=await Promise.all([
+      sb.from('user_profiles').select('display_name').in('role',['admin','staff']).order('display_name'),
+      sb.from('staff_directory').select('name,position').order('name')
+    ])
+    const userNames=(staffList||[]).map(s=>s.display_name||'').filter(Boolean)
+    const dirNames=(staffDir||[]).map(s=>s.name).filter(n=>!userNames.includes(n))
     staffSel.innerHTML='<option value="">— ไม่ระบุ —</option>'+
-      (staffList||[]).map(s=>`<option${s.display_name===staffResp?' selected':''}>${esc(s.display_name||'')}</option>`).join('')
-    if(staffResp&&!(staffList||[]).find(s=>s.display_name===staffResp))
-      staffSel.innerHTML+=`<option selected>${esc(staffResp)}</option>`
+      userNames.map(n=>`<option value="${esc(n)}"${n===staffResp?' selected':''}>${esc(n)}</option>`).join('')
+    if(dirNames.length)
+      staffSel.innerHTML+=`<optgroup label="📋 รายชื่อที่นำเข้า">` +
+        dirNames.map(n=>`<option value="${esc(n)}"${n===staffResp?' selected':''}>${esc(n)}</option>`).join('') +
+        `</optgroup>`
+    if(staffResp&&!userNames.includes(staffResp)&&!dirNames.includes(staffResp))
+      staffSel.innerHTML+=`<option value="${esc(staffResp)}" selected>${esc(staffResp)}</option>`
   }
   // โหลด dropdown อสม. — ส่ง village ตรงจากข้อมูลผู้ป่วย (ไม่ผ่าน select element)
   await refreshAosomoByVillage(village, aosomoResp)
