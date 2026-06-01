@@ -56,21 +56,31 @@ CREATE TABLE public.app_settings (
 );
 
 -- ─── View: สถานะผู้ป่วย (รวมวันนัดล่าสุด) ────────────────────────
-CREATE VIEW public.patient_status AS
+-- ถ้า injection_date อยู่ในอนาคต = วันนัดหมายล่วงหน้า ให้ใช้วันนั้นโดยตรง
+-- ถ้า injection_date อยู่ในอดีต = ฉีดแล้ว ให้บวก interval เพื่อหาวันนัดถัดไป
+CREATE OR REPLACE VIEW public.patient_status AS
 SELECT
   p.id,
   p.name,
   p.village,
   p.note,
+  p.file_url,
   ir.injection_date                                              AS last_date,
   ir.group_color,
   ir.group_label,
   ir.interval_str,
   ir.interval_days,
   ir.note                                                        AS last_note,
-  (ir.injection_date + (ir.interval_days || ' days')::INTERVAL)::DATE AS next_date,
-  ((ir.injection_date + (ir.interval_days || ' days')::INTERVAL)::DATE
-    - CURRENT_DATE)::INT                                         AS days_until
+  CASE
+    WHEN ir.injection_date > CURRENT_DATE THEN ir.injection_date
+    ELSE (ir.injection_date + (ir.interval_days || ' days')::INTERVAL)::DATE
+  END                                                            AS next_date,
+  CASE
+    WHEN ir.injection_date > CURRENT_DATE
+      THEN (ir.injection_date - CURRENT_DATE)::INT
+    ELSE ((ir.injection_date + (ir.interval_days || ' days')::INTERVAL)::DATE
+      - CURRENT_DATE)::INT
+  END                                                            AS days_until
 FROM public.patients p
 LEFT JOIN LATERAL (
   SELECT *
