@@ -977,13 +977,29 @@ async function openModal(id){
     if(!p)throw new Error('ไม่พบผู้ป่วย')
     p.group_label=groupLabel(p.group_color)
     const hist=await getHistory(id)
-    const chip=daysChip(parseInt(p.days_until))
-    const histHtml=hist.slice(0,8).map((h,i)=>`
-    <div class="history-item" id="hist-${h.id}">
-      <div class="history-dot" style="background:${i===0?'var(--primary)':'var(--border)'};margin-top:5px"></div>
+    const todayStr=todayISO()
+    const futureRecs=hist.filter(h=>h.injection_date>todayStr)
+    const pastRecs=hist.filter(h=>h.injection_date<=todayStr)
+    // วันนัดครั้งต่อไป: ถ้ามี record อนาคต ใช้วันที่เร็วที่สุดของ record นั้นโดยตรง
+    const correctedNextDate=futureRecs.length>0
+      ?[...futureRecs].sort((a,b)=>a.injection_date.localeCompare(b.injection_date))[0].injection_date
+      :p.next_date
+    const correctedDays=Math.round((new Date(correctedNextDate+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000)
+    const chip=daysChip(correctedDays)
+    const histHtml=hist.slice(0,8).map((h)=>{
+      const isFuture=h.injection_date>todayStr
+      const isFirstPast=!isFuture&&pastRecs[0]?.id===h.id
+      const dotColor=isFuture?'#f59e0b':isFirstPast?'var(--primary)':'var(--border)'
+      const badge=isFuture
+        ?`<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-weight:700">📅 นัดหมาย</span>`
+        :isFirstPast?`<span style="font-size:10px;background:var(--primary-lt);color:var(--primary);padding:1px 6px;border-radius:4px;font-weight:700">ล่าสุด</span>`:''
+      const rowBg=isFuture?'background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px;margin-bottom:4px':''
+      return`
+    <div class="history-item" id="hist-${h.id}" style="${rowBg}">
+      <div class="history-dot" style="background:${dotColor};margin-top:5px"></div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
-          <div class="history-date">${esc(h.date_th)}${i===0?` <span style="font-size:10px;background:var(--primary-lt);color:var(--primary);padding:1px 6px;border-radius:4px;font-weight:700">ล่าสุด</span>`:''}</div>
+          <div class="history-date">${esc(h.date_th)} ${badge}</div>
           ${canDo('record')?`<div style="display:flex;gap:2px">
             <button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${esc(h.interval_str||'')}','${esc(h.note||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="แก้ไข">✏️</button>
             <button onclick="deleteRecord(${h.id},${p.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="ลบรายการนี้">🗑️</button>
@@ -992,8 +1008,8 @@ async function openModal(id){
         <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(h.group_label||'')} · ${esc(h.interval_str||'')}</div>
         ${h.note?`<div class="history-note">${esc(h.note)}</div>`:''}
         <div id="edit-rec-${h.id}" style="display:none;background:#f0f9ff;border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:10px;margin-top:8px">
-          <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px">แก้ไขรายการฉีดยา</div>
-          <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">วันที่ฉีดยา</label><input type="date" id="er-date-${h.id}" value="${h.injection_date}"></div>
+          <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px">แก้ไขรายการ</div>
+          <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">${isFuture?'วันนัดหมาย':'วันที่ฉีดยา'}</label><input type="date" id="er-date-${h.id}" value="${h.injection_date}"></div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">รอบนัดต่อไป</label>
             <select id="er-interval-${h.id}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:'Sarabun',sans-serif;font-size:13px">
               ${['2 สัปดาห์','3 สัปดาห์','4 สัปดาห์','1 เดือน','3 เดือน'].map(v=>`<option${v===h.interval_str?' selected':''}>${v}</option>`).join('')}
@@ -1006,7 +1022,7 @@ async function openModal(id){
           </div>
         </div>
       </div>
-    </div>`).join('')
+    </div>`}).join('')
     ct.innerHTML=`
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')} · ${esc(hospitalName)}</div></div>
@@ -1032,13 +1048,13 @@ async function openModal(id){
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:16px">
       <div style="font-size:12px;color:var(--text3);margin-bottom:2px">วันนัดครั้งต่อไป</div>
-      <div style="font-size:16px;font-weight:700;color:var(--primary)">${thDateFull(p.next_date)}</div>
-      <div style="font-size:12px;color:var(--text3);margin-top:2px">รอบการฉีดยา: ${esc(p.interval_str||'')}</div>
+      <div style="font-size:16px;font-weight:700;color:var(--primary)">${thDateFull(correctedNextDate)}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">รอบการฉีดยา: ${esc(futureRecs.length>0?futureRecs[0].interval_str:p.interval_str||'')}</div>
     </div>
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
     ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:700">ประวัติการฉีดยา (${hist.length} ครั้ง)</div>
+      <div style="font-size:13px;font-weight:700">ประวัติการฉีดยา (${pastRecs.length} ครั้ง)${futureRecs.length>0?`<span style="font-size:11px;font-weight:400;color:#92400e;margin-left:6px">📅 นัดหมาย ${futureRecs.length} รายการ</span>`:''}</div>
       <button onclick="toggleRecordForm()" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">+ บันทึก</button>
     </div>
     <div id="record-form-wrap" style="display:none;background:var(--primary-lt);border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid rgba(10,126,164,.2)">
