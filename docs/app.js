@@ -8,7 +8,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 // ─── Constants ───────────────────────────────────────────────────
 const TH_MONTHS_S = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
 const TH_MONTHS_F = ['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
-const PAGES = ['dashboard','patients','timeline','overview','visit','admin']
+const PAGES = ['dashboard','patients','timeline','overview','visit','admin','members']
 
 const STAFF_CHECKLIST = [
   ['s1','ประเมินอาการทางจิตเวช (สังเกต พูดคุย)'],
@@ -159,6 +159,7 @@ async function navigate(page) {
     overview: ['ภาพรวม','สถิติและกราฟ'],
     visit:    ['เยี่ยมบ้าน','บันทึกการเยี่ยม'],
     admin:    ['แอดมิน','จัดการและตั้งค่า'],
+    members:  ['จัดการสมาชิก','กำหนดสิทธิ์การเข้าถึง'],
   }
   const [t,s] = titles[page]
   document.getElementById('header-title').textContent = t
@@ -172,6 +173,7 @@ async function navigate(page) {
   else if (page==='overview')  renderOverview(el)
   else if (page==='visit')     renderVisit(el)
   else if (page==='admin')     renderAdmin(el)
+  else if (page==='members')   renderMembers(el)
   history.replaceState(null,'','#'+page)
 }
 
@@ -409,6 +411,16 @@ function setVTab(tab,btn){
 }
 
 // ─── Admin ───────────────────────────────────────────────────────
+function renderMembers(el){
+  if(!canDo('admin')){el.innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--text3)">🔒 เฉพาะผู้ดูแลระบบเท่านั้น</div>';return}
+  el.innerHTML=`<div class="page">
+  <div class="section-hd"><h3>👥 จัดการสมาชิก</h3></div>
+  <p style="font-size:13px;color:var(--text3);margin-bottom:16px">กำหนดสิทธิ์การเข้าถึงข้อมูลของสมาชิกแต่ละคน</p>
+  <div id="members-list"><div style="text-align:center;padding:20px;color:var(--text3)">⏳ กำลังโหลด...</div></div>
+  </div>`
+  loadMembersList()
+}
+
 async function renderAdmin(el) {
   const settings=await getSettings()
   hospitalName=settings.hospital_name||hospitalName
