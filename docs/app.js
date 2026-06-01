@@ -605,7 +605,7 @@ async function testLine(){
   try{
     const res=await fetch(LINE_FUNC_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},
       body:JSON.stringify({message:`🏥 JitHome ทดสอบแจ้งเตือน LINE\nระบบติดตามผู้ป่วยจิตเวช ${hospitalName}\nเวลา: ${new Date().toLocaleString('th-TH')}`})
     })
     const data=await res.json()
@@ -620,7 +620,7 @@ async function sendLineVisitReport(visitData){
     const{data}=await sb.from('app_settings').select('setting_value').eq('setting_key','line_enabled').single()
     if(data?.setting_value!=='1')return
     const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
-    await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({message:msg})})
+    await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:msg})})
   }catch(e){console.warn('LINE notify error:',e)}
 }
 
