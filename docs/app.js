@@ -1497,6 +1497,16 @@ async function openModal(id){
         <input type="text" id="edit-pt-nid" placeholder="X-XXXX-XXXXX-XX-X" maxlength="17" inputmode="numeric"
           oninput="this.value=formatNationalIdInput(this.value)" style="letter-spacing:1px">
       </div>`:''}
+      <div class="form-group">
+        <label>📎 แนบไฟล์ใหม่ (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
+        ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--primary);margin-bottom:6px;text-decoration:none">📄 ไฟล์ปัจจุบัน (คลิกดู) — อัปโหลดใหม่เพื่อแทนที่</a>`:''}
+        <div id="edit-pt-file-wrap" onclick="document.getElementById('edit-pt-file').click()"
+          style="border:2px dashed var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer;background:#fff">
+          <div id="edit-pt-file-label" style="font-size:12px;color:var(--text3)">📁 กดเพื่อเลือกไฟล์</div>
+          <input type="file" id="edit-pt-file" accept="image/*,.pdf,.xls,.xlsx,.csv" style="display:none"
+            onchange="const f=this.files[0];if(f){if(f.size>10*1024*1024){alert('ไฟล์ใหญ่เกิน 10 MB');this.value='';return}document.getElementById('edit-pt-file-label').textContent='✅ '+f.name+' ('+(f.size/1024).toFixed(0)+' KB)';document.getElementById('edit-pt-file-wrap').style.borderColor='var(--primary)'}">
+        </div>
+      </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" style="flex:1" id="edit-pt-save-btn" onclick="saveEditPatient(${p.id})">บันทึกการแก้ไข</button>
         <button class="btn btn-outline" onclick="closeEditPatient()">ยกเลิก</button>
@@ -1682,10 +1692,22 @@ async function saveEditPatient(id){
   const nidRaw=(document.getElementById('edit-pt-nid')?.value||'').replace(/\D/g,'')
   const btn=document.getElementById('edit-pt-save-btn')
   if(!name){alert('กรุณากรอกชื่อผู้ป่วย');return}
+  const fileInput=document.getElementById('edit-pt-file')
+  const file=fileInput?.files?.[0]||null
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const updates={name,village,note,staff_responsible,aosomo_responsible}
     if(canDo('admin'))updates.national_id=nidRaw
+    if(file){
+      btn.textContent='กำลังอัพโหลดไฟล์...'
+      const ext=file.name.split('.').pop()
+      const filename=`${Date.now()}_${name.replace(/\s+/g,'_')}.${ext}`
+      const{error:ue}=await sb.storage.from('patient-files').upload(filename,file)
+      if(ue)throw ue
+      const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
+      updates.file_url=publicUrl
+      btn.textContent='กำลังบันทึก...'
+    }
     const{error}=await sb.from('patients').update(updates).eq('id',id)
     if(error)throw error
     allPatients=await getPatients()
