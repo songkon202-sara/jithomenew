@@ -498,8 +498,14 @@ async function renderAdmin(el) {
         </div>
         <label class="toggle"><input type="checkbox" ${settings.line_enabled==='1'?'checked':''} onchange="toggleSetting('line_enabled',this.checked)"><span class="toggle-slider"></span></label>
       </div>
-      <input id="line-token-input" type="text" value="${esc(settings.line_token||'')}" placeholder="LINE Access Token" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
-      <button onclick="saveTokenSetting('line_token','line-token-input','line-save-btn')" id="line-save-btn" style="padding:6px 14px;background:#06c755;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก Token</button>
+      <input id="line-token-input" type="text" value="${esc(settings.line_token||'')}" placeholder="LINE Channel Access Token" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px">LINE Group ID</div>
+      <input id="line-groupid-input" type="text" value="${esc(settings.line_group_id||'')}" placeholder="Cxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
+      <div style="display:flex;gap:8px">
+        <button onclick="saveLineSettings()" id="line-save-btn" style="flex:1;padding:7px;background:#06c755;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก</button>
+        <button onclick="testLine()" id="line-test-btn" style="flex:1;padding:7px;background:#fff;color:#06c755;border:1.5px solid #06c755;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📨 ทดสอบส่ง</button>
+      </div>
+      <div id="line-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -574,6 +580,48 @@ async function changeMemberRole(userId,role){
 
 async function toggleSetting(key,val){
   await sb.from('app_settings').upsert({setting_key:key,setting_value:val?'1':'0'},{onConflict:'setting_key'})
+}
+
+const LINE_FUNC_URL = 'https://drwnsumijarzqezljare.supabase.co/functions/v1/line-notify'
+
+async function saveLineSettings(){
+  const token=(document.getElementById('line-token-input')?.value||'').trim()
+  const groupId=(document.getElementById('line-groupid-input')?.value||'').trim()
+  const btn=document.getElementById('line-save-btn')
+  const status=document.getElementById('line-status')
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  const errs=[]
+  if(token){const{error}=await sb.from('app_settings').upsert({setting_key:'line_token',setting_value:token},{onConflict:'setting_key'});if(error)errs.push(error.message)}
+  if(groupId){const{error}=await sb.from('app_settings').upsert({setting_key:'line_group_id',setting_value:groupId},{onConflict:'setting_key'});if(error)errs.push(error.message)}
+  btn.disabled=false;btn.textContent='💾 บันทึก'
+  if(errs.length){status.style.color='var(--red)';status.textContent='❌ '+errs.join(', ')}
+  else{status.style.color='var(--green)';status.textContent='✅ บันทึกสำเร็จ'}
+}
+
+async function testLine(){
+  const btn=document.getElementById('line-test-btn')
+  const status=document.getElementById('line-status')
+  btn.disabled=true;btn.textContent='กำลังส่ง...'
+  try{
+    const res=await fetch(LINE_FUNC_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},
+      body:JSON.stringify({message:`🏥 JitHome ทดสอบแจ้งเตือน LINE\nระบบติดตามผู้ป่วยจิตเวช ${hospitalName}\nเวลา: ${new Date().toLocaleString('th-TH')}`})
+    })
+    const data=await res.json()
+    if(!res.ok||data.error)throw new Error(data.error||'ส่งไม่สำเร็จ')
+    status.style.color='var(--green)';status.textContent='✅ ส่งสำเร็จ! ตรวจสอบกลุ่ม LINE ได้เลย'
+  }catch(e){status.style.color='var(--red)';status.textContent='❌ '+e.message}
+  btn.disabled=false;btn.textContent='📨 ทดสอบส่ง'
+}
+
+async function sendLineVisitReport(visitData){
+  try{
+    const{data}=await sb.from('app_settings').select('setting_value').eq('setting_key','line_enabled').single()
+    if(data?.setting_value!=='1')return
+    const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
+    await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY},body:JSON.stringify({message:msg})})
+  }catch(e){console.warn('LINE notify error:',e)}
 }
 
 async function saveTelegramSettings(){
@@ -1126,6 +1174,7 @@ async function saveVisitRecord(){
   try{
     const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer})
     if(error)throw error
+    sendLineVisitReport({patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,score:_visitChecks.length,refer})
     closeVisitModal()
     if(location.hash==='#visit')navigate('visit')
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
