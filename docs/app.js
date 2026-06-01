@@ -315,7 +315,8 @@ async function renderOverview(el) {
   const todayC=pts.filter(p=>parseInt(p.days_until)===0).length
   const soon=pts.filter(p=>{const d=parseInt(p.days_until);return d>0&&d<=7}).length
   const ok=pts.filter(p=>parseInt(p.days_until)>7).length
-  const trends=await getTrend()
+  const [trends, visits] = await Promise.all([getTrend(), getVisits()])
+
   // Donut
   function donut(r,y,g){
     const tot=Math.max(r+y+g,1),R=40,cx=60,cy=60,circ=2*Math.PI*R
@@ -326,7 +327,8 @@ async function renderOverview(el) {
     if(g)p+=`<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#059669" stroke-width="16" stroke-dasharray="${gd} ${circ}" stroke-dashoffset="${-(rd+yd)}"/>`
     return`<svg width="120" height="120" viewBox="0 0 120 120" style="transform:rotate(-90deg)">${p}</svg>`
   }
-  // Line chart
+
+  // Line chart (injection trends)
   let lineHtml=''
   if(trends.length>=2){
     const W=320,H=130,pL=28,pR=12,pT=12,pB=28,cW=W-pL-pR,cH=H-pT-pB
@@ -352,6 +354,69 @@ async function renderOverview(el) {
       </svg>
     </div>`
   }
+
+  // Visit bar chart (last 6 months)
+  const totalStaff=visits.filter(v=>v.visit_type==='staff').length
+  const totalAosomo=visits.filter(v=>v.visit_type==='aosomo').length
+  let visitChartHtml=''
+  if(visits.length){
+    // สร้าง map เดือน → {staff, aosomo}
+    const monthMap={}
+    visits.forEach(v=>{
+      const mk=(v.visit_date||'').slice(0,7)
+      if(!mk)return
+      if(!monthMap[mk])monthMap[mk]={staff:0,aosomo:0}
+      monthMap[mk][v.visit_type==='staff'?'staff':'aosomo']++
+    })
+    const keys=Object.keys(monthMap).sort().slice(-6)
+    const maxBar=Math.max(...keys.map(k=>monthMap[k].staff+monthMap[k].aosomo),1)
+    const W=320,H=140,pL=28,pR=8,pT=12,pB=28,cW=W-pL-pR,cH=H-pT-pB
+    const bw=Math.min(18,cW/(keys.length*2+keys.length+1))
+    const gap=bw*0.6
+    const groupW=bw*2+gap
+    const totalW=keys.length*groupW+(keys.length-1)*gap
+    const startX=pL+(cW-totalW)/2
+    const yT=[0,Math.round(maxBar/2),maxBar]
+    const bars=keys.map((mk,i)=>{
+      const{staff:s,aosomo:a}=monthMap[mk]
+      const [,m]=mk.split('-')
+      const gx=startX+i*(groupW+gap)
+      const sh=s?Math.max((s/maxBar)*cH,3):0
+      const ah=a?Math.max((a/maxBar)*cH,3):0
+      const bY=pT+cH
+      return`
+        <rect x="${gx}" y="${bY-sh}" width="${bw}" height="${sh}" rx="3" fill="#0d9488"/>
+        ${s?`<text x="${gx+bw/2}" y="${bY-sh-3}" text-anchor="middle" font-size="8" fill="#0d9488" font-weight="700">${s}</text>`:''}
+        <rect x="${gx+bw+gap}" y="${bY-ah}" width="${bw}" height="${ah}" rx="3" fill="#7c3aed"/>
+        ${a?`<text x="${gx+bw+gap+bw/2}" y="${bY-ah-3}" text-anchor="middle" font-size="8" fill="#7c3aed" font-weight="700">${a}</text>`:''}
+        <text x="${gx+bw+gap/2}" y="${H-4}" text-anchor="middle" font-size="9" fill="var(--text3)">${TH_MONTHS_S[+m]||m}</text>`
+    }).join('')
+    const yLines=yT.map(v=>{const ty=pT+cH-(v/maxBar)*cH;return`<line x1="${pL}" y1="${ty}" x2="${W-pR}" y2="${ty}" stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"/><text x="${pL-4}" y="${ty+4}" text-anchor="end" font-size="8" fill="var(--text3)">${v}</text>`}).join('')
+    visitChartHtml=`<div style="background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div style="font-weight:700;font-size:14px">การเยี่ยมบ้านรายเดือน</div>
+        <div style="display:flex;gap:12px">
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;border-radius:2px;background:#0d9488"></div>
+            <span style="font-size:11px;color:var(--text3)">เจ้าหน้าที่ <strong style="color:#0d9488">${totalStaff}</strong></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:10px;height:10px;border-radius:2px;background:#7c3aed"></div>
+            <span style="font-size:11px;color:var(--text3)">อสม. <strong style="color:#7c3aed">${totalAosomo}</strong></span>
+          </div>
+        </div>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;overflow:visible">
+        ${yLines}${bars}
+      </svg>
+    </div>`
+  } else {
+    visitChartHtml=`<div style="background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px">การเยี่ยมบ้านรายเดือน</div>
+      <div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">ยังไม่มีบันทึกการเยี่ยมบ้าน</div>
+    </div>`
+  }
+
   el.innerHTML=`<div class="page">
   <div class="page-title">ภาพรวมผู้ป่วย</div>
   <div class="page-sub">สรุปข้อมูล ${esc(hospitalName)} · ${total} ราย</div>
@@ -386,6 +451,7 @@ async function renderOverview(el) {
     </div>
   </div>
   ${lineHtml}
+  ${visitChartHtml}
   </div>`
 }
 
