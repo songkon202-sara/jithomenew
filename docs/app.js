@@ -477,6 +477,36 @@ function renderMembers(el){
 }
 
 function renderGuide(el) {
+  const villages=['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต']
+  const previewSection = canDo('admin') ? `
+  <div style="background:#fff7ed;border:2px solid #fed7aa;border-radius:14px;padding:16px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <div style="font-size:20px">🔍</div>
+      <div>
+        <div style="font-size:14px;font-weight:800;color:#c2410c">ทดลองดูหน้าเว็บในฐานะสมาชิกแต่ละประเภท</div>
+        <div style="font-size:11px;color:#9a3412;margin-top:2px">กดปุ่มเพื่อดูว่าสมาชิกแต่ละประเภทเห็นอะไร — กด <strong>"ออกจากโหมดนี้"</strong> เพื่อกลับ</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <button onclick="previewAs('staff')" style="background:#f0f9ff;border:2px solid #0a7ea4;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
+        <div style="font-size:20px;margin-bottom:4px">👨‍⚕️</div>
+        <div style="font-size:13px;font-weight:800;color:#0a7ea4">เจ้าหน้าที่</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">บันทึกฉีดยา + เยี่ยมบ้าน</div>
+      </button>
+      <button onclick="previewAs('viewer')" style="background:#f9fafb;border:2px solid #6b7280;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
+        <div style="font-size:20px;margin-bottom:4px">👁️</div>
+        <div style="font-size:13px;font-weight:800;color:#6b7280">ผู้สังเกตการณ์</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">ดูข้อมูลได้อย่างเดียว</div>
+      </button>
+    </div>
+    <div style="background:#f5f3ff;border-radius:10px;padding:10px">
+      <div style="font-size:12px;font-weight:700;color:#7c3aed;margin-bottom:8px">🏡 อสม. — เลือกหมู่บ้านที่ต้องการดู:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${villages.map(v=>`<button onclick="previewAs('aosomo','${v}')" style="background:#fff;border:1.5px solid #c4b5fd;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;color:#7c3aed;cursor:pointer;font-family:'Sarabun',sans-serif">${v}</button>`).join('')}
+      </div>
+    </div>
+  </div>` : ''
+
   const roles = [
     {
       key:'admin', label:'ผู้ดูแลระบบ', color:'#dc2626', bg:'#fef2f2', border:'#fca5a5', icon:'👑',
@@ -545,6 +575,7 @@ function renderGuide(el) {
 
   el.innerHTML = `
   <div style="max-width:700px;margin:0 auto;padding:8px 0">
+    ${previewSection}
     <div style="text-align:center;margin-bottom:20px">
       <div style="font-size:28px;margin-bottom:6px">📖</div>
       <div style="font-size:15px;font-weight:700;color:var(--text1)">สิทธิ์การใช้งานแต่ละประเภทสมาชิก</div>
