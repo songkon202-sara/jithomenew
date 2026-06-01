@@ -1311,7 +1311,7 @@ async function openModal(id){
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')} · ${esc(hospitalName)}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
-        ${canDo('record')?`<button onclick="toggleEditPatient(${p.id},'${esc(p.name)}','${esc(p.village||'')}','${esc(p.note||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
+        ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${esc(p.name)}','${esc(p.village||'')}','${esc(p.note||'')}','${esc(p.staff_responsible||'')}','${esc(p.aosomo_responsible||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
         <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>
@@ -1319,10 +1319,12 @@ async function openModal(id){
       <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#166534">✏️ แก้ไขข้อมูลผู้ป่วย</div>
       <div class="form-group"><label>ชื่อ-นามสกุล</label><input type="text" id="edit-pt-name" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+      <div class="form-group"><label>👨‍⚕️ เจ้าหน้าที่รับผิดชอบ</label><select id="edit-pt-staff" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
+      <div class="form-group"><label>🏡 อสม. รับผิดชอบ</label><select id="edit-pt-aosomo" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" style="flex:1" id="edit-pt-save-btn" onclick="saveEditPatient(${p.id})">บันทึกการแก้ไข</button>
-        <button class="btn btn-outline" onclick="toggleEditPatient()">ยกเลิก</button>
+        <button class="btn btn-outline" onclick="closeEditPatient()">ยกเลิก</button>
       </div>
       ${canDo('admin')?`<button onclick="deletePatient(${p.id},'${esc(p.name)}')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🗑️ ลบผู้ป่วยรายนี้ออกจากระบบ</button>`:''}
     </div>
@@ -1335,6 +1337,11 @@ async function openModal(id){
       <div style="font-size:16px;font-weight:700;color:var(--primary)">${thDateFull(correctedNextDate)}</div>
       <div style="font-size:12px;color:var(--text3);margin-top:2px">รอบการฉีดยา: ${esc(futureRecs.length>0?futureRecs[0].interval_str:p.interval_str||'')}</div>
     </div>
+    ${(p.staff_responsible||p.aosomo_responsible)?`
+    <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap">
+      ${p.staff_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">👨‍⚕️ เจ้าหน้าที่:</span> <strong>${esc(p.staff_responsible)}</strong></div>`:''}
+      ${p.aosomo_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">🏡 อสม.:</span> <strong>${esc(p.aosomo_responsible)}</strong></div>`:''}
+    </div>`:''}
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
     ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -1393,12 +1400,15 @@ async function deleteRecord(id,patientId){
   await openModal(patientId)
 }
 
-function toggleEditPatient(id,name,village,note){
+function toggleEditPatient(){}
+function closeEditPatient(){
+  const w=document.getElementById('edit-patient-wrap')
+  if(w)w.style.display='none'
+}
+async function openEditPatient(id,name,village,note,staffResp,aosomoResp){
   const w=document.getElementById('edit-patient-wrap')
   if(!w)return
-  if(!id){w.style.display='none';return}
-  const showing=w.style.display!=='none'
-  if(showing){w.style.display='none';return}
+  if(w.style.display!=='none'){w.style.display='none';return}
   w.style.display='block'
   const nEl=document.getElementById('edit-pt-name')
   const vEl=document.getElementById('edit-pt-village')
@@ -1406,6 +1416,27 @@ function toggleEditPatient(id,name,village,note){
   if(nEl)nEl.value=name||''
   if(ntEl)ntEl.value=note||''
   if(vEl)for(const o of vEl.options)if(o.value===village||o.text===village){o.selected=true;break}
+  // โหลด dropdown เจ้าหน้าที่
+  const staffSel=document.getElementById('edit-pt-staff')
+  if(staffSel){
+    const{data:staffList}=await sb.from('user_profiles').select('display_name').in('role',['admin','staff']).order('display_name')
+    staffSel.innerHTML='<option value="">— ไม่ระบุ —</option>'+
+      (staffList||[]).map(s=>`<option${s.display_name===staffResp?' selected':''}>${esc(s.display_name||'')}</option>`).join('')
+    if(staffResp&&!(staffList||[]).find(s=>s.display_name===staffResp))
+      staffSel.innerHTML+=`<option selected>${esc(staffResp)}</option>`
+  }
+  // โหลด dropdown อสม.
+  const aosomoSel=document.getElementById('edit-pt-aosomo')
+  if(aosomoSel){
+    const{data:aosomoList}=await sb.from('aosomo_directory').select('name,village').order('village').order('name')
+    aosomoSel.innerHTML='<option value="">— ไม่ระบุ —</option>'+
+      (aosomoList||[]).map(a=>{
+        const label=`${a.name}${a.village?' ('+a.village+')':''}`
+        return`<option value="${esc(a.name)}"${a.name===aosomoResp?' selected':''}>${esc(label)}</option>`
+      }).join('')
+    if(aosomoResp&&!(aosomoList||[]).find(a=>a.name===aosomoResp))
+      aosomoSel.innerHTML+=`<option value="${esc(aosomoResp)}" selected>${esc(aosomoResp)}</option>`
+  }
 }
 async function deletePatient(id,name){
   if(!confirm(`ลบผู้ป่วย "${name}" ออกจากระบบ?\n\nประวัติการฉีดยาทั้งหมดจะถูกลบด้วย\nไม่สามารถกู้คืนได้!`))return
@@ -1421,11 +1452,13 @@ async function saveEditPatient(id){
   const name=(document.getElementById('edit-pt-name')?.value||'').trim()
   const village=document.getElementById('edit-pt-village')?.value||''
   const note=(document.getElementById('edit-pt-note')?.value||'').trim()
+  const staff_responsible=document.getElementById('edit-pt-staff')?.value||''
+  const aosomo_responsible=document.getElementById('edit-pt-aosomo')?.value||''
   const btn=document.getElementById('edit-pt-save-btn')
   if(!name){alert('กรุณากรอกชื่อผู้ป่วย');return}
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const{error}=await sb.from('patients').update({name,village,note}).eq('id',id)
+    const{error}=await sb.from('patients').update({name,village,note,staff_responsible,aosomo_responsible}).eq('id',id)
     if(error)throw error
     allPatients=await getPatients()
     await openModal(id)
