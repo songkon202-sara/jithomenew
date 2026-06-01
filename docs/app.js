@@ -97,6 +97,21 @@ function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
 function todayISO() { return new Date().toISOString().slice(0,10) }
+function maskNationalId(id){
+  const d=(id||'').replace(/\D/g,'')
+  if(!d)return''
+  const fmt=n=>`${n.slice(0,1)}-${n.slice(1,5)}-${n.slice(5,10)}-${n.slice(10,12)}-${n.slice(12,13)}`
+  if(canDo('admin'))return fmt(d.padEnd(13,'?'))
+  return'X-XXXX-XXXXX-XX-X'
+}
+function formatNationalIdInput(v){
+  const d=v.replace(/\D/g,'').slice(0,13)
+  if(d.length<=1)return d
+  if(d.length<=5)return`${d.slice(0,1)}-${d.slice(1)}`
+  if(d.length<=10)return`${d.slice(0,1)}-${d.slice(1,5)}-${d.slice(5)}`
+  if(d.length<=12)return`${d.slice(0,1)}-${d.slice(1,5)}-${d.slice(5,10)}-${d.slice(10)}`
+  return`${d.slice(0,1)}-${d.slice(1,5)}-${d.slice(5,10)}-${d.slice(10,12)}-${d.slice(12,13)}`
+}
 
 function patientCard(p) {
   const chip = daysChip(p.days_until)
@@ -1466,7 +1481,7 @@ async function openModal(id){
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')} · ${esc(hospitalName)}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
-        ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${esc(p.name)}','${esc(p.village||'')}','${esc(p.note||'')}','${esc(p.staff_responsible||'')}','${esc(p.aosomo_responsible||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
+        ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${esc(p.name)}','${esc(p.village||'')}','${esc(p.note||'')}','${esc(p.staff_responsible||'')}','${esc(p.aosomo_responsible||'')}','${esc(p.national_id||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
         <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>
@@ -1477,6 +1492,11 @@ async function openModal(id){
       <div class="form-group"><label>👨‍⚕️ เจ้าหน้าที่รับผิดชอบ</label><select id="edit-pt-staff" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>🏡 อสม. รับผิดชอบ <span id="edit-pt-aosomo-village" style="font-size:11px;color:#7c3aed;font-weight:400"></span></label><select id="edit-pt-aosomo" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
+      ${canDo('admin')?`<div class="form-group">
+        <label>🪪 เลขบัตรประชาชน <span style="font-size:11px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-weight:700">admin เท่านั้น</span></label>
+        <input type="text" id="edit-pt-nid" placeholder="X-XXXX-XXXXX-XX-X" maxlength="17" inputmode="numeric"
+          oninput="this.value=formatNationalIdInput(this.value)" style="letter-spacing:1px">
+      </div>`:''}
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" style="flex:1" id="edit-pt-save-btn" onclick="saveEditPatient(${p.id})">บันทึกการแก้ไข</button>
         <button class="btn btn-outline" onclick="closeEditPatient()">ยกเลิก</button>
@@ -1496,6 +1516,13 @@ async function openModal(id){
     <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap">
       ${p.staff_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">👨‍⚕️ เจ้าหน้าที่:</span> <strong>${esc(p.staff_responsible)}</strong></div>`:''}
       ${p.aosomo_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">🏡 อสม.:</span> <strong>${esc(p.aosomo_responsible)}</strong></div>`:''}
+    </div>`:''}
+    ${p.national_id?`<div style="background:${canDo('admin')?'#fefce8':'#f9fafb'};border:1px solid ${canDo('admin')?'#fde68a':'var(--border)'};border-radius:8px;padding:8px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px">🪪</span>
+      <div>
+        <div style="font-size:10px;color:var(--text3);font-weight:600">เลขบัตรประชาชน ${canDo('admin')?'':' <span style="background:#e5e7eb;color:#6b7280;padding:0 5px;border-radius:4px;font-size:10px">PDPA</span>'}</div>
+        <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${canDo('admin')?'#92400e':'var(--text3)'}">${maskNationalId(p.national_id)}</div>
+      </div>
     </div>`:''}
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
     ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
@@ -1560,7 +1587,7 @@ function closeEditPatient(){
   const w=document.getElementById('edit-patient-wrap')
   if(w)w.style.display='none'
 }
-async function openEditPatient(id,name,village,note,staffResp,aosomoResp){
+async function openEditPatient(id,name,village,note,staffResp,aosomoResp,nationalId){
   const w=document.getElementById('edit-patient-wrap')
   if(!w)return
   if(w.style.display!=='none'){w.style.display='none';return}
@@ -1568,8 +1595,10 @@ async function openEditPatient(id,name,village,note,staffResp,aosomoResp){
   const nEl=document.getElementById('edit-pt-name')
   const vEl=document.getElementById('edit-pt-village')
   const ntEl=document.getElementById('edit-pt-note')
+  const nidEl=document.getElementById('edit-pt-nid')
   if(nEl)nEl.value=name||''
   if(ntEl)ntEl.value=note||''
+  if(nidEl)nidEl.value=formatNationalIdInput(nationalId||'')
   // ตั้งค่า dropdown หมู่บ้าน
   if(vEl){
     let matched=false
@@ -1650,11 +1679,14 @@ async function saveEditPatient(id){
   const note=(document.getElementById('edit-pt-note')?.value||'').trim()
   const staff_responsible=document.getElementById('edit-pt-staff')?.value||''
   const aosomo_responsible=document.getElementById('edit-pt-aosomo')?.value||''
+  const nidRaw=(document.getElementById('edit-pt-nid')?.value||'').replace(/\D/g,'')
   const btn=document.getElementById('edit-pt-save-btn')
   if(!name){alert('กรุณากรอกชื่อผู้ป่วย');return}
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const{error}=await sb.from('patients').update({name,village,note,staff_responsible,aosomo_responsible}).eq('id',id)
+    const updates={name,village,note,staff_responsible,aosomo_responsible}
+    if(canDo('admin'))updates.national_id=nidRaw
+    const{error}=await sb.from('patients').update(updates).eq('id',id)
     if(error)throw error
     allPatients=await getPatients()
     await openModal(id)
@@ -2107,6 +2139,12 @@ function openAddPatient(){
   <div class="form-group"><label>รอบนัดต่อไป</label><select id="np-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
   <div class="form-group"><label>หมายเหตุ</label><input type="text" id="np-note" placeholder="บันทึกเพิ่มเติม..."></div>
   <div class="form-group">
+    <label>🪪 เลขบัตรประชาชน <span style="font-size:11px;color:var(--text3);font-weight:400">(13 หลัก — แสดงเฉพาะ admin)</span></label>
+    <input type="text" id="np-nid" placeholder="X-XXXX-XXXXX-XX-X" maxlength="17" inputmode="numeric"
+      oninput="this.value=formatNationalIdInput(this.value)"
+      style="letter-spacing:1px">
+  </div>
+  <div class="form-group">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
       <label style="margin-bottom:0">📎 แนบไฟล์ (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
       <button onclick="downloadTemplate('patient')" style="background:none;border:1px solid var(--primary);color:var(--primary);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">⬇️ ไฟล์ตัวอย่าง</button>
@@ -2145,6 +2183,7 @@ async function saveNewPatient(){
   const date=document.getElementById('np-date')?.value
   const interval=document.getElementById('np-interval')?.value||'1 เดือน'
   const note=(document.getElementById('np-note')?.value||'').trim()
+  const national_id=(document.getElementById('np-nid')?.value||'').replace(/\D/g,'')
   const fileInput=document.getElementById('np-file')
   const file=fileInput?.files?.[0]||null
   const btn=document.getElementById('np-btn')
@@ -2164,7 +2203,7 @@ async function saveNewPatient(){
       file_url=publicUrl
     }
     btn.textContent='กำลังบันทึก...'
-    const{error:pe}=await sb.from('patients').insert({name,village,file_url})
+    const{error:pe}=await sb.from('patients').insert({name,village,national_id,file_url})
     if(pe)throw pe
     if(date){
       const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
