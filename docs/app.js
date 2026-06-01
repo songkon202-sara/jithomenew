@@ -491,16 +491,21 @@ function renderGuide(el) {
         <div style="font-size:11px;color:#9a3412;margin-top:2px">กดปุ่มเพื่อดูว่าสมาชิกแต่ละประเภทเห็นอะไร — กด <strong>"ออกจากโหมดนี้"</strong> เพื่อกลับ</div>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
       <button onclick="previewAs('staff')" style="background:#f0f9ff;border:2px solid #0a7ea4;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
         <div style="font-size:20px;margin-bottom:4px">👨‍⚕️</div>
         <div style="font-size:13px;font-weight:800;color:#0a7ea4">เจ้าหน้าที่</div>
         <div style="font-size:11px;color:var(--text3);margin-top:2px">บันทึกฉีดยา + เยี่ยมบ้าน</div>
       </button>
+      <button onclick="previewAs('aosomo',villages[0])" style="background:#f5f3ff;border:2px solid #7c3aed;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
+        <div style="font-size:20px;margin-bottom:4px">🏡</div>
+        <div style="font-size:13px;font-weight:800;color:#7c3aed">อสม.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">เยี่ยมบ้าน + หมู่บ้าน</div>
+      </button>
       <button onclick="previewAs('viewer')" style="background:#f9fafb;border:2px solid #6b7280;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
         <div style="font-size:20px;margin-bottom:4px">👁️</div>
         <div style="font-size:13px;font-weight:800;color:#6b7280">ผู้สังเกตการณ์</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">ดูข้อมูลได้อย่างเดียว</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">ภาพรวมอย่างเดียว</div>
       </button>
     </div>
     <div style="background:#f5f3ff;border-radius:10px;padding:10px">
@@ -545,16 +550,17 @@ function renderGuide(el) {
       key:'aosomo', label:'อสม.', color:'#7c3aed', bg:'#f5f3ff', border:'#c4b5fd', icon:'🏡',
       desc:'ดูและบันทึกเฉพาะผู้ป่วยในหมู่บ้านที่รับผิดชอบ',
       menus:[
-        {icon:'🏠',name:'หน้าหลัก',desc:'ดูเฉพาะผู้ป่วยในหมู่บ้านตัวเอง'},
-        {icon:'👥',name:'ผู้ป่วย',desc:'ดูรายชื่อ — เฉพาะหมู่บ้านที่กำหนด'},
+        {icon:'🏠',name:'หน้าหลัก',desc:'เห็นเฉพาะผู้ป่วยในหมู่บ้านตัวเอง ไม่เห็นหมู่บ้านอื่น'},
+        {icon:'👥',name:'ผู้ป่วย',desc:'ดูรายชื่อและประวัติฉีดยา — กรองเฉพาะหมู่บ้านที่กำหนด'},
         {icon:'📅',name:'ตารางนัด',desc:'ดูนัดหมายของหมู่บ้านตัวเอง'},
-        {icon:'🏡',name:'เยี่ยมบ้าน',desc:'บันทึกการเยี่ยมบ้าน (5 ธงแดง)'},
+        {icon:'🏡',name:'เยี่ยมบ้าน',desc:'บันทึกการเยี่ยมบ้าน ประเมิน 5 ธงแดง รายงาน LINE'},
       ],
       locked:[
-        {icon:'📊',name:'ภาพรวม',desc:'ไม่มีสิทธิ์ดูสถิติรวม'},
+        {icon:'📊',name:'ภาพรวม',desc:'ไม่เห็นสถิติรวมทุกหมู่บ้าน'},
         {icon:'⚙️',name:'แอดมิน',desc:'ไม่มีสิทธิ์ตั้งค่าระบบ'},
         {icon:'👤',name:'จัดการสมาชิก',desc:'ไม่มีสิทธิ์จัดการสมาชิก'},
-        {icon:'✏️',name:'แก้ไข/บันทึกฉีดยา',desc:'ดูได้อย่างเดียว ไม่บันทึกฉีดยา'},
+        {icon:'💉',name:'บันทึกฉีดยา',desc:'ดูประวัติได้ แต่ไม่สามารถบันทึกหรือแก้ไขฉีดยา'},
+        {icon:'➕',name:'เพิ่มผู้ป่วย',desc:'ไม่มีสิทธิ์เพิ่มหรือลบผู้ป่วย'},
       ]
     },
     {
@@ -698,16 +704,21 @@ async function renderAdmin(el) {
   <div class="form-section">
     <h3>👁️ ดูตัวอย่างการแสดงผลตามสิทธิ์</h3>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px">เลือกประเภทสมาชิกเพื่อดูว่าเขาจะเห็นหน้าเว็บแบบไหน — กดปุ่ม <strong>ออกจากโหมดนี้</strong> เพื่อกลับสิทธิ์แอดมิน</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <button onclick="previewAs('staff')" style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
         <div style="font-size:18px;margin-bottom:4px">👨‍⚕️</div>
         <div style="font-size:13px;font-weight:700;color:#0a7ea4">เจ้าหน้าที่</div>
         <div style="font-size:11px;color:var(--text3);margin-top:2px">บันทึกฉีดยา เยี่ยมบ้าน</div>
       </button>
+      <button onclick="previewAs('aosomo',villages[0])" style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
+        <div style="font-size:18px;margin-bottom:4px">🏡</div>
+        <div style="font-size:13px;font-weight:700;color:#7c3aed">อสม.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">เยี่ยมบ้าน + หมู่บ้าน</div>
+      </button>
       <button onclick="previewAs('viewer')" style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
         <div style="font-size:18px;margin-bottom:4px">👁️</div>
         <div style="font-size:13px;font-weight:700;color:#6b7280">ผู้สังเกตการณ์</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">ดูได้อย่างเดียว</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">ภาพรวมอย่างเดียว</div>
       </button>
     </div>
     <div style="margin-top:8px">
