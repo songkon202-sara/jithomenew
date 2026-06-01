@@ -984,7 +984,10 @@ async function openModal(id){
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
           <div class="history-date">${esc(h.date_th)}${i===0?` <span style="font-size:10px;background:var(--primary-lt);color:var(--primary);padding:1px 6px;border-radius:4px;font-weight:700">ล่าสุด</span>`:''}</div>
-          ${canDo('record')?`<button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${esc(h.interval_str||'')}','${esc(h.note||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif">✏️</button>`:''}
+          ${canDo('record')?`<div style="display:flex;gap:2px">
+            <button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${esc(h.interval_str||'')}','${esc(h.note||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="แก้ไข">✏️</button>
+            <button onclick="deleteRecord(${h.id},${p.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="ลบรายการนี้">🗑️</button>
+          </div>`:''}
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(h.group_label||'')} · ${esc(h.interval_str||'')}</div>
         ${h.note?`<div class="history-note">${esc(h.note)}</div>`:''}
@@ -1081,6 +1084,13 @@ async function saveEditRecord(id,patientId){
     if(error)throw error
     await openModal(patientId)
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
+}
+
+async function deleteRecord(id,patientId){
+  if(!confirm('ลบรายการฉีดยานี้ออกจากประวัติ?\nการดำเนินการนี้ไม่สามารถย้อนกลับได้'))return
+  const{error}=await sb.from('injection_records').delete().eq('id',id)
+  if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
+  await openModal(patientId)
 }
 
 function toggleEditPatient(id,name,village,note){
