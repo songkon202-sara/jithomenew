@@ -8,7 +8,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 // ─── Constants ───────────────────────────────────────────────────
 const TH_MONTHS_S = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
 const TH_MONTHS_F = ['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
-const PAGES = ['dashboard','patients','timeline','overview','visit','admin','members']
+const PAGES = ['dashboard','patients','timeline','overview','visit','admin','members','guide']
 
 const STAFF_CHECKLIST = [
   ['s1','ประเมินอาการทางจิตเวช (สังเกต พูดคุย)'],
@@ -171,6 +171,7 @@ async function navigate(page) {
     visit:    ['เยี่ยมบ้าน','บันทึกการเยี่ยม'],
     admin:    ['แอดมิน','จัดการและตั้งค่า'],
     members:  ['จัดการสมาชิก','กำหนดสิทธิ์การเข้าถึง'],
+    guide:    ['คู่มือการใช้งาน','ตัวอย่างสิทธิ์แต่ละประเภท'],
   }
   const [t,s] = titles[page]
   document.getElementById('header-title').textContent = t
@@ -185,6 +186,7 @@ async function navigate(page) {
   else if (page==='visit')     renderVisit(el)
   else if (page==='admin')     renderAdmin(el)
   else if (page==='members')   renderMembers(el)
+  else if (page==='guide')     renderGuide(el)
   history.replaceState(null,'','#'+page)
 }
 
@@ -470,6 +472,120 @@ function renderMembers(el){
   </div>
   </div>`
   loadMembersList()
+}
+
+function renderGuide(el) {
+  const roles = [
+    {
+      key:'admin', label:'ผู้ดูแลระบบ', color:'#dc2626', bg:'#fef2f2', border:'#fca5a5', icon:'👑',
+      desc:'ควบคุมและจัดการทุกอย่างในระบบ',
+      menus:[
+        {icon:'🏠',name:'หน้าหลัก',desc:'ดูภาพรวมผู้ป่วยทั้งหมด สถิติ และการแจ้งเตือน'},
+        {icon:'👥',name:'ผู้ป่วย',desc:'เพิ่ม แก้ไข ลบผู้ป่วย บันทึกการฉีดยา แก้ไขประวัติ'},
+        {icon:'📅',name:'ตารางนัด',desc:'ดูนัดหมายทุกรายการ กรองตามวัน'},
+        {icon:'📊',name:'ภาพรวม',desc:'กราฟแนวโน้ม สถิติกลุ่มสี'},
+        {icon:'🏡',name:'เยี่ยมบ้าน',desc:'บันทึกและดูประวัติเยี่ยมบ้านทุกหมู่บ้าน'},
+        {icon:'⚙️',name:'แอดมิน',desc:'ตั้งค่า LINE, ดูแลระบบ, export ข้อมูล'},
+        {icon:'👤',name:'จัดการสมาชิก',desc:'เพิ่ม/ลบ กำหนดสิทธิ์และหมู่บ้านของสมาชิก'},
+        {icon:'📖',name:'คู่มือ',desc:'ดูตัวอย่างสิทธิ์การใช้งาน'},
+      ]
+    },
+    {
+      key:'staff', label:'เจ้าหน้าที่', color:'#0a7ea4', bg:'#f0f9ff', border:'#bae6fd', icon:'👨‍⚕️',
+      desc:'บันทึกข้อมูลและดูแลผู้ป่วยทุกรายการ',
+      menus:[
+        {icon:'🏠',name:'หน้าหลัก',desc:'ดูภาพรวมผู้ป่วยทั้งหมด สถิติ'},
+        {icon:'👥',name:'ผู้ป่วย',desc:'เพิ่ม แก้ไขข้อมูลผู้ป่วย บันทึกการฉีดยา'},
+        {icon:'📅',name:'ตารางนัด',desc:'ดูนัดหมายทุกรายการ'},
+        {icon:'📊',name:'ภาพรวม',desc:'ดูกราฟสถิติ'},
+        {icon:'🏡',name:'เยี่ยมบ้าน',desc:'บันทึกและดูประวัติเยี่ยมบ้าน'},
+      ],
+      locked:[
+        {icon:'⚙️',name:'แอดมิน',desc:'ไม่มีสิทธิ์ตั้งค่าระบบ'},
+        {icon:'👤',name:'จัดการสมาชิก',desc:'ไม่มีสิทธิ์จัดการสมาชิก'},
+      ]
+    },
+    {
+      key:'aosomo', label:'อสม.', color:'#7c3aed', bg:'#f5f3ff', border:'#c4b5fd', icon:'🏡',
+      desc:'ดูและบันทึกเฉพาะผู้ป่วยในหมู่บ้านที่รับผิดชอบ',
+      menus:[
+        {icon:'🏠',name:'หน้าหลัก',desc:'ดูเฉพาะผู้ป่วยในหมู่บ้านตัวเอง'},
+        {icon:'👥',name:'ผู้ป่วย',desc:'ดูรายชื่อ — เฉพาะหมู่บ้านที่กำหนด'},
+        {icon:'📅',name:'ตารางนัด',desc:'ดูนัดหมายของหมู่บ้านตัวเอง'},
+        {icon:'🏡',name:'เยี่ยมบ้าน',desc:'บันทึกการเยี่ยมบ้าน (5 ธงแดง)'},
+      ],
+      locked:[
+        {icon:'📊',name:'ภาพรวม',desc:'ไม่มีสิทธิ์ดูสถิติรวม'},
+        {icon:'⚙️',name:'แอดมิน',desc:'ไม่มีสิทธิ์ตั้งค่าระบบ'},
+        {icon:'👤',name:'จัดการสมาชิก',desc:'ไม่มีสิทธิ์จัดการสมาชิก'},
+        {icon:'✏️',name:'แก้ไข/บันทึกฉีดยา',desc:'ดูได้อย่างเดียว ไม่บันทึกฉีดยา'},
+      ]
+    },
+    {
+      key:'viewer', label:'ผู้สังเกตการณ์', color:'#6b7280', bg:'#f9fafb', border:'#e5e7eb', icon:'👁️',
+      desc:'ดูข้อมูลได้อย่างเดียว ไม่สามารถแก้ไขหรือบันทึก',
+      menus:[
+        {icon:'🏠',name:'หน้าหลัก',desc:'ดูภาพรวมผู้ป่วย'},
+        {icon:'👥',name:'ผู้ป่วย',desc:'ดูรายชื่อและประวัติ — ดูอย่างเดียว'},
+        {icon:'📅',name:'ตารางนัด',desc:'ดูตารางนัดหมาย'},
+        {icon:'📊',name:'ภาพรวม',desc:'ดูกราฟสถิติ'},
+      ],
+      locked:[
+        {icon:'✏️',name:'บันทึกฉีดยา',desc:'ไม่มีสิทธิ์บันทึกหรือแก้ไข'},
+        {icon:'🏡',name:'เยี่ยมบ้าน',desc:'ไม่มีสิทธิ์บันทึกการเยี่ยม'},
+        {icon:'⚙️',name:'แอดมิน',desc:'ไม่มีสิทธิ์ตั้งค่าระบบ'},
+        {icon:'👤',name:'จัดการสมาชิก',desc:'ไม่มีสิทธิ์จัดการสมาชิก'},
+      ]
+    }
+  ]
+
+  const roleColors = {admin:'#dc2626',staff:'#0a7ea4',aosomo:'#7c3aed',viewer:'#6b7280'}
+
+  el.innerHTML = `
+  <div style="max-width:700px;margin:0 auto;padding:8px 0">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:28px;margin-bottom:6px">📖</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text1)">สิทธิ์การใช้งานแต่ละประเภทสมาชิก</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">ตัวอย่างเมนูและฟังก์ชันที่สมาชิกแต่ละประเภทเข้าถึงได้</div>
+    </div>
+    ${roles.map(r=>`
+    <div style="background:${r.bg};border:1.5px solid ${r.border};border-radius:14px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:40px;height:40px;background:${r.color};border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${r.icon}</div>
+        <div>
+          <div style="font-size:15px;font-weight:800;color:${r.color}">${r.label}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:1px">${r.desc}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;letter-spacing:.5px">✅ เข้าถึงได้</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:${r.locked?'10px':'0'}">
+        ${r.menus.map(m=>`
+        <div style="background:#fff;border-radius:8px;padding:7px 10px;display:flex;align-items:flex-start;gap:7px">
+          <div style="font-size:15px;line-height:1.2;flex-shrink:0">${m.icon}</div>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--text1)">${m.name}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px;line-height:1.3">${m.desc}</div>
+          </div>
+        </div>`).join('')}
+      </div>
+      ${r.locked?`
+      <div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:6px;letter-spacing:.5px">🔒 ไม่มีสิทธิ์</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+        ${r.locked.map(m=>`
+        <div style="background:rgba(0,0,0,.04);border-radius:8px;padding:7px 10px;display:flex;align-items:flex-start;gap:7px;opacity:.7">
+          <div style="font-size:15px;line-height:1.2;flex-shrink:0">${m.icon}</div>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#9ca3af;text-decoration:line-through">${m.name}</div>
+            <div style="font-size:10px;color:#9ca3af;margin-top:1px;line-height:1.3">${m.desc}</div>
+          </div>
+        </div>`).join('')}
+      </div>`:''
+      }
+    </div>`).join('')}
+    <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-top:4px;font-size:11px;color:var(--text3);line-height:1.7">
+      <strong style="color:var(--text2)">หมายเหตุ:</strong> แอดมินสามารถเปลี่ยนประเภทสมาชิกและกำหนดหมู่บ้านได้ที่เมนู <strong>จัดการสมาชิก</strong>
+    </div>
+  </div>`
 }
 
 async function renderAdmin(el) {
