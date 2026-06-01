@@ -1400,12 +1400,12 @@ function openAddPatient(){
   <div class="form-group"><label>รอบนัดต่อไป</label><select id="np-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
   <div class="form-group"><label>หมายเหตุ</label><input type="text" id="np-note" placeholder="บันทึกเพิ่มเติม..."></div>
   <div class="form-group">
-    <label>📎 แนบไฟล์ (ภาพ / PDF ไม่เกิน 10 MB)</label>
+    <label>📎 แนบไฟล์ (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
     <div id="np-file-wrap" onclick="document.getElementById('np-file').click()"
       style="border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;background:var(--bg);transition:.2s">
       <div style="font-size:24px;margin-bottom:4px">📁</div>
       <div id="np-file-label" style="font-size:12px;color:var(--text3)">กดเพื่อเลือกไฟล์</div>
-      <input type="file" id="np-file" accept="image/*,.pdf" style="display:none" onchange="previewFile(this)">
+      <input type="file" id="np-file" accept="image/*,.pdf,.xls,.xlsx,.csv" style="display:none" onchange="previewFile(this)">
     </div>
   </div>
   <div style="display:flex;gap:10px;margin-top:4px">
