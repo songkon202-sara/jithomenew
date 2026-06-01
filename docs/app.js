@@ -582,7 +582,7 @@ async function toggleSetting(key,val){
   await sb.from('app_settings').upsert({setting_key:key,setting_value:val?'1':'0'},{onConflict:'setting_key'})
 }
 
-const LINE_FUNC_URL = 'https://drwnsumijarzqezljare.supabase.co/functions/v1/line-notify'
+const LINE_FUNC_URL = 'https://drwnsumijarzqezljare.supabase.co/functions/v1/smooth-endpoint'
 
 async function saveLineSettings(){
   const token=(document.getElementById('line-token-input')?.value||'').trim()
