@@ -2195,11 +2195,29 @@ async function loadAndNav(){
 }
 
 async function init(){
-  const hash=window.location.hash
-  if(hash.includes('type=recovery')){
+  // ดัก PASSWORD_RECOVERY event จาก Supabase (รองรับทั้ง implicit และ PKCE flow)
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if(event === 'PASSWORD_RECOVERY'){
+      showAuthWall('reset')
+    } else if(event === 'SIGNED_IN' && session && !currentUser){
+      currentUser = session.user
+      await loadProfile(session.user)
+      await updateLastLogin(session.user.id)
+      updateUserUI()
+      await loadAndNav()
+    }
+  })
+
+  // ตรวจ URL ทั้ง hash และ query string (รองรับ Supabase PKCE + implicit)
+  const url = window.location.href
+  const hash = window.location.hash
+  if(url.includes('type=recovery') || hash.includes('type=recovery')){
+    // รอ Supabase แลก token ก่อน
+    await new Promise(r => setTimeout(r, 300))
     const{data:{session}}=await sb.auth.getSession()
     if(session){showAuthWall('reset');return}
   }
+
   const{data:{user}}=await sb.auth.getUser()
   if(!user){showAuthWall('login');return}
   currentUser=user
