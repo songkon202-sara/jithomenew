@@ -907,6 +907,7 @@ async function openModal(id){
       <div style="font-size:12px;color:var(--text3);margin-top:2px">รอบการฉีดยา: ${esc(p.interval_str||'')}</div>
     </div>
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
+    ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <div style="font-size:13px;font-weight:700">ประวัติการฉีดยา (${hist.length} ครั้ง)</div>
       <button onclick="toggleRecordForm()" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">+ บันทึก</button>
@@ -1398,6 +1399,15 @@ function openAddPatient(){
   <div class="form-group"><label>วันที่ฉีดยาล่าสุด (ถ้ามี)</label><input type="date" id="np-date" value="${todayISO()}"></div>
   <div class="form-group"><label>รอบนัดต่อไป</label><select id="np-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
   <div class="form-group"><label>หมายเหตุ</label><input type="text" id="np-note" placeholder="บันทึกเพิ่มเติม..."></div>
+  <div class="form-group">
+    <label>📎 แนบไฟล์ (ภาพ / PDF ไม่เกิน 10 MB)</label>
+    <div id="np-file-wrap" onclick="document.getElementById('np-file').click()"
+      style="border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;background:var(--bg);transition:.2s">
+      <div style="font-size:24px;margin-bottom:4px">📁</div>
+      <div id="np-file-label" style="font-size:12px;color:var(--text3)">กดเพื่อเลือกไฟล์</div>
+      <input type="file" id="np-file" accept="image/*,.pdf" style="display:none" onchange="previewFile(this)">
+    </div>
+  </div>
   <div style="display:flex;gap:10px;margin-top:4px">
     <button class="btn btn-primary" style="flex:1" id="np-btn" onclick="saveNewPatient()">บันทึกผู้ป่วย</button>
     <button class="btn btn-outline" onclick="closeAddPatient()">ยกเลิก</button>
@@ -1408,6 +1418,16 @@ function openAddPatient(){
 
 function closeAddPatient(){document.getElementById('addpt-overlay').style.display='none'}
 
+function previewFile(input){
+  const file=input.files[0]
+  const label=document.getElementById('np-file-label')
+  const wrap=document.getElementById('np-file-wrap')
+  if(!file){label.textContent='กดเพื่อเลือกไฟล์';return}
+  if(file.size>10*1024*1024){alert('ไฟล์ใหญ่เกิน 10 MB');input.value='';return}
+  label.textContent=`✅ ${file.name} (${(file.size/1024).toFixed(0)} KB)`
+  wrap.style.borderColor='var(--primary)'
+}
+
 async function saveNewPatient(){
   const name=(document.getElementById('np-name')?.value||'').trim()
   const village=document.getElementById('np-village')?.value||'หมู่ 1'
@@ -1415,12 +1435,26 @@ async function saveNewPatient(){
   const date=document.getElementById('np-date')?.value
   const interval=document.getElementById('np-interval')?.value||'1 เดือน'
   const note=(document.getElementById('np-note')?.value||'').trim()
+  const fileInput=document.getElementById('np-file')
+  const file=fileInput?.files?.[0]||null
   const btn=document.getElementById('np-btn')
   if(!name){alert('กรุณากรอกชื่อ-นามสกุล');document.getElementById('np-name')?.focus();return}
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const{error:pe}=await sb.from('patients').insert({name,village})
+    // อัพโหลดไฟล์ก่อน (ถ้ามี)
+    let file_url=''
+    if(file){
+      btn.textContent='กำลังอัพโหลดไฟล์...'
+      const ext=file.name.split('.').pop()
+      const filename=`${Date.now()}_${name.replace(/\s+/g,'_')}.${ext}`
+      const{error:ue}=await sb.storage.from('patient-files').upload(filename,file)
+      if(ue)throw ue
+      const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
+      file_url=publicUrl
+    }
+    btn.textContent='กำลังบันทึก...'
+    const{error:pe}=await sb.from('patients').insert({name,village,file_url})
     if(pe)throw pe
     if(date){
       const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
