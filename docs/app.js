@@ -1416,6 +1416,8 @@ async function openEditPatient(id,name,village,note,staffResp,aosomoResp){
   if(nEl)nEl.value=name||''
   if(ntEl)ntEl.value=note||''
   if(vEl)for(const o of vEl.options)if(o.value===village||o.text===village){o.selected=true;break}
+  // อ่าน village จาก dropdown ที่ set แล้ว (รับประกันค่าถูกต้อง)
+  const actualVillage=vEl?vEl.options[vEl.selectedIndex]?.text||village:village
   // โหลด dropdown เจ้าหน้าที่
   const staffSel=document.getElementById('edit-pt-staff')
   if(staffSel){
@@ -1426,25 +1428,28 @@ async function openEditPatient(id,name,village,note,staffResp,aosomoResp){
       staffSel.innerHTML+=`<option selected>${esc(staffResp)}</option>`
   }
   // โหลด dropdown อสม. — กรองตามหมู่บ้านของผู้ป่วย
-  await refreshAosomoByVillage(village, aosomoResp)
+  await refreshAosomoByVillage(actualVillage, aosomoResp)
 }
 
 async function refreshAosomoByVillage(village, currentVal){
   const aosomoSel=document.getElementById('edit-pt-aosomo')
   if(!aosomoSel)return
   if(currentVal===undefined) currentVal=aosomoSel.value
+  // ถ้า village ว่าง ให้อ่านจาก dropdown หมู่บ้านโดยตรง
+  if(!village){
+    const vEl=document.getElementById('edit-pt-village')
+    if(vEl) village=vEl.options[vEl.selectedIndex]?.text||vEl.value||''
+  }
   const{data:allAosomo}=await sb.from('aosomo_directory').select('name,village').order('name')
-  // normalize village สำหรับเปรียบเทียบ เช่น "หมู่ 5" = "หมู่5" = "5"
-  const norm=v=>(v||'').replace(/\s/g,'').replace('หมู่','').trim()
-  const filtered=village
-    ?(allAosomo||[]).filter(a=>norm(a.village)===norm(village))
-    :(allAosomo||[])
+  const filtered=(allAosomo||[]).filter(a=>(a.village||'')===(village||''))
   aosomoSel.innerHTML='<option value="">— ไม่ระบุ —</option>'+
     filtered.map(a=>`<option value="${esc(a.name)}"${a.name===currentVal?' selected':''}>${esc(a.name)}</option>`).join('')
   if(currentVal&&!filtered.find(a=>a.name===currentVal)){
     const fromOther=(allAosomo||[]).find(a=>a.name===currentVal)
     if(fromOther)
       aosomoSel.innerHTML+=`<option value="${esc(fromOther.name)}" selected>${esc(fromOther.name)} ⚠️ (${esc(fromOther.village||'ต่างหมู่')})</option>`
+    else
+      aosomoSel.innerHTML+=`<option value="${esc(currentVal)}" selected>${esc(currentVal)}</option>`
   }
 }
 async function deletePatient(id,name){
