@@ -1,0 +1,56 @@
+name: LINE Daily Notification
+
+on:
+  schedule:
+    - cron: '0 1 * * *'   # 08:00 น. เวลาไทย (UTC+7 = 01:00 UTC)
+  workflow_dispatch:        # รันมือได้จาก GitHub Actions
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check upcoming appointments and send LINE
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          LINE_FUNCTION_URL: ${{ secrets.LINE_FUNCTION_URL }}
+        run: |
+          python3 - <<'EOF'
+          import urllib.request, urllib.error, json, os
+          from datetime import date
+
+          url  = os.environ['SUPABASE_URL']
+          key  = os.environ['SUPABASE_KEY']
+          func = os.environ['LINE_FUNCTION_URL']
+
+          # ดึงผู้ป่วยที่นัดใน 1-7 วัน
+          req = urllib.request.Request(
+            f"{url}/rest/v1/patient_status?days_until=gte.1&days_until=lte.7&select=name,village,next_date,days_until,group_label",
+            headers={'apikey': key, 'Authorization': f'Bearer {key}', 'Accept': 'application/json'}
+          )
+          with urllib.request.urlopen(req) as r:
+            patients = json.loads(r.read())
+
+          if not patients:
+            print("ไม่มีผู้ป่วยที่นัดในสัปดาห์นี้")
+            exit(0)
+
+          today = date.today().strftime('%d/%m/%Y')
+          lines = [f"📅 JitHome — แจ้งเตือนนัดฉีดยา ({today})\n"]
+          for p in patients:
+            days = p['days_until']
+            name = p['name']
+            village = p.get('village','')
+            next_d = p.get('next_date','')
+            group = p.get('group_label','')
+            lines.append(f"{'⚠️' if days<=3 else '🔔'} {name} ({village})\n   นัด: {next_d} — อีก {days} วัน [{group}]")
+
+          message = "\n".join(lines)
+          print("ข้อความที่จะส่ง:\n", message)
+
+          body = json.dumps({'message': message}).encode()
+          req2 = urllib.request.Request(func, data=body,
+            headers={'Content-Type': 'application/json'}, method='POST')
+          with urllib.request.urlopen(req2) as r:
+            print("ส่งสำเร็จ:", r.read())
+          EOF
