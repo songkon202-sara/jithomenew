@@ -39,6 +39,7 @@ let _redFlags    = []                   // 5 Red Flags
 let currentUser        = null
 let currentRole        = 'viewer'  // admin | staff | aosomo | viewer
 let currentDisplayName = ''
+let currentVillage     = ''        // หมู่บ้านที่ อสม. รับผิดชอบ
 
 const ROLE_LABEL = {admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',aosomo:'อสม.',viewer:'ผู้สังเกตการณ์'}
 const ROLE_COLOR = {admin:'var(--primary)',staff:'#0d9488',aosomo:'#7c3aed',viewer:'var(--text3)'}
@@ -121,7 +122,9 @@ function patientCard(p) {
 
 // ─── Data ────────────────────────────────────────────────────────
 async function getPatients() {
-  const { data, error } = await sb.from('patient_status').select('*').order('days_until')
+  let q = sb.from('patient_status').select('*').order('days_until')
+  if (currentRole === 'aosomo' && currentVillage) q = q.eq('village', currentVillage)
+  const { data, error } = await q
   if (error) { console.error(error); return [] }
   return (data||[]).map(p => ({ ...p, group_label: groupLabel(p.group_color) }))
 }
@@ -561,19 +564,33 @@ async function loadMembersList(){
           <div style="font-size:11px;color:var(--text3)">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${ROLE_COLOR[p.role]}22;color:${ROLE_COLOR[p.role]};font-weight:700">${ROLE_LABEL[p.role]||p.role}</span>
-        ${p.id===currentUser?.id?`<span style="font-size:10px;color:var(--text3)">(คุณ)</span>`:
-        `<select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
+        ${p.id===currentUser?.id?`<span style="font-size:10px;color:var(--text3)">(คุณ)</span>`:`
+        <select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
           ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
         </select>`}
       </div>
+      ${p.role==='aosomo'&&p.id!==currentUser?.id?`
+      <div style="margin-top:8px;display:flex;align-items:center;gap:6px;padding-top:8px;border-top:1px solid var(--border)">
+        <span style="font-size:11px;color:var(--text3);white-space:nowrap">🏡 หมู่บ้านรับผิดชอบ:</span>
+        <select onchange="changeMemberVillage('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif;flex:1">
+          <option value="">— ยังไม่กำหนด —</option>
+          ${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option value="${v}"${p.village===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>`:''}
     </div>
   </div>`).join('')
 }
 
 async function changeMemberRole(userId,role){
   const{error}=await sb.from('user_profiles').update({role}).eq('id',userId)
+  if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
+  await loadMembersList()
+}
+
+async function changeMemberVillage(userId,village){
+  const{error}=await sb.from('user_profiles').update({village}).eq('id',userId)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
   await loadMembersList()
 }
@@ -1295,14 +1312,19 @@ async function logoutUser(){
 // ─── Profile / Role ──────────────────────────────────────────────
 async function loadProfile(user){
   const{data}=await sb.from('user_profiles').select('*').eq('id',user.id).single()
-  if(data){currentRole=data.role;currentDisplayName=data.display_name||user.email.split('@')[0];return data}
+  if(data){
+    currentRole=data.role
+    currentDisplayName=data.display_name||user.email.split('@')[0]
+    currentVillage=data.village||''
+    return data
+  }
   // ถ้ายังไม่มี profile → สร้างใหม่ (คนแรกเป็น admin)
   const{count}=await sb.from('user_profiles').select('*',{count:'exact',head:true})
   const role=count===0?'admin':'viewer'
   const dn=user.email.split('@')[0]
-  const profile={id:user.id,email:user.email,display_name:dn,role,last_login:new Date().toISOString()}
+  const profile={id:user.id,email:user.email,display_name:dn,role,village:'',last_login:new Date().toISOString()}
   await sb.from('user_profiles').insert(profile)
-  currentRole=role;currentDisplayName=dn
+  currentRole=role;currentDisplayName=dn;currentVillage=''
   return profile
 }
 
