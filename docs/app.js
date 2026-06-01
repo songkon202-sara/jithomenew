@@ -126,7 +126,18 @@ async function getPatients() {
   if (currentRole === 'aosomo' && currentVillage) q = q.eq('village', currentVillage)
   const { data, error } = await q
   if (error) { console.error(error); return [] }
-  return (data||[]).map(p => ({ ...p, group_label: groupLabel(p.group_color) }))
+  const today = todayISO()
+  return (data||[]).map(p => {
+    const corrected = { ...p, group_label: groupLabel(p.group_color) }
+    // ถ้า last_date อยู่ในอนาคต = วันนัดล่วงหน้า ให้ใช้วันนั้นโดยตรง
+    if (corrected.last_date && corrected.last_date > today) {
+      corrected.next_date = corrected.last_date
+      corrected.days_until = Math.round(
+        (new Date(corrected.last_date+'T00:00:00') - new Date(today+'T00:00:00')) / 86400000
+      )
+    }
+    return corrected
+  })
 }
 async function getSettings() {
   const { data } = await sb.from('app_settings').select('setting_key,setting_value')
