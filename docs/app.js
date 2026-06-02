@@ -2348,6 +2348,14 @@ function openVisitForm(type){
     ${cl.map(([id,lbl])=>`<div class="check-item" onclick="toggleCheck('${id}')"><div class="check-box" id="cb-${id}"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><span class="check-label">${esc(lbl)}</span></div>`).join('')}
   </div>
   ${type==='staff'?`
+  <div style="background:#fff5f5;border-radius:10px;padding:10px 14px;margin-bottom:14px;border:1.5px solid #fecaca">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700;color:#b91c1c">⚠️ ปัญหาที่พบ (ถ้ามี)</div>
+      <span id="prob-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#fef2f2;color:#b91c1c;display:none">พบ <span id="prob-count">0</span> รายการ</span>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">กดเลือกปัญหาที่พบในการเยี่ยม — จะส่งต่อโดยอัตโนมัติถ้าพบปัญหา</div>
+    ${AOSOMO_PROBLEMS.map(([id,lbl])=>`<div class="check-item" onclick="toggleProblem('${id}')" style="border-color:#fecaca"><div class="check-box" id="pb-${id}" style="border-color:#fca5a5;background:#fff"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><span class="check-label" style="color:#9f1239">${esc(lbl)}</span></div>`).join('')}
+  </div>
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div style="font-size:13px;font-weight:700">📊 แบบประเมิน OAS</div>
