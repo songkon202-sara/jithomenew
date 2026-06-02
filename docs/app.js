@@ -1054,7 +1054,7 @@ async function renderAdmin(el) {
   <div class="form-section">
     <h3>🔗 เชื่อมต่อข้อมูล</h3>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">นำเข้า/ส่งออก และเชื่อมข้อมูลกับระบบภายนอก</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <button onclick="exportCSV()" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:10px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif">
         <div style="display:flex;align-items:center;gap:6px"><span style="font-size:18px">📥</span><span style="font-size:13px;font-weight:700;color:#059669">ส่งออกข้อมูล</span></div>
         <div style="font-size:10px;color:var(--text3)">CSV / JSON</div>
@@ -1064,6 +1064,13 @@ async function renderAdmin(el) {
         <div style="font-size:10px;color:var(--text3)">ข้อมูลแบบ JSON</div>
       </button>
     </div>
+    <button onclick="exportVisitExcel()" style="display:flex;align-items:center;gap:8px;width:100%;padding:12px 14px;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;cursor:pointer;text-align:left;font-family:'Sarabun',sans-serif;margin-bottom:14px">
+      <span style="font-size:18px">📋</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#b45309">Export รายงานเยี่ยมบ้าน (Excel)</div>
+        <div style="font-size:10px;color:var(--text3)">สำหรับกรอกข้อมูลใน JHCIS / HOSxP</div>
+      </div>
+    </button>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:8px">
@@ -1878,6 +1885,40 @@ function exportCSV(){
 }
 function exportJSON(){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(allPatients,null,2)],{type:'application/json'}));a.download='jithome.json';a.click()
+}
+
+async function exportVisitExcel(){
+  try{
+    const{data:visits}=await sb.from('home_visits')
+      .select('*')
+      .order('visit_date',{ascending:false})
+    if(!visits||!visits.length){alert('ไม่พบข้อมูลการเยี่ยมบ้าน');return}
+    const patMap=Object.fromEntries(allPatients.map(p=>[p.id,p]))
+    const typeLabel={staff:'เจ้าหน้าที่',aosomo:'อสม.'}
+    const hdr=['วันที่เยี่ยม','ประเภท','ชื่อ-สกุล','หมู่บ้าน','บ้านเลขที่','เลขบัตรประชาชน','รหัสโรค','ชื่อโรค','ผู้เยี่ยม','คะแนน','ส่งต่อ','หมายเหตุ']
+    const rows=visits.map(v=>{
+      const p=patMap[v.patient_id]||{}
+      return[
+        v.visit_date||'',
+        typeLabel[v.visit_type]||v.visit_type||'',
+        v.patient_name||'',
+        v.village||'',
+        p.house_no||'',
+        p.national_id||'',
+        p.disease_code||'',
+        p.disease_name||'',
+        v.visitor||'',
+        v.score||0,
+        v.refer?'ส่งต่อ':'ปกติ',
+        (v.note||'').split('\n')[0]
+      ]
+    })
+    const ws=XLSX.utils.aoa_to_sheet([hdr,...rows])
+    ws['!cols']=[{wch:12},{wch:10},{wch:20},{wch:10},{wch:10},{wch:16},{wch:8},{wch:20},{wch:16},{wch:6},{wch:8},{wch:30}]
+    const wb=XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb,ws,'รายงานเยี่ยมบ้าน')
+    XLSX.writeFile(wb,`visit_report_${todayISO()}.xlsx`)
+  }catch(e){alert('❌ '+e.message)}
 }
 
 function downloadTemplate(type){
