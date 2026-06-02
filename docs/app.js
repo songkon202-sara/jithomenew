@@ -570,7 +570,7 @@ function renderVisitList(visits){
     const cl=v.visit_type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
     const pct=cl.length?v.score/cl.length:0
     const[bg,clr,lbl]=pct>=0.8?['var(--green-lt)','var(--green)','ปกติดี']:pct>=0.5?['var(--yellow-lt)','var(--yellow)','พอใช้']:['var(--red-lt)','var(--red)','ต้องติดตาม']
-    const canEdit=canDo('admin')||(v.visit_type==='aosomo'&&currentRole==='aosomo'&&v.visitor===currentDisplayName)||(v.visit_type==='staff'&&canDo('record'))
+    const canEdit=canDo('admin')||(v.visit_type==='aosomo'&&currentRole==='aosomo')||(v.visit_type==='staff'&&canDo('record'))
     return`<div class="visit-card ${v.visit_type}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700">${esc(v.patient_name)}</div><div style="font-size:12px;color:var(--text3)">${esc(v.village||'')} · ${v.visit_date_th||v.visit_date}</div></div>
