@@ -587,31 +587,56 @@ function renderVisitList(visits){
 async function openEditVisit(id){
   const{data:v}=await sb.from('home_visits').select('*').eq('id',id).single()
   if(!v)return
-  const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
-  if(!ov||!ct)return
-  ct.innerHTML=`
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-    <div><div style="font-size:17px;font-weight:700">✏️ แก้ไขบันทึกเยี่ยมบ้าน</div>
-    <div style="font-size:12px;color:var(--text3);margin-top:2px">${esc(v.patient_name)} · ${v.visit_date||''}</div></div>
-    <button onclick="closeVisitModal()" style="background:none;border:none;cursor:pointer;color:var(--text3)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-  </div>
-  <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="ev-note" rows="4" style="resize:none;font-family:'Sarabun',sans-serif">${esc(v.note||'')}</textarea></div>
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:8px;margin-bottom:16px">
-    <div><div style="font-size:13px;font-weight:700;color:var(--red)">ต้องการส่งต่อ / รายงานเร่งด่วน</div></div>
-    <label class="toggle"><input type="checkbox" id="ev-refer" ${v.refer?'checked':''}><span class="toggle-slider"></span></label>
-  </div>
-  <div style="display:flex;gap:10px">
-    <button class="btn btn-primary" style="flex:1" id="ev-save-btn" onclick="saveEditVisit(${id})">บันทึก</button>
-    <button class="btn btn-outline" onclick="closeVisitModal()">ยกเลิก</button>
-  </div>`
-  ov.style.display='flex'
+  // restore state
+  _visitType=v.visit_type||'aosomo'
+  _visitChecks=[]
+  _visitProblems=[]
+  _redFlags=[]
+  _ytAssess={ya:null,yati:null,sara:null}
+  _assess10={}
+  _oasScores={s1:0,s2:0,s3:0}
+  try{const saved=JSON.parse(v.checks_json||'[]');_visitChecks=Array.isArray(saved)?saved:[]}catch(e){}
+  // เปิดฟอร์มเต็มเหมือนตอนเยี่ยม
+  openVisitForm(_visitType)
+  // หลัง render เสร็จ restore ค่า
+  setTimeout(()=>{
+    // restore ชื่อ หมู่บ้าน วันที่ ผู้เยี่ยม
+    const nEl=document.getElementById('v-name');if(nEl)nEl.value=v.patient_name||''
+    const vEl=document.getElementById('v-village');if(vEl)for(const o of vEl.options)if(o.value===v.village){o.selected=true;break}
+    const dEl=document.getElementById('v-date');if(dEl)dEl.value=v.visit_date||''
+    const visEl=document.getElementById('v-visitor');if(visEl)visEl.value=v.visitor||''
+    // restore รายการตรวจสอบ
+    _visitChecks.forEach(id=>{
+      const cb=document.getElementById('cb-'+id);if(cb)cb.classList.add('checked')
+    })
+    updateScore()
+    // restore refer
+    const rEl=document.getElementById('v-refer');if(rEl)rEl.checked=!!v.refer
+    // restore note (เฉพาะบรรทัดแรก ไม่รวม auto-text)
+    const noteLines=(v.note||'').split('\n')
+    const cleanNote=noteLines.filter(l=>!l.startsWith('[')&&!l.startsWith('●')&&l.trim()).join('\n')
+    const ntEl=document.getElementById('v-note');if(ntEl)ntEl.value=cleanNote
+    // เปลี่ยนปุ่มบันทึกเป็น saveEditVisit
+    const saveBtn=document.getElementById('v-save-btn')
+    if(saveBtn){saveBtn.textContent='💾 บันทึกการแก้ไข';saveBtn.onclick=()=>saveEditVisit(id)}
+  },80)
 }
 async function saveEditVisit(id){
-  const note=document.getElementById('ev-note')?.value?.trim()||''
-  const refer=document.getElementById('ev-refer')?.checked||false
-  const btn=document.getElementById('ev-save-btn')
+  const name=document.getElementById('v-name')?.value?.trim()||''
+  const village=document.getElementById('v-village')?.value||''
+  const date=document.getElementById('v-date')?.value||''
+  const visitor=document.getElementById('v-visitor')?.value?.trim()||''
+  const refer=document.getElementById('v-refer')?.checked||false
+  const noteRaw=document.getElementById('v-note')?.value?.trim()||''
+  const RF_LABELS={rf1:'ไม่หลับไม่นอน',rf2:'เดินไปเดินมา',rf3:'พูดจาคนเดียว',rf4:'หงุดหงิดฉุนเฉียว',rf5:'หวาดระแวง'}
+  const rfText=_redFlags.length>0?`\n[5 Red Flags] พบ: ${_redFlags.map(i=>RF_LABELS[i]).join(', ')}`:''
+  const ytText=_visitType==='aosomo'?getYTText():''
+  const a10Text=_visitType==='staff'?getAssess10Text():''
+  const probText=_visitProblems.length>0?`\n[ปัญหาที่พบ] ${_visitProblems.map(i=>AOSOMO_PROBLEMS.find(([pid])=>pid===i)?.[1]||i).join(' | ')}`:''
+  const note=(noteRaw+rfText+ytText+a10Text+probText).trim()
+  const btn=document.getElementById('v-save-btn')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
-  const{error}=await sb.from('home_visits').update({note,refer}).eq('id',id)
+  const{error}=await sb.from('home_visits').update({patient_name:name,village,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note,refer}).eq('id',id)
   if(error){btn.textContent='❌ '+error.message;btn.disabled=false;return}
   closeVisitModal()
   if(location.hash==='#visit')navigate('visit')
