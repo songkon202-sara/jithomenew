@@ -2475,9 +2475,25 @@ function openAddPatient(){
   const ct=document.getElementById('addpt-content')
   if(!ov||!ct)return
   ct.innerHTML=`
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
     <div style="font-size:17px;font-weight:700">➕ เพิ่มผู้ป่วยใหม่</div>
     <button onclick="closeAddPatient()" style="background:none;border:none;cursor:pointer;color:var(--text3)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  <div style="background:#f0f9ff;border:1.5px dashed #38bdf8;border-radius:10px;padding:12px 14px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#0369a1">📥 นำเข้าหลายรายชื่อจากไฟล์</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">Excel / CSV — นำเข้าได้ครั้งละหลายร้อยราย</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button onclick="downloadTemplate('patient')" style="padding:6px 10px;background:#fff;color:#0369a1;border:1px solid #38bdf8;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">⬇️ ตัวอย่าง</button>
+      <button onclick="document.getElementById('addpt-import-input').click()" style="padding:6px 10px;background:#0369a1;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📂 เลือกไฟล์</button>
+    </div>
+    <input type="file" id="addpt-import-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importPatientFile(this);closeAddPatient()">
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <div style="font-size:11px;color:var(--text3);white-space:nowrap">— หรือเพิ่มทีละราย —</div>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
   </div>
   <div class="form-group"><label>ชื่อ-นามสกุล *</label><input type="text" id="np-name" placeholder="เช่น นายสมชาย ใจดี"></div>
   <div class="form-group"><label>หมู่บ้าน</label><select id="np-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
@@ -2508,18 +2524,6 @@ function openAddPatient(){
     </select></div>
   </div>
   <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="np-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
-  <div class="form-group">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <label style="margin-bottom:0">📎 แนบไฟล์ (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
-      <button onclick="downloadTemplate('patient')" style="background:none;border:1px solid var(--primary);color:var(--primary);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">⬇️ ไฟล์ตัวอย่าง</button>
-    </div>
-    <div id="np-file-wrap" onclick="document.getElementById('np-file').click()"
-      style="border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;background:var(--bg);transition:.2s">
-      <div style="font-size:24px;margin-bottom:4px">📁</div>
-      <div id="np-file-label" style="font-size:12px;color:var(--text3)">กดเพื่อเลือกไฟล์</div>
-      <input type="file" id="np-file" accept="image/*,.pdf,.xls,.xlsx,.csv" style="display:none" onchange="previewFile(this)">
-    </div>
-  </div>
   <div style="display:flex;gap:10px;margin-top:4px">
     <button class="btn btn-primary" style="flex:1" id="np-btn" onclick="saveNewPatient()">บันทึกผู้ป่วย</button>
     <button class="btn btn-outline" onclick="closeAddPatient()">ยกเลิก</button>
@@ -2551,26 +2555,12 @@ async function saveNewPatient(){
   const visit_interval=parseInt(document.getElementById('np-visit-interval')?.value)||null
   const inject_interval=parseInt(document.getElementById('np-inject-interval')?.value)||null
   const medication_name=(document.getElementById('np-medication')?.value||'').trim()||null
-  const fileInput=document.getElementById('np-file')
-  const file=fileInput?.files?.[0]||null
   const btn=document.getElementById('np-btn')
   if(!name){alert('กรุณากรอกชื่อ-นามสกุล');document.getElementById('np-name')?.focus();return}
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    // อัพโหลดไฟล์ก่อน (ถ้ามี)
-    let file_url=''
-    if(file){
-      btn.textContent='กำลังอัพโหลดไฟล์...'
-      const ext=file.name.split('.').pop()
-      const filename=`${Date.now()}_${name.replace(/\s+/g,'_')}.${ext}`
-      const{error:ue}=await sb.storage.from('patient-files').upload(filename,file)
-      if(ue)throw ue
-      const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
-      file_url=publicUrl
-    }
-    btn.textContent='กำลังบันทึก...'
-    const{error:pe}=await sb.from('patients').insert({name,village,national_id,file_url,visit_interval,inject_interval,medication_name})
+    const{error:pe}=await sb.from('patients').insert({name,village,national_id,visit_interval,inject_interval,medication_name})
     if(pe)throw pe
     if(date){
       const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
