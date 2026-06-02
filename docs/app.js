@@ -1579,13 +1579,32 @@ async function sendReferralToHospital(visitData){
     const tgToken=s.refer_telegram_token||''
     const tgChatId=s.refer_telegram_chatid||''
     if(!lineGroupId&&(!tgToken||!tgChatId))return
-    const oasMax=Math.max(visitData.oasScores?.s1||0,visitData.oasScores?.s2||0,visitData.oasScores?.s3||0)
-    const oasLine=oasMax>0?`\n📊 OAS ระดับ ${oasMax} — ต่อตนเอง:${visitData.oasScores.s1} ต่อผู้อื่น:${visitData.oasScores.s2} ต่อทรัพย์สิน:${visitData.oasScores.s3}`:''
-    const a10Line=visitData.assess10Total?`\n📋 แบบ10ด้าน: ${visitData.assess10Total}/30 — ${visitData.assess10Level}`+
-      (visitData.assess10Detail?` (${visitData.assess10Detail})`:''):''
-    const rfLine=visitData.redFlags?.length?`\n🚩 Red Flags: ${visitData.redFlags.join(', ')}`:''
-    const noteLine=visitData.note?`\n📝 บันทึก: ${visitData.note.split('\n')[0]}`:''
-    const msg=`🏥 ใบส่งต่อ รพ. แม่ข่าย\n━━━━━━━━━━━━━━━\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}  🏥 เจ้าหน้าที่: ${visitData.visitor||'-'}\n✅ รายการผ่าน: ${visitData.score} ข้อ${oasLine}${a10Line}${rfLine}${noteLine}\n━━━━━━━━━━━━━━━\n⚠️ ต้องการส่งต่อ/รายงานเร่งด่วน — ${hospitalName}`
+    const d=visitData
+    const colorIcon={'red':'🔴','yellow':'🟡','green':'🟢'}[d.group_color]||'⚪'
+    const oasMax=Math.max(d.oasScores?.s1||0,d.oasScores?.s2||0,d.oasScores?.s3||0)
+    const oasSection=oasMax>0?`\n━━━━━━━━━━━━━━━\n📊 OAS พฤติกรรมก้าวร้าว (ระดับสูงสุด: ${oasMax})\n• ต่อตนเอง: ${d.oasScores.s1} — ${(d.oasLabels?.s1||[])[d.oasScores.s1]||''}\n• ต่อผู้อื่น: ${d.oasScores.s2} — ${(d.oasLabels?.s2||[])[d.oasScores.s2]||''}\n• ต่อทรัพย์สิน: ${d.oasScores.s3} — ${(d.oasLabels?.s3||[])[d.oasScores.s3]||''}`:''
+    const checkSection=d.checkFull?.length?`\n━━━━━━━━━━━━━━━\n📝 รายการตรวจสอบ (${d.score}/${d.checkFull.length})\n${d.checkFull.join('\n')}`:''
+    const a10Section=d.assess10Full?.length?`\n━━━━━━━━━━━━━━━\n📋 แบบติดตาม 10 ด้าน (${d.assess10Total}/30 — ${d.assess10Level})\n${d.assess10Full.map((l,i)=>`${i+1}. ${l}`).join('\n')}`:''
+    const rfSection=d.redFlags?.length?`\n━━━━━━━━━━━━━━━\n🚩 Red Flags (${d.redFlags.length} รายการ)\n${d.redFlags.map(r=>`• ${r}`).join('\n')}`:''
+    const noteSection=d.note?`\n━━━━━━━━━━━━━━━\n📄 บันทึกเพิ่มเติม\n${d.note.split('\n').slice(0,3).join('\n')}`:''
+    const msg=[
+      `🏥 ใบส่งต่อ รพ. แม่ข่าย`,
+      `━━━━━━━━━━━━━━━`,
+      `👤 ${d.patient_name}`,
+      d.national_id?`🆔 บัตรประชาชน: ${d.national_id}`:'',
+      `🏠 ${d.house_no?d.house_no+' ':''} ${d.village}`,
+      d.disease_code||d.disease_name?`🦠 โรค: ${[d.disease_code,d.disease_name].filter(Boolean).join(' — ')}`:'',
+      d.group_label?`${colorIcon} กลุ่ม: ${d.group_label}`:'',
+      d.medication_name?`💊 ยา: ${d.medication_name}`:'',
+      d.next_date?`📅 นัดครั้งถัดไป: ${thDate(d.next_date)}`:'',
+      `━━━━━━━━━━━━━━━`,
+      `📅 วันที่เยี่ยม: ${d.visit_date}`,
+      `👩‍⚕️ เจ้าหน้าที่: ${d.visitor||'-'}`,
+      checkSection, oasSection, a10Section, rfSection, noteSection,
+      `━━━━━━━━━━━━━━━`,
+      `⚠️ ต้องการส่งต่อ/รายงานเร่งด่วน`,
+      `🏥 ${hospitalName}`,
+    ].filter(Boolean).join('\n')
     if(lineGroupId){
       const body={message:msg,groupId:lineGroupId}
       if(lineToken)body.token=lineToken
@@ -2600,8 +2619,29 @@ async function saveVisitRecord(){
       const RF_LABELS2={rf1:'ไม่หลับไม่นอน',rf2:'เดินไปเดินมา',rf3:'พูดจาคนเดียว',rf4:'หงุดหงิดฉุนเฉียว',rf5:'หวาดระแวง'}
       const a10Total=Object.keys(_assess10).length?Object.values(_assess10).reduce((a,b)=>a+b,0):0
       const a10Level=a10Total?a10Total<=14?'ผ่านเกณฑ์ดี':a10Total<=19?'ต้องติดตาม':'ต้องการความช่วยเหลือเร่งด่วน':''
-      const a10Detail=ASSESS10_DOMAINS.map(({id,opts})=>{const s=_assess10[id];if(!s)return null;const o=opts.find(x=>x[0]===s);return`${id}=${s}(${o?o[1]:'?'})`}).filter(Boolean).join(' ')
-      sendReferralToHospital({patient_name:name,village,visit_date:date,visitor,score:_visitChecks.length,oasScores:{..._oasScores},redFlags:_redFlags.map(id=>RF_LABELS2[id]),assess10Total:a10Total||null,assess10Level:a10Level,assess10Detail:a10Detail,note})
+      const a10Full=ASSESS10_DOMAINS.map(({id,title,opts})=>{
+        const s=_assess10[id];if(!s)return null
+        const o=opts.find(x=>x[0]===s)
+        return`${title.replace(/^\d+\. /,'')}: ${s} (${o?o[1]:'?'})`
+      }).filter(Boolean)
+      const oasLabels={
+        s1:['ไม่พบ','ขีดข่วน/ตีตนเอง','ทำร้ายรุนแรง มีรอยซ้ำ','ทำร้ายรุนแรงมาก'],
+        s2:['ไม่พบ','ตะโกน ด่าทอ','คุกคาม/ผลัก/ตี','ทำร้ายจนบาดเจ็บ'],
+        s3:['ไม่พบ','ปิดประตูดัง รื้อของ','ขว้าง/เตะ/ทุบ','ทุบกระจก/จุดไฟ']
+      }
+      const checkFull=STAFF_CHECKLIST.map(([id,lbl])=>(_visitChecks.includes(id)?'✅':'❌')+' '+lbl)
+      sendReferralToHospital({
+        patient_name:name, village, visit_date:date, visitor,
+        house_no:found?.house_no||'', national_id:found?.national_id||'',
+        disease_code:found?.disease_code||'', disease_name:found?.disease_name||'',
+        group_color:found?.group_color||'', group_label:found?.group_label||'',
+        medication_name:found?.medication_name||'', next_date:found?.next_date||'',
+        score:_visitChecks.length, checkFull,
+        oasScores:{..._oasScores}, oasLabels,
+        redFlags:_redFlags.map(id=>RF_LABELS2[id]),
+        assess10Total:a10Total||null, assess10Level:a10Level, assess10Full:a10Full,
+        note
+      })
     }
     closeVisitModal()
     if(location.hash==='#visit')navigate('visit')
