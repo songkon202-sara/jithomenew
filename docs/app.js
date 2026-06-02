@@ -1591,7 +1591,6 @@ async function sendReferralToHospital(visitData){
       `🏥 ใบส่งต่อ รพ. แม่ข่าย`,
       `━━━━━━━━━━━━━━━`,
       `👤 ${d.patient_name}`,
-      d.national_id?`🆔 บัตรประชาชน: ${d.national_id}`:'',
       `🏠 ${d.house_no?d.house_no+' ':''} ${d.village}`,
       d.disease_code||d.disease_name?`🦠 โรค: ${[d.disease_code,d.disease_name].filter(Boolean).join(' — ')}`:'',
       d.group_label?`${colorIcon} กลุ่ม: ${d.group_label}`:'',
@@ -2032,13 +2031,23 @@ async function openModal(id){
       ${p.staff_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">👨‍⚕️ เจ้าหน้าที่:</span> <strong>${esc(p.staff_responsible)}</strong></div>`:''}
       ${p.aosomo_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">🏡 อสม.:</span> <strong>${esc(p.aosomo_responsible)}</strong></div>`:''}
     </div>`:''}
-    ${p.national_id?`<div style="background:${canDo('admin')?'#fefce8':'#f9fafb'};border:1px solid ${canDo('admin')?'#fde68a':'var(--border)'};border-radius:8px;padding:8px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
-      <span style="font-size:14px">🪪</span>
-      <div>
-        <div style="font-size:10px;color:var(--text3);font-weight:600">เลขบัตรประชาชน ${canDo('admin')?'':' <span style="background:#e5e7eb;color:#6b7280;padding:0 5px;border-radius:4px;font-size:10px">PDPA</span>'}</div>
-        <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${canDo('admin')?'#92400e':'var(--text3)'}">${maskNationalId(p.national_id)}</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      ${p.national_id?`<div style="flex:1;min-width:0;background:${canDo('admin')?'#fefce8':'#f9fafb'};border:1px solid ${canDo('admin')?'#fde68a':'var(--border)'};border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:14px">🪪</span>
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600">เลขบัตรประชาชน${canDo('admin')?'':' <span style="background:#e5e7eb;color:#6b7280;padding:0 5px;border-radius:4px;font-size:9px">PDPA</span>'}</div>
+          <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${canDo('admin')?'#92400e':'var(--text3)'}">${maskNationalId(p.national_id)}</div>
+        </div>
+      </div>`:''}
+      <div style="background:${p.consent_given?'#f0fdf4':'#fef2f2'};border:1px solid ${p.consent_given?'#86efac':'#fca5a5'};border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px">${p.consent_given?'✅':'⚠️'}</span>
+        <div>
+          <div style="font-size:10px;color:var(--text3);font-weight:600">ความยินยอม PDPA</div>
+          <div style="font-size:12px;font-weight:700;color:${p.consent_given?'#15803d':'#b91c1c'}">${p.consent_given?`ยินยอมแล้ว${p.consent_date?' · '+thDate(p.consent_date):'`:'ยังไม่ได้รับความยินยอม'}</div>
+        </div>
+        ${canDo('record')&&!p.consent_given?`<button onclick="giveConsent(${p.id})" style="margin-left:4px;padding:4px 8px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;flex-shrink:0">รับยินยอม</button>`:''}
       </div>
-    </div>`:''}
+    </div>
     ${(p.visit_interval||p.inject_interval||p.medication_name)?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:10px">
       ${p.visit_interval?`<div style="font-size:12px"><span style="color:var(--text3)">🏡 เยี่ยมบ้าน</span> <strong style="color:#15803d">ทุก ${p.visit_interval} เดือน</strong></div>`:''}
       ${p.inject_interval?`<div style="font-size:12px"><span style="color:var(--text3)">💉 ฉีดยา</span> <strong style="color:#15803d">ทุก ${p.inject_interval} เดือน</strong></div>`:''}
@@ -2203,7 +2212,7 @@ async function refreshAosomoByVillage(village, currentVal){
   }
 }
 async function deletePatient(id,name){
-  if(!confirm(`ลบผู้ป่วย "${name}" ออกจากระบบ?\n\nประวัติการฉีดยาทั้งหมดจะถูกลบด้วย\nไม่สามารถกู้คืนได้!`))return
+  if(!confirm(`ลบผู้ป่วย "${name}" ออกจากระบบ?\n\nประวัติการฉีดยาทั้งหมดจะถูกลบด้วย\nไม่สามารถกู้คืนได้!\n\n(สิทธิ์ตาม PDPA มาตรา 33 — สิทธิ์ขอลบข้อมูล)`))return
   try{
     const{error}=await sb.from('patients').delete().eq('id',id)
     if(error)throw error
@@ -2211,6 +2220,11 @@ async function deletePatient(id,name){
     allPatients=await getPatients()
     if(location.hash==='#patients')navigate('patients')
   }catch(e){alert('❌ ลบไม่สำเร็จ: '+e.message)}
+}
+async function giveConsent(id){
+  const{error}=await sb.from('patients').update({consent_given:true,consent_date:todayISO()}).eq('id',id)
+  if(error){alert('❌ '+error.message);return}
+  openModal(id)
 }
 async function saveEditPatient(id){
   const name=(document.getElementById('edit-pt-name')?.value||'').trim()
@@ -2666,7 +2680,11 @@ function showAuthWall(mode='login'){
     <div style="text-align:right;margin-top:-8px;margin-bottom:10px"><a href="#" onclick="showAuthWall('forgot');return false" style="font-size:12px;color:var(--text3)">ลืมรหัสผ่าน?</a></div>
     <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
     <button class="btn btn-primary btn-block" id="auth-btn" onclick="loginUser()">เข้าสู่ระบบ</button>
-    <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)">ยังไม่มีบัญชี? <a href="#" onclick="showAuthWall('register');return false" style="color:var(--primary);font-weight:700">สมัครสมาชิก</a></div>`
+    <div style="margin-top:14px;padding:10px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:11px;color:#0369a1;line-height:1.6">
+      🔒 <strong>นโยบายคุ้มครองข้อมูลส่วนบุคคล (PDPA)</strong><br>
+      ระบบนี้ดำเนินการภายใต้กระทรวงสาธารณสุข เพื่อการดูแลผู้ป่วยจิตเวชในชุมชน ข้อมูลสุขภาพถูกเก็บรักษาอย่างปลอดภัย เข้าถึงได้เฉพาะบุคลากรที่ได้รับอนุญาต
+    </div>
+    <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--text3)">ยังไม่มีบัญชี? <a href="#" onclick="showAuthWall('register');return false" style="color:var(--primary);font-weight:700">สมัครสมาชิก</a></div>`
   } else if(mode==='forgot'){
     ct.innerHTML=`
     <div style="text-align:center;margin-bottom:24px">
@@ -2703,6 +2721,12 @@ function showAuthWall(mode='login'){
     <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="example@email.com" autocomplete="email"></div>
     <div class="form-group"><label>รหัสผ่าน</label><input type="password" id="auth-password" placeholder="อย่างน้อย 6 ตัวอักษร"></div>
     <div class="form-group"><label>ยืนยันรหัสผ่าน</label><input type="password" id="auth-password2" placeholder="พิมพ์รหัสผ่านอีกครั้ง" onkeydown="if(event.key==='Enter')registerUser()"></div>
+    <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;padding:10px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px">
+      <input type="checkbox" id="auth-pdpa-consent" style="margin-top:2px;flex-shrink:0">
+      <label for="auth-pdpa-consent" style="font-size:11px;color:#0369a1;line-height:1.6;cursor:pointer">
+        ข้าพเจ้ารับทราบและยินยอมให้ระบบ JitHome เก็บและประมวลผลข้อมูลส่วนบุคคล เพื่อการดูแลผู้ป่วยจิตเวชภายใต้กระทรวงสาธารณสุข ตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ.2562
+      </label>
+    </div>
     <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
     <button class="btn btn-primary btn-block" id="auth-btn" onclick="registerUser()">สมัครสมาชิก</button>
     <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)">มีบัญชีแล้ว? <a href="#" onclick="showAuthWall('login');return false" style="color:var(--primary);font-weight:700">เข้าสู่ระบบ</a></div>`
@@ -2737,9 +2761,11 @@ async function registerUser(){
   const password2=document.getElementById('auth-password2')?.value||''
   const btn=document.getElementById('auth-btn')
   const err=document.getElementById('auth-error')
+  const pdpaConsent=document.getElementById('auth-pdpa-consent')?.checked
   if(!email||!password){err.textContent='กรุณากรอก Email และรหัสผ่าน';return}
   if(password.length<6){err.textContent='รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';return}
   if(password!==password2){err.textContent='รหัสผ่านไม่ตรงกัน';return}
+  if(!pdpaConsent){err.textContent='กรุณายืนยันความยินยอม PDPA ก่อนสมัครสมาชิก';return}
   btn.disabled=true;btn.textContent='กำลังสมัคร...'
   const{data,error}=await sb.auth.signUp({email,password})
   if(error){err.textContent='❌ '+error.message;btn.disabled=false;btn.textContent='สมัครสมาชิก';return}
@@ -2897,6 +2923,16 @@ function openAddPatient(){
     </select></div>
   </div>
   <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="np-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
+  <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+    <div style="font-size:12px;font-weight:700;color:#0369a1;margin-bottom:8px">🔒 ความยินยอมตาม PDPA</div>
+    <div style="display:flex;align-items:flex-start;gap:8px">
+      <input type="checkbox" id="np-consent" style="margin-top:3px;flex-shrink:0">
+      <label for="np-consent" style="font-size:12px;color:var(--text2);line-height:1.6;cursor:pointer">
+        ผู้ป่วย/ผู้ดูแลรับทราบและยินยอมให้ <strong>${esc(hospitalName)}</strong> เก็บและประมวลผลข้อมูลสุขภาพ เพื่อการติดตามดูแลในชุมชน ตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ.2562
+      </label>
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-top:6px">วันที่รับความยินยอม: ${todayISO()}</div>
+  </div>
   <div style="display:flex;gap:10px;margin-top:4px">
     <button class="btn btn-primary" style="flex:1" id="np-btn" onclick="saveNewPatient()">บันทึกผู้ป่วย</button>
     <button class="btn btn-outline" onclick="closeAddPatient()">ยกเลิก</button>
@@ -2928,13 +2964,15 @@ async function saveNewPatient(){
   const visit_interval=parseInt(document.getElementById('np-visit-interval')?.value)||null
   const inject_interval=parseInt(document.getElementById('np-inject-interval')?.value)||null
   const medication_name=(document.getElementById('np-medication')?.value||'').trim()||null
+  const consent_given=document.getElementById('np-consent')?.checked||false
+  const consent_date=consent_given?todayISO():null
   const btn=document.getElementById('np-btn')
   if(!name){alert('กรุณากรอกชื่อ-นามสกุล');document.getElementById('np-name')?.focus();return}
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const house_no=(document.getElementById('np-house-no')?.value||'').trim()
-    const{error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name})
+    const{error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date})
     if(pe){
       if(pe.message?.includes('unique'))throw new Error(`ชื่อ "${name}" มีในระบบแล้ว กรุณาใช้ชื่ออื่น`)
       throw pe
