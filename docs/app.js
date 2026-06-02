@@ -1247,11 +1247,11 @@ async function importPatientFile(input){
     const batchSize=50
     for(let i=0;i<records.length;i+=batchSize){
       const batch=records.slice(i,i+batchSize)
-      const{error}=await sb.from('patients').insert(batch)
+      const{error}=await sb.from('patients').upsert(batch,{onConflict:'name',ignoreDuplicates:true})
       if(error)throw error
       done+=batch.length
     }
-    alert(`✅ นำเข้าสำเร็จ ${done} รายชื่อ`)
+    alert(`✅ นำเข้าสำเร็จ ${done} รายชื่อ (รายที่ซ้ำถูกข้ามไป)`)
     await loadPatients()
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
@@ -1294,11 +1294,11 @@ async function importHospitalFile(input){
     const batchSize=50
     for(let i=0;i<records.length;i+=batchSize){
       const batch=records.slice(i,i+batchSize)
-      const{error}=await sb.from('patients').insert(batch)
+      const{error}=await sb.from('patients').upsert(batch,{onConflict:'name',ignoreDuplicates:true})
       if(error)throw error
       done+=batch.length
     }
-    alert(`✅ นำเข้าสำเร็จ ${done} รายชื่อ`)
+    alert(`✅ นำเข้าสำเร็จ ${done} รายชื่อ (รายที่ซ้ำถูกข้ามไป)`)
     await loadPatients()
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
@@ -2576,7 +2576,10 @@ async function saveNewPatient(){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const{error:pe}=await sb.from('patients').insert({name,village,note:'',national_id,visit_interval,inject_interval,medication_name})
-    if(pe)throw pe
+    if(pe){
+      if(pe.message?.includes('unique'))throw new Error(`ชื่อ "${name}" มีในระบบแล้ว กรุณาใช้ชื่ออื่น`)
+      throw pe
+    }
     if(date){
       const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
       if(found){
