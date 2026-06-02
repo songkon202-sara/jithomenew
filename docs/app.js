@@ -2575,7 +2575,7 @@ async function saveNewPatient(){
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const{error:pe}=await sb.from('patients').insert({name,village,national_id,visit_interval,inject_interval,medication_name})
+    const{error:pe}=await sb.from('patients').insert({name,village,note:'',national_id,visit_interval,inject_interval,medication_name})
     if(pe)throw pe
     if(date){
       const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
