@@ -880,7 +880,7 @@ async function renderAdmin(el) {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:8px">
           <div style="width:32px;height:32px;background:#0a7ea4;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px">🧑‍⚕️</div>
-          <div><div style="font-size:13px;font-weight:700">นำเข้าผู้ป่วย</div><div style="font-size:11px;color:var(--text3)">คอลัมน์: ชื่อ, หมู่บ้าน, หมายเหตุ, เลขบัตรประชาชน</div></div>
+          <div><div style="font-size:13px;font-weight:700">นำเข้าผู้ป่วย</div><div style="font-size:11px;color:var(--text3)">ชื่อ, หมู่บ้าน, หมายเหตุ, เลขบัตร, รหัสโรค, ชื่อโรค</div></div>
         </div>
         <div style="display:flex;gap:6px">
           <button onclick="downloadTemplate('patient')" style="padding:5px 10px;background:#fff;color:#0a7ea4;border:1px solid #0a7ea4;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">⬇️ ตัวอย่าง</button>
@@ -1205,6 +1205,8 @@ async function importPatientFile(input){
       village:String(r[1]||'').trim(),
       note:String(r[2]||'').trim(),
       national_id:String(r[3]||'').replace(/\D/g,'').slice(0,13)||null,
+      disease_code:String(r[4]||'').trim()||null,
+      disease_name:String(r[5]||'').trim()||null,
     })).filter(r=>r.name)
     if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
     if(!confirm(`นำเข้า ${records.length} รายชื่อผู้ป่วย ใช่หรือไม่?`))return
@@ -1555,12 +1557,12 @@ function downloadTemplate(type){
       'นายประสิทธิ์ ทองดี,หมู่ 3,0856789012'
     filename='ตัวอย่าง_รายชื่ออสม.csv'
   } else {
-    csv='ชื่อ-นามสกุล,หมู่บ้าน,หมายเหตุ,เลขบัตรประชาชน\n'+
-      'นายสมศักดิ์ ใจเย็น,หมู่ 1,โรคจิตเภท ติดตามทุกเดือน,1100100123456\n'+
-      'นางสาวอรุณี สว่างจิต,หมู่ 2,,1100200234567\n'+
-      'นายวิชัย มั่นคง,หมู่ 3,ผู้ดูแลคือนางสมศรี โทร 089-xxx,\n'+
-      'นางประภา รุ่งเรือง,หมู่ 1,,\n'+
-      'นายธนพล ใจกว้าง,หมู่ 4,แพ้ยา Haloperidol,'
+    csv='ชื่อ-นามสกุล,หมู่บ้าน,หมายเหตุ,เลขบัตรประชาชน,รหัสโรค,ชื่อโรค\n'+
+      'นายสมศักดิ์ ใจเย็น,หมู่ 1,โรคจิตเภท ติดตามทุกเดือน,1100100123456,F20,Schizophrenia\n'+
+      'นางสาวอรุณี สว่างจิต,หมู่ 2,,1100200234567,F102,Alcohol Dependence\n'+
+      'นายวิชัย มั่นคง,หมู่ 3,ผู้ดูแลคือนางสมศรี โทร 089-xxx,,F150,\n'+
+      'นางประภา รุ่งเรือง,หมู่ 1,,,, \n'+
+      'นายธนพล ใจกว้าง,หมู่ 4,แพ้ยา Haloperidol,,F152,'
     filename='ตัวอย่าง_รายชื่อผู้ป่วย.csv'
   }
   const a=document.createElement('a')
