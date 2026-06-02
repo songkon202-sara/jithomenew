@@ -28,11 +28,20 @@ const AOSOMO_CHECKLIST = [
   ['a5','มีนัดฉีดยาตามกำหนด (ทราบวันนัด)'],
   ['a6','สภาพบ้านสะอาด ปลอดภัย ไม่มีสิ่งอันตราย'],
 ]
+const AOSOMO_PROBLEMS = [
+  ['p1','ผู้ป่วยหายออกจากชุมชน / ไม่พบตัว'],
+  ['p2','ขาดยา / ไม่รับประทานยาตามแพทย์สั่ง'],
+  ['p3','พบอาการก้าวร้าว / พฤติกรรมผิดปกติ'],
+  ['p4','ครอบครัวทอดทิ้ง / ดูแลผู้ป่วยไม่ได้'],
+  ['p5','ขาดนัดฉีดยา / ไม่ทราบวันนัด'],
+  ['p6','สภาพบ้านไม่ปลอดภัย / มีสิ่งอันตราย'],
+]
 
 // ─── State ───────────────────────────────────────────────────────
 let hospitalName = 'รพ.สต.สองคอน'
 let allPatients  = []
 let _visitChecks = []
+let _visitProblems = []
 let _visitType   = 'aosomo'
 let _oasScores   = {s1:0, s2:0, s3:0}  // OAS: ต่อตนเอง, ต่อผู้อื่น, ต่อทรัพย์สิน
 let _redFlags    = []                   // 5 Red Flags
@@ -1998,7 +2007,7 @@ async function saveModalRecord(pid,gc){
 function openVisitForm(type){
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
-  _visitType=type;_visitChecks=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={}
+  _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={}
   const cl=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
   const nameOpts=allPatients.map(p=>`<option value="${esc(p.name)}" data-village="${esc(p.village||'')}">`).join('')
   ct.innerHTML=`
@@ -2081,6 +2090,14 @@ function openVisitForm(type){
   </div>`:''}
 
   ${type==='aosomo'?`
+  <div style="background:#fff5f5;border-radius:10px;padding:10px 14px;margin-bottom:14px;border:1.5px solid #fecaca">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700;color:#b91c1c">⚠️ ปัญหาที่พบ (ถ้ามี)</div>
+      <span id="prob-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#fef2f2;color:#b91c1c;display:none">พบ <span id="prob-count">0</span> รายการ</span>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">กดเลือกปัญหาที่พบในการเยี่ยม — จะส่งต่อโดยอัตโนมัติถ้าพบปัญหา</div>
+    ${AOSOMO_PROBLEMS.map(([id,lbl])=>`<div class="check-item" onclick="toggleProblem('${id}')" style="border-color:#fecaca"><div class="check-box" id="pb-${id}" style="border-color:#fca5a5;background:#fff"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div><span class="check-label" style="color:#9f1239">${esc(lbl)}</span></div>`).join('')}
+  </div>
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div style="font-size:13px;font-weight:700">🚩 แบบประเมิน 5 Red Flags</div>
@@ -2149,6 +2166,13 @@ function toggleCheck(id){
   const idx=_visitChecks.indexOf(id),cb=document.getElementById('cb-'+id)
   if(idx===-1){_visitChecks.push(id);cb?.classList.add('checked')}else{_visitChecks.splice(idx,1);cb?.classList.remove('checked')}
   updateScore()
+}
+function toggleProblem(id){
+  const idx=_visitProblems.indexOf(id),cb=document.getElementById('pb-'+id)
+  if(idx===-1){_visitProblems.push(id);cb?.classList.add('checked')}else{_visitProblems.splice(idx,1);cb?.classList.remove('checked')}
+  const badge=document.getElementById('prob-badge'),cnt=document.getElementById('prob-count')
+  if(badge){badge.style.display=_visitProblems.length?'':'none';if(cnt)cnt.textContent=_visitProblems.length}
+  if(_visitProblems.length>0){const r=document.getElementById('v-refer');if(r)r.checked=true}
 }
 function updateScore(){
   const cl=_visitType==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST,n=_visitChecks.length,max=cl.length,pct=max>0?n/max:0
@@ -2315,7 +2339,8 @@ async function saveVisitRecord(){
     :''
   const ytText=_visitType==='aosomo'?getYTText():''
   const a10Text=_visitType==='staff'?getAssess10Text():''
-  const fullNote=(note+oasText+rfText+ytText+a10Text).trim()
+  const probText=_visitProblems.length>0?`\n[ปัญหาที่พบ] ${_visitProblems.map(id=>AOSOMO_PROBLEMS.find(([pid])=>pid===id)?.[1]||id).join(' | ')}`:''
+  const fullNote=(note+oasText+rfText+ytText+a10Text+probText).trim()
   try{
     const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer})
     if(error)throw error
