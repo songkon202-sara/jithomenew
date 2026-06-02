@@ -946,6 +946,19 @@ async function renderAdmin(el) {
   </div>
   ${canDo('manage_users')?`
   <div class="form-section">
+    <h3>🏡 สร้างบัญชีสำหรับ อสม.</h3>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">สร้างบัญชีให้ อสม. ที่ไม่มีอีเมล — ใช้เบอร์โทรแทน</div>
+    <div class="form-group"><label>ชื่อ-นามสกุล อสม. *</label><input type="text" id="ca-name" placeholder="เช่น นางสมศรี ใจดี" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>เบอร์โทรศัพท์ * (ใช้เป็นชื่อผู้ใช้และรหัสผ่าน)</label><input type="tel" id="ca-phone" placeholder="0812345678" maxlength="10" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>หมู่บ้าน</label>
+      <select id="ca-village" style="width:100%">
+        ${villages.map(v=>`<option>${v}</option>`).join('')}
+      </select>
+    </div>
+    <div id="ca-result" style="font-size:12px;min-height:16px;margin-bottom:8px"></div>
+    <button class="btn btn-primary" id="ca-btn" onclick="createAosomoAccount()" style="background:#7c3aed;border-color:#7c3aed">🏡 สร้างบัญชี อสม.</button>
+  </div>
+  <div class="form-section">
     <h3>👥 จัดการสมาชิก</h3>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">กำหนดสิทธิ์การเข้าถึงของสมาชิกแต่ละคน</div>
     <div id="members-list"><div style="text-align:center;padding:20px;color:var(--text3)">⏳ กำลังโหลด...</div></div>
@@ -953,6 +966,53 @@ async function renderAdmin(el) {
   </div>`
 
   if(canDo('manage_users'))loadMembersList()
+}
+
+async function createAosomoAccount(){
+  const name=(document.getElementById('ca-name')?.value||'').trim()
+  const phone=(document.getElementById('ca-phone')?.value||'').replace(/\D/g,'')
+  const village=document.getElementById('ca-village')?.value||''
+  const result=document.getElementById('ca-result')
+  const btn=document.getElementById('ca-btn')
+  if(!name){result.style.color='var(--red)';result.textContent='❌ กรุณากรอกชื่อ';return}
+  if(phone.length<9){result.style.color='var(--red)';result.textContent='❌ เบอร์โทรไม่ถูกต้อง';return}
+  const email=phone+'@jithome.local'
+  const password=phone
+  btn.disabled=true;btn.textContent='กำลังสร้างบัญชี...'
+  result.style.color='var(--text3)';result.textContent=''
+  try{
+    // ใช้ temp client เพื่อไม่กระทบ session ของแอดมิน
+    const tmp=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false}})
+    const{data,error}=await tmp.auth.signUp({email,password})
+    if(error){
+      if(error.message?.includes('already registered'))
+        result.style.color='var(--red)';result.textContent='❌ เบอร์โทรนี้มีบัญชีอยู่แล้ว'
+      else {result.style.color='var(--red)';result.textContent='❌ '+error.message}
+      btn.disabled=false;btn.textContent='🏡 สร้างบัญชี อสม.';return
+    }
+    const uid=data?.user?.id
+    if(uid){
+      // สร้าง profile ทันที ไม่ต้องรอ login ครั้งแรก
+      await sb.from('user_profiles').upsert({
+        id:uid,email,display_name:name,role:'aosomo',village,
+        last_login:new Date().toISOString()
+      },{onConflict:'id'})
+    }
+    // แสดงข้อมูลล็อกอินให้แอดมินส่งต่อ
+    result.innerHTML=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;margin-top:4px">
+      <div style="font-weight:700;color:#166534;margin-bottom:6px">✅ สร้างบัญชีสำเร็จ! แจ้ง อสม. ดังนี้:</div>
+      <div style="font-size:12px;line-height:1.8">
+        👤 ชื่อผู้ใช้: <strong>${esc(email)}</strong><br>
+        🔑 รหัสผ่าน: <strong>${esc(phone)}</strong><br>
+        🏡 หมู่บ้าน: <strong>${esc(village)}</strong>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px">💡 แนะนำให้เปลี่ยนรหัสผ่านหลังเข้าสู่ระบบครั้งแรก</div>
+    </div>`
+    document.getElementById('ca-name').value=''
+    document.getElementById('ca-phone').value=''
+    loadMembersList()
+  }catch(e){result.style.color='var(--red)';result.textContent='❌ '+e.message}
+  btn.disabled=false;btn.textContent='🏡 สร้างบัญชี อสม.'
 }
 
 function memberCard(p,showVillage=false){
