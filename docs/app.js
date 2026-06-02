@@ -1218,7 +1218,7 @@ async function importPatientFile(input){
     const records=rows.slice(1).filter(r=>r[0]).map(r=>({
       name:String(r[0]||'').trim(),
       village:String(r[1]||'').trim(),
-      note:String(r[2]||'').trim(),
+      note:String(r[2]||'').trim()||null,
       national_id:String(r[3]||'').replace(/\D/g,'').slice(0,13)||null,
       disease_code:String(r[4]||'').trim()||null,
       disease_name:String(r[5]||'').trim()||null,
@@ -1228,9 +1228,15 @@ async function importPatientFile(input){
     })).filter(r=>r.name)
     if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
     if(!confirm(`นำเข้า ${records.length} รายชื่อผู้ป่วย ใช่หรือไม่?`))return
-    const{error}=await sb.from('patients').insert(records)
-    if(error)throw error
-    alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
+    let done=0
+    const batchSize=50
+    for(let i=0;i<records.length;i+=batchSize){
+      const batch=records.slice(i,i+batchSize)
+      const{error}=await sb.from('patients').insert(batch)
+      if(error)throw error
+      done+=batch.length
+    }
+    alert(`✅ นำเข้าสำเร็จ ${done} รายชื่อ`)
     await loadPatients()
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
@@ -1269,9 +1275,15 @@ async function importHospitalFile(input){
     }).filter(r=>r.name)
     if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
     if(!confirm(`นำเข้า ${records.length} รายชื่อผู้ป่วย (รูปแบบ HOSxP/JHCIS) ใช่หรือไม่?`))return
-    const{error}=await sb.from('patients').insert(records)
-    if(error)throw error
-    alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
+    let done=0
+    const batchSize=50
+    for(let i=0;i<records.length;i+=batchSize){
+      const batch=records.slice(i,i+batchSize)
+      const{error}=await sb.from('patients').insert(batch)
+      if(error)throw error
+      done+=batch.length
+    }
+    alert(`✅ นำเข้าสำเร็จ ${done} รายชื่อ`)
     await loadPatients()
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
