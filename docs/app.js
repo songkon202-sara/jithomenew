@@ -1229,9 +1229,13 @@ async function mergeAndSavePatients(records, confirmMsg){
   const{data:existing}=await sb.from('patients').select('id,name,village,note,national_id,disease_code,disease_name,visit_interval,inject_interval,medication_name')
   const exMap={}
   existing?.forEach(p=>{exMap[p.name]=p})
+  // deduplicate records by name (last row wins within file)
+  const recMap={}
+  for(const rec of records)recMap[rec.name]=rec
+  const deduped=Object.values(recMap)
   const toInsert=[]
   const toUpdate=[]
-  for(const rec of records){
+  for(const rec of deduped){
     const ex=exMap[rec.name]
     if(!ex){toInsert.push(rec)}
     else{
