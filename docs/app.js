@@ -1233,7 +1233,7 @@ async function importPatientFile(input){
     const records=rows.slice(1).filter(r=>r[0]).map(r=>({
       name:String(r[0]||'').trim(),
       village:String(r[1]||'').trim(),
-      note:String(r[2]||'').trim()||null,
+      note:String(r[2]||'').trim(),
       national_id:String(r[3]||'').replace(/\D/g,'').slice(0,13)||null,
       disease_code:String(r[4]||'').trim()||null,
       disease_name:String(r[5]||'').trim()||null,
