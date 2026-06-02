@@ -516,7 +516,9 @@ async function renderVisit(el) {
   window._allVisits=visits
   // โหลด referrals สำหรับ staff/admin
   let referralHtml=''
+  let clinicQueueHtml=''
   if(canDo('record')){
+    // queue 1: อสม. → เจ้าหน้าที่
     const{data:refs}=await sb.from('home_visits')
       .select('patient_name,village,visit_date,visitor,note')
       .eq('refer',true).eq('visit_type','aosomo')
@@ -539,6 +541,24 @@ async function renderVisit(el) {
         </div>`).join('')}
       </div>`
     }
+    // queue 2: เจ้าหน้าที่ → รพ./คลินิก
+    const{data:clinicRefs}=await sb.from('home_visits')
+      .select('id,patient_name,village,visit_date,visitor,note')
+      .eq('refer',true).eq('visit_type','staff').eq('refer_resolved',false)
+      .order('visit_date',{ascending:false}).limit(20)
+    if((clinicRefs||[]).length){
+      clinicQueueHtml=`<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:10px">🏥 รายการส่งต่อ รพ./คลินิก รอดำเนินการ (${clinicRefs.length} ราย)</div>
+        ${clinicRefs.map(r=>`<div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #fde68a;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13px;font-weight:700;color:var(--text1)">${esc(r.patient_name)}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">📍 ${esc(r.village||'')} &nbsp;·&nbsp; 🏥 ${esc(r.visitor||'')} &nbsp;·&nbsp; 📅 ${r.visit_date||''}</div>
+            ${r.note?`<div style="font-size:11px;color:#92400e;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.note.split('\n')[0])}</div>`:''}
+          </div>
+          <span style="flex-shrink:0;padding:5px 10px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:11px;font-weight:700">⏳ รอแอดมิน</span>
+        </div>`).join('')}
+      </div>`
+    }
   }
   el.innerHTML=`<div class="page">
   <div class="page-title">เยี่ยมบ้าน</div>
@@ -548,6 +568,7 @@ async function renderVisit(el) {
     ${currentRole!=='staff'?`<button onclick="openVisitForm('aosomo')" class="btn ${currentRole==='aosomo'?'btn-primary':'btn-outline'}" style="flex:1;${currentRole!=='aosomo'?'border-color:var(--primary);color:var(--primary)':''}">🏡 เยี่ยม (อสม.)</button>`:''}
   </div>
   ${referralHtml}
+  ${clinicQueueHtml}
   <div class="tab-bar">
     <button class="tab-btn active" onclick="setVTab('all',this)">ทั้งหมด (${visits.length})</button>
     <button class="tab-btn" onclick="setVTab('staff',this)">เจ้าหน้าที่ (${visits.filter(v=>v.visit_type==='staff').length})</button>
@@ -936,9 +957,39 @@ async function renderAdmin(el) {
   const todayC=pts.filter(p=>parseInt(p.days_until)===0).length
   const nameOpts=pts.map(p=>`<option value="${esc(p.name)}">`).join('')
   const villages=['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต']
+  const{data:staffRefs}=await sb.from('home_visits')
+    .select('id,patient_name,village,visit_date,visitor,note')
+    .eq('refer',true).eq('visit_type','staff').eq('refer_resolved',false)
+    .order('visit_date',{ascending:false}).limit(30)
+  const pendingRefs=staffRefs||[]
+  const refQueueHtml=pendingRefs.length?`
+  <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:700;color:#b91c1c">🏥 รายการส่งต่อจากเจ้าหน้าที่ รอดำเนินการ (${pendingRefs.length} ราย)</div>
+    </div>
+    ${pendingRefs.map(r=>`
+    <div style="background:#fff;border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid #fecaca">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:14px;font-weight:700;color:var(--text1)">${esc(r.patient_name)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">📍 ${esc(r.village||'')} &nbsp;·&nbsp; 🏥 ${esc(r.visitor||'')} &nbsp;·&nbsp; 📅 ${r.visit_date||''}</div>
+          ${r.note?`<div style="font-size:11px;color:#b91c1c;margin-top:4px;padding:6px 8px;background:#fef2f2;border-radius:6px;white-space:pre-wrap;line-height:1.5">${esc(r.note.split('\n').slice(0,2).join('\n'))}</div>`:''}
+        </div>
+        <button onclick="resolveReferral(${r.id})"
+          style="flex-shrink:0;padding:8px 14px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">
+          ✅ รับเรื่องแล้ว
+        </button>
+      </div>
+    </div>`).join('')}
+  </div>`
+  :`<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:22px">✅</span>
+    <div><div style="font-size:13px;font-weight:700;color:#15803d">ไม่มีรายการส่งต่อค้างอยู่</div><div style="font-size:11px;color:var(--text3);margin-top:2px">เจ้าหน้าที่ยังไม่มีการส่งต่อเพิ่มเติม</div></div>
+  </div>`
   el.innerHTML=`<div class="page">
   <div class="page-title">แอดมิน</div>
   <div class="page-sub">จัดการข้อมูลและตั้งค่าระบบ</div>
+  ${refQueueHtml}
   <div class="form-section">
     <h3>👁️ ดูตัวอย่างการแสดงผลตามสิทธิ์</h3>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px">เลือกประเภทสมาชิกเพื่อดูว่าเขาจะเห็นหน้าเว็บแบบไหน — กดปุ่ม <strong>ออกจากโหมดนี้</strong> เพื่อกลับสิทธิ์แอดมิน</div>
@@ -2262,6 +2313,13 @@ function openVisitForm(type){
   ov.style.display='flex'
 }
 function closeVisitModal(){document.getElementById('visit-overlay').style.display='none'}
+async function resolveReferral(id){
+  const btn=event?.target
+  if(btn){btn.textContent='⏳ กำลังบันทึก...';btn.disabled=true}
+  const{error}=await sb.from('home_visits').update({refer_resolved:true}).eq('id',id)
+  if(error){alert('เกิดข้อผิดพลาด: '+error.message);if(btn){btn.textContent='✅ รับเรื่องแล้ว';btn.disabled=false}return}
+  renderPage('admin')
+}
 function toggleCheck(id){
   const idx=_visitChecks.indexOf(id),cb=document.getElementById('cb-'+id)
   if(idx===-1){_visitChecks.push(id);cb?.classList.add('checked')}else{_visitChecks.splice(idx,1);cb?.classList.remove('checked')}
