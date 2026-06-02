@@ -876,6 +876,19 @@ async function renderAdmin(el) {
       </button>
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:#0a7ea4;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px">🧑‍⚕️</div>
+          <div><div style="font-size:13px;font-weight:700">นำเข้าผู้ป่วย</div><div style="font-size:11px;color:var(--text3)">คอลัมน์: ชื่อ, หมู่บ้าน, หมายเหตุ, เลขบัตรประชาชน</div></div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button onclick="downloadTemplate('patient')" style="padding:5px 10px;background:#fff;color:#0a7ea4;border:1px solid #0a7ea4;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">⬇️ ตัวอย่าง</button>
+          <button onclick="document.getElementById('patient-import-input').click()" style="padding:5px 10px;background:#0a7ea4;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📎 นำเข้า</button>
+        </div>
+      </div>
+      <input type="file" id="patient-import-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importPatientFile(this)">
+    </div>
+    <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
           <div style="width:32px;height:32px;background:#0f9d58;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px">G</div>
@@ -1164,6 +1177,29 @@ async function importStaffDirFile(input){
     if(error)throw error
     alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
     loadMembersList()
+  }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
+}
+
+async function importPatientFile(input){
+  const file=input.files[0];if(!file)return;input.value=''
+  try{
+    const data=await file.arrayBuffer()
+    const wb=XLSX.read(data)
+    const ws=wb.Sheets[wb.SheetNames[0]]
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1}).filter(r=>r.length>0)
+    if(rows.length<2){alert('ไม่พบข้อมูล (ต้องมีแถว header และข้อมูลอย่างน้อย 1 แถว)');return}
+    const records=rows.slice(1).filter(r=>r[0]).map(r=>({
+      name:String(r[0]||'').trim(),
+      village:String(r[1]||'').trim(),
+      note:String(r[2]||'').trim(),
+      national_id:String(r[3]||'').replace(/\D/g,'').slice(0,13)||null,
+    })).filter(r=>r.name)
+    if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
+    if(!confirm(`นำเข้า ${records.length} รายชื่อผู้ป่วย ใช่หรือไม่?`))return
+    const{error}=await sb.from('patients').insert(records)
+    if(error)throw error
+    alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
+    await loadPatients()
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
 
@@ -1466,12 +1502,12 @@ function downloadTemplate(type){
       'นายประสิทธิ์ ทองดี,หมู่ 3,0856789012'
     filename='ตัวอย่าง_รายชื่ออสม.csv'
   } else {
-    csv='ชื่อ-นามสกุล,หมู่บ้าน,หมายเหตุ\n'+
-      'นายสมศักดิ์ ใจเย็น,หมู่ 1,โรคจิตเภท ติดตามทุกเดือน\n'+
-      'นางสาวอรุณี สว่างจิต,หมู่ 2,\n'+
-      'นายวิชัย มั่นคง,หมู่ 3,ผู้ดูแลคือนางสมศรี โทร 089-xxx\n'+
-      'นางประภา รุ่งเรือง,หมู่ 1,\n'+
-      'นายธนพล ใจกว้าง,หมู่ 4,แพ้ยา Haloperidol'
+    csv='ชื่อ-นามสกุล,หมู่บ้าน,หมายเหตุ,เลขบัตรประชาชน\n'+
+      'นายสมศักดิ์ ใจเย็น,หมู่ 1,โรคจิตเภท ติดตามทุกเดือน,1100100123456\n'+
+      'นางสาวอรุณี สว่างจิต,หมู่ 2,,1100200234567\n'+
+      'นายวิชัย มั่นคง,หมู่ 3,ผู้ดูแลคือนางสมศรี โทร 089-xxx,\n'+
+      'นางประภา รุ่งเรือง,หมู่ 1,,\n'+
+      'นายธนพล ใจกว้าง,หมู่ 4,แพ้ยา Haloperidol,'
     filename='ตัวอย่าง_รายชื่อผู้ป่วย.csv'
   }
   const a=document.createElement('a')
