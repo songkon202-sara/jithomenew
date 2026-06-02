@@ -595,8 +595,9 @@ async function openEditVisit(id){
   _ytAssess={ya:null,yati:null,sara:null}
   _assess10={}
   _oasScores={s1:0,s2:0,s3:0}
-  try{const saved=JSON.parse(v.checks_json||'[]');_visitChecks=Array.isArray(saved)?saved:[]}catch(e){}
-  // เปิดฟอร์มเต็มเหมือนตอนเยี่ยม
+  let savedChecks=[]
+  try{const saved=JSON.parse(v.checks_json||'[]');savedChecks=Array.isArray(saved)?saved:[]}catch(e){}
+  // เปิดฟอร์มเต็มเหมือนตอนเยี่ยม (จะ reset _visitChecks ภายใน)
   openVisitForm(_visitType)
   // หลัง render เสร็จ restore ค่า
   setTimeout(()=>{
@@ -606,8 +607,9 @@ async function openEditVisit(id){
     const dEl=document.getElementById('v-date');if(dEl)dEl.value=v.visit_date||''
     const visEl=document.getElementById('v-visitor');if(visEl)visEl.value=v.visitor||''
     // restore รายการตรวจสอบ
-    _visitChecks.forEach(id=>{
-      const cb=document.getElementById('cb-'+id);if(cb)cb.classList.add('checked')
+    savedChecks.forEach(cid=>{
+      _visitChecks.push(cid)
+      const cb=document.getElementById('cb-'+cid);if(cb)cb.classList.add('checked')
     })
     updateScore()
     // restore refer
