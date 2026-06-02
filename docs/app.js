@@ -36,6 +36,7 @@ let _visitChecks = []
 let _visitType   = 'aosomo'
 let _oasScores   = {s1:0, s2:0, s3:0}  // OAS: ต่อตนเอง, ต่อผู้อื่น, ต่อทรัพย์สิน
 let _redFlags    = []                   // 5 Red Flags
+let _ytAssess    = {ya:null, yati:null, sara:null} // ยาดี-ญาติดี-สารเสพติด
 let currentUser        = null
 let currentRole        = 'viewer'  // admin | staff | aosomo | viewer
 let currentDisplayName = ''
@@ -1892,7 +1893,7 @@ async function saveModalRecord(pid,gc){
 function openVisitForm(type){
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
-  _visitType=type;_visitChecks=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[]
+  _visitType=type;_visitChecks=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null}
   const cl=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
   const nameOpts=allPatients.map(p=>`<option value="${esc(p.name)}" data-village="${esc(p.village||'')}">`).join('')
   ct.innerHTML=`
@@ -1979,7 +1980,30 @@ function openVisitForm(type){
     <div id="rf-alert" style="display:none;margin-top:8px;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:12px;color:#b91c1c;font-weight:600">
       ⚠️ พบปัจจัยเสี่ยง! แจ้งญาติ/ผู้ดูแลและเจ้าหน้าที่ รพ.สต. ทันที
     </div>
+  </div>
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700">💊 ยาดี · ญาติดี · ไม่ใช้สารเสพติด</div>
+      <span id="yt-badge" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ยังไม่ประเมิน</span>
+    </div>
+    ${[
+      ['ya','💊 ยา','ผู้ป่วยรับประทานยาตามแพทย์สั่งต่อเนื่อง','ดี','ไม่ดี'],
+      ['yati','👨‍👩‍👧 ญาติ','ครอบครัวดูแล ไม่ทอดทิ้ง อยู่ใกล้ชิด','ดี','ไม่ดี'],
+      ['sara','🚫 สารเสพติด','ไม่มีการใช้สารเสพติด สุรา บุหรี่เกินขนาด','ไม่ใช้','ใช้'],
+    ].map(([key,label,desc,good,bad])=>`
+    <div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700;margin-bottom:2px">${label}</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${desc}</div>
+      <div style="display:flex;gap:6px">
+        <button type="button" id="yt-good-${key}" onclick="setYT('${key}',true)"
+          style="flex:1;padding:8px;border-radius:8px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ${good}</button>
+        <button type="button" id="yt-bad-${key}" onclick="setYT('${key}',false)"
+          style="flex:1;padding:8px;border-radius:8px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">❌ ${bad}</button>
+      </div>
+    </div>`).join('')}
+    <div id="yt-result" style="display:none;margin-top:4px;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;text-align:center"></div>
   </div>`:''}
+
   <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="v-note" rows="3" style="resize:none;font-family:'Sarabun',sans-serif" placeholder="อาการ สิ่งที่พบ ข้อสังเกต..."></textarea></div>
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:8px;margin-bottom:14px">
     <div><div style="font-size:13px;font-weight:700;color:var(--red)">ต้องการส่งต่อ / รายงานเร่งด่วน</div><div style="font-size:11px;color:var(--text3)">กรณีพบความเสี่ยงสูง</div></div>
@@ -2068,6 +2092,34 @@ function toggleRedFlag(id,found){
   if(alert)alert.style.display=hasRisk?'block':'none'
   if(refer&&hasRisk)refer.checked=true
 }
+function setYT(key, isGood){
+  _ytAssess[key]=isGood
+  const goodBtn=document.getElementById('yt-good-'+key)
+  const badBtn=document.getElementById('yt-bad-'+key)
+  const activeStyle='border:2px solid;font-weight:800'
+  if(goodBtn){goodBtn.style.background=isGood?'#dcfce7':'#f3f4f6';goodBtn.style.borderColor=isGood?'#16a34a':'#d1d5db';goodBtn.style.color=isGood?'#15803d':'var(--text2)'}
+  if(badBtn){badBtn.style.background=!isGood?'#fef2f2':'#f3f4f6';badBtn.style.borderColor=!isGood?'#f87171':'#d1d5db';badBtn.style.color=!isGood?'#b91c1c':'var(--text2)'}
+  // คำนวณสีผลลัพธ์
+  const {ya,yati,sara}=_ytAssess
+  if(ya===null||yati===null||sara===null)return
+  const badCount=[ya===false,yati===false,sara===false].filter(Boolean).length
+  let color,bg,border,msg
+  if(badCount===0){color='#15803d';bg='#dcfce7';border='#86efac';msg='🟢 สีเขียว — ยาดี ญาติดี ไม่ใช้สารเสพติด'}
+  else if(badCount===1){color='#92400e';bg='#fef9c3';border='#fde047';msg='🟡 สีเหลือง — มีข้อใดข้อหนึ่งไม่ดี ต้องติดตามภายใน 15 วัน'}
+  else{color='#b91c1c';bg='#fef2f2';border='#fca5a5';msg='🔴 สีแดง — เสี่ยงสูง/วิกฤต แจ้งเจ้าหน้าที่ รพ.สต. ทันที';const r=document.getElementById('v-refer');if(r)r.checked=true}
+  const badge=document.getElementById('yt-badge')
+  const result=document.getElementById('yt-result')
+  if(badge){badge.textContent=msg.split(' — ')[0];badge.style.background=bg;badge.style.color=color;badge.style.borderColor=border}
+  if(result){result.style.display='block';result.style.background=bg;result.style.border=`1px solid ${border}`;result.style.color=color;result.textContent=msg}
+}
+function getYTText(){
+  const {ya,yati,sara}=_ytAssess
+  if(ya===null&&yati===null&&sara===null)return''
+  const labels=[ya===null?'ยา:?':ya?'ยา:ดี':'ยา:ไม่ดี',yati===null?'ญาติ:?':yati?'ญาติ:ดี':'ญาติ:ไม่ดี',sara===null?'สาร:?':sara?'สาร:ไม่ใช้':'สาร:ใช้']
+  const badCount=[ya===false,yati===false,sara===false].filter(Boolean).length
+  const colorLabel=badCount===0?'สีเขียว':badCount===1?'สีเหลือง':'สีแดง'
+  return`\n[ยาดี-ญาติดี-สาร] ${labels.join(' ')} → ${colorLabel}`
+}
 
 function autoFillVillage(name){
   const found=allPatients.find(p=>p.name===name)
@@ -2094,7 +2146,8 @@ async function saveVisitRecord(){
   const rfText=_visitType==='aosomo'&&_redFlags.length>0
     ?`\n[5 Red Flags] พบ: ${_redFlags.map(id=>RF_LABELS[id]).join(', ')}`
     :''
-  const fullNote=(note+oasText+rfText).trim()
+  const ytText=_visitType==='aosomo'?getYTText():''
+  const fullNote=(note+oasText+rfText+ytText).trim()
   try{
     const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer})
     if(error)throw error
