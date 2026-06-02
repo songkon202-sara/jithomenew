@@ -2043,7 +2043,7 @@ async function openModal(id){
         <span style="font-size:16px">${p.consent_given?'✅':'⚠️'}</span>
         <div>
           <div style="font-size:10px;color:var(--text3);font-weight:600">ความยินยอม PDPA</div>
-          <div style="font-size:12px;font-weight:700;color:${p.consent_given?'#15803d':'#b91c1c'}">${p.consent_given?`ยินยอมแล้ว${p.consent_date?' · '+thDate(p.consent_date):'`:'ยังไม่ได้รับความยินยอม'}</div>
+          <div style="font-size:12px;font-weight:700;color:${p.consent_given?'#15803d':'#b91c1c'}">${p.consent_given?('ยินยอมแล้ว'+(p.consent_date?' · '+thDate(p.consent_date):'')):'ยังไม่ได้รับความยินยอม'}</div>
         </div>
         ${canDo('record')&&!p.consent_given?`<button onclick="giveConsent(${p.id})" style="margin-left:4px;padding:4px 8px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;flex-shrink:0">รับยินยอม</button>`:''}
       </div>
