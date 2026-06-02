@@ -1222,6 +1222,48 @@ async function importStaffDirFile(input){
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
 
+async function mergeAndSavePatients(records, confirmMsg){
+  if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return false}
+  if(!confirm(confirmMsg))return false
+  // fetch existing patients to merge
+  const{data:existing}=await sb.from('patients').select('id,name,village,note,national_id,disease_code,disease_name,visit_interval,inject_interval,medication_name')
+  const exMap={}
+  existing?.forEach(p=>{exMap[p.name]=p})
+  const toInsert=[]
+  const toUpdate=[]
+  for(const rec of records){
+    const ex=exMap[rec.name]
+    if(!ex){toInsert.push(rec)}
+    else{
+      // fill only empty fields, keep existing data
+      const upd={
+        village:ex.village||rec.village||'',
+        note:ex.note||rec.note||'',
+        national_id:ex.national_id||rec.national_id||null,
+        disease_code:ex.disease_code||rec.disease_code||null,
+        disease_name:ex.disease_name||rec.disease_name||null,
+        visit_interval:ex.visit_interval??rec.visit_interval??null,
+        inject_interval:ex.inject_interval??rec.inject_interval??null,
+        medication_name:ex.medication_name||rec.medication_name||null,
+      }
+      toUpdate.push({id:ex.id,...upd})
+    }
+  }
+  const batchSize=50
+  for(let i=0;i<toInsert.length;i+=batchSize){
+    const{error}=await sb.from('patients').insert(toInsert.slice(i,i+batchSize))
+    if(error)throw error
+  }
+  for(const u of toUpdate){
+    const{id,...fields}=u
+    const{error}=await sb.from('patients').update(fields).eq('id',id)
+    if(error)throw error
+  }
+  alert(`✅ นำเข้าสำเร็จ\nใหม่: ${toInsert.length} ราย | อัปเดต: ${toUpdate.length} ราย`)
+  await loadPatients()
+  return true
+}
+
 async function importPatientFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
@@ -1241,18 +1283,7 @@ async function importPatientFile(input){
       inject_interval:parseInt(r[7])||null,
       medication_name:String(r[8]||'').trim()||null,
     })).filter(r=>r.name)
-    if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
-    if(!confirm(`นำเข้า ${records.length} รายชื่อผู้ป่วย ใช่หรือไม่?`))return
-    let done=0
-    const batchSize=50
-    for(let i=0;i<records.length;i+=batchSize){
-      const batch=records.slice(i,i+batchSize)
-      const{error}=await sb.from('patients').upsert(batch,{onConflict:'name',ignoreDuplicates:true})
-      if(error)throw error
-      done+=batch.length
-    }
-    alert(`✅ นำเข้าสำเร็จ ${done} รายชื่อ (รายที่ซ้ำถูกข้ามไป)`)
-    await loadPatients()
+    await mergeAndSavePatients(records,`นำเข้า ${records.length} รายชื่อผู้ป่วย ใช่หรือไม่?`)
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
 
@@ -1288,18 +1319,7 @@ async function importHospitalFile(input){
       if(nid)rec.national_id=nid
       return rec
     }).filter(r=>r.name)
-    if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
-    if(!confirm(`นำเข้า ${records.length} รายชื่อผู้ป่วย (รูปแบบ HOSxP/JHCIS) ใช่หรือไม่?`))return
-    let done=0
-    const batchSize=50
-    for(let i=0;i<records.length;i+=batchSize){
-      const batch=records.slice(i,i+batchSize)
-      const{error}=await sb.from('patients').upsert(batch,{onConflict:'name',ignoreDuplicates:true})
-      if(error)throw error
-      done+=batch.length
-    }
-    alert(`✅ นำเข้าสำเร็จ ${done} รายชื่อ (รายที่ซ้ำถูกข้ามไป)`)
-    await loadPatients()
+    await mergeAndSavePatients(records,`นำเข้า ${records.length} รายชื่อผู้ป่วย (รูปแบบ HOSxP/JHCIS) ใช่หรือไม่?`)
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
 
