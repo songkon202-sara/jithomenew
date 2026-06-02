@@ -37,6 +37,20 @@ let _visitType   = 'aosomo'
 let _oasScores   = {s1:0, s2:0, s3:0}  // OAS: ต่อตนเอง, ต่อผู้อื่น, ต่อทรัพย์สิน
 let _redFlags    = []                   // 5 Red Flags
 let _ytAssess    = {ya:null, yati:null, sara:null} // ยาดี-ญาติดี-สารเสพติด
+let _assess10    = {}                   // แบบติดตาม 10 ด้าน
+
+const ASSESS10_DOMAINS = [
+  {id:'d1',title:'1. ด้านอาการทางจิต',opts:[[1,'ไม่มีอาการ','รู้สึกดี ช่วยตนเองได้ ดำรงชีวิตได้'],[2,'มีบ้าง','พฤติกรรมผิดปกติ ≥10 วัน/เดือน'],[3,'มีมาก','พฤติกรรมผิดปกติ >10 วัน/เดือน']]},
+  {id:'d2',title:'2. ด้านการรับยา',opts:[[1,'สม่ำเสมอ','กินยาตามแพทย์สั่งทุกครั้ง'],[2,'ไม่สม่ำเสมอ','กินยาไม่ครบ แต่ยังกินบางเวลา'],[3,'ไม่กินยา','ไม่รับประทานยาเลย']]},
+  {id:'d3',title:'3. ด้านผู้ดูแล/ญาติ',opts:[[1,'ดี','มีผู้ดูแลในครอบครัว มีศักยภาพ'],[2,'ปานกลาง','มีผู้ดูแล แต่เป็นคนนอกครอบครัว'],[3,'ปรับปรุง','ไม่มีผู้ดูแล หรือดูแลไม่ได้']]},
+  {id:'d4',title:'4. ด้านกิจวัตรประจำวัน',opts:[[1,'ทำได้','ทำด้วยตนเองได้'],[2,'ทำได้บ้าง','ทำได้ แต่ต้องมีคนช่วย'],[3,'ทำไม่ได้','ทำกิจวัตรไม่ได้เลย']]},
+  {id:'d5',title:'5. ด้านการประกอบอาชีพ',opts:[[1,'ทำได้','มีอาชีพ ช่วยตนเองด้านอาชีพได้'],[2,'ทำได้บ้าง','ช่วยตนเองได้ แต่ต้องมีคนกระตุ้น'],[3,'ทำไม่ได้','ประกอบอาชีพไม่ได้เลย']]},
+  {id:'d6',title:'6. ด้านสัมพันธภาพในครอบครัว',opts:[[1,'ดี','ครอบครัวสื่อสารดี ให้กำลังใจ'],[2,'ปานกลาง','สื่อสารได้ แต่มีข้อขัดแย้งบ้าง'],[3,'ปรับปรุง','ครอบครัวมีปัญหา ดูถูก ผู้ป่วยรู้สึกไม่เป็นส่วนหนึ่ง']]},
+  {id:'d7',title:'7. ด้านสิ่งแวดล้อม',opts:[[1,'ดี','มีที่อยู่อาศัยเป็นหลักแหล่ง'],[2,'ปานกลาง','มีที่อยู่ แต่อยู่คนเดียวหรือเป็นครั้งคราว'],[3,'ปรับปรุง','ไม่มีที่อยู่อาศัย ไม่ปลอดภัย']]},
+  {id:'d8',title:'8. ด้านการสื่อสาร',opts:[[1,'ดี','ถ่ายทอดความคิดเห็นกับผู้อื่นได้'],[2,'ปานกลาง','สื่อสารได้บ้างครั้งคราว'],[3,'ปรับปรุง','ไม่พูดคุยกับใครเลย']]},
+  {id:'d9',title:'9. ด้านการเรียนรู้',opts:[[1,'ดี','บอกครั้งเดียวจำได้ ทำตามได้'],[2,'ปานกลาง','ต้องสอนซ้ำๆ จึงทำได้'],[3,'ปรับปรุง','สอนเท่าไรก็ทำไม่ได้']]},
+  {id:'d10',title:'10. ด้านการใช้สารเสพติด (บุหรี่/สุรา/ยาเสพติด)',opts:[[1,'ไม่ใช้','ไม่ใช้สารเสพติดเลย'],[2,'ใช้บ้าง','ใช้บ้าง แต่ไม่ทุกวัน'],[3,'ใช้ประจำ','ใช้ทุกวันหรือแทบทุกวัน']]},
+]
 let currentUser        = null
 let currentRole        = 'viewer'  // admin | staff | aosomo | viewer
 let currentDisplayName = ''
@@ -1893,7 +1907,7 @@ async function saveModalRecord(pid,gc){
 function openVisitForm(type){
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
-  _visitType=type;_visitChecks=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null}
+  _visitType=type;_visitChecks=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={}
   const cl=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
   const nameOpts=allPatients.map(p=>`<option value="${esc(p.name)}" data-village="${esc(p.village||'')}">`).join('')
   ct.innerHTML=`
@@ -1950,7 +1964,31 @@ function openVisitForm(type){
       </div>
     </div>`).join('')}
     <div id="oas-detail" style="font-size:11px;color:var(--text3);padding:8px 10px;background:#fff;border-radius:6px;border:1px solid var(--border);display:none"></div>
+  </div>
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <div style="font-size:13px;font-weight:700">📋 แบบติดตาม 10 ด้าน</div>
+        <div style="font-size:11px;color:var(--text3)">แบบติดตามผู้ป่วยจิตเวชเรื้อรังในชุมชน (คะแนน 10–30)</div>
+      </div>
+      <span id="a10-badge" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ยังไม่ประเมิน</span>
+    </div>
+    ${ASSESS10_DOMAINS.map(({id,title,opts})=>`
+    <div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--text1)">${title}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
+        ${opts.map(([score,label,desc])=>`
+        <button type="button" id="a10-${id}-${score}" onclick="setAssess10('${id}',${score})"
+          style="padding:6px 4px;border-radius:8px;border:2px solid #e5e7eb;background:#f9fafb;color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;line-height:1.3;text-align:center">
+          <div style="font-size:13px;font-weight:800;margin-bottom:2px">${score}</div>
+          <div style="font-size:10px;font-weight:700">${label}</div>
+          <div style="font-size:9px;opacity:.7;margin-top:1px">${desc.length>18?desc.slice(0,16)+'…':desc}</div>
+        </button>`).join('')}
+      </div>
+    </div>`).join('')}
+    <div id="a10-result" style="display:none;margin-top:4px;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;text-align:center"></div>
   </div>`:''}
+
   ${type==='aosomo'?`
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -2120,6 +2158,44 @@ function getYTText(){
   const colorLabel=badCount===0?'สีเขียว':badCount===1?'สีเหลือง':'สีแดง'
   return`\n[ยาดี-ญาติดี-สาร] ${labels.join(' ')} → ${colorLabel}`
 }
+function setAssess10(domainId, score){
+  _assess10[domainId]=score
+  // อัปเดตปุ่ม
+  for(let s=1;s<=3;s++){
+    const btn=document.getElementById(`a10-${domainId}-${s}`)
+    if(!btn)continue
+    const active=s===score
+    const colors=s===1?['#dcfce7','#16a34a','#15803d']:s===2?['#fef9c3','#ca8a04','#92400e']:['#fef2f2','#f87171','#b91c1c']
+    btn.style.background=active?colors[0]:'#f9fafb'
+    btn.style.borderColor=active?colors[1]:'#e5e7eb'
+    btn.style.color=active?colors[2]:'var(--text2)'
+  }
+  // คำนวณคะแนนรวม
+  const filled=Object.keys(_assess10).length
+  const total=Object.values(_assess10).reduce((a,b)=>a+b,0)
+  const badge=document.getElementById('a10-badge')
+  const result=document.getElementById('a10-result')
+  if(filled<10){
+    if(badge){badge.textContent=`${filled}/10 ด้าน`;badge.style.background='#f3f4f6';badge.style.color='var(--text3)'}
+    return
+  }
+  let bg,border,color,level
+  if(total<=14){bg='#dcfce7';border='#86efac';color='#15803d';level='🟢 ผ่านเกณฑ์ดี'}
+  else if(total<=19){bg='#fef9c3';border='#fde047';color='#92400e';level='🟡 ต้องติดตามต่อเนื่อง'}
+  else{bg='#fef2f2';border='#fca5a5';color='#b91c1c';level='🔴 ต้องการความช่วยเหลือเร่งด่วน';const r=document.getElementById('v-refer');if(r)r.checked=true}
+  if(badge){badge.textContent=`รวม ${total} คะแนน · ${level}`;badge.style.background=bg;badge.style.color=color}
+  if(result){result.style.display='block';result.style.background=bg;result.style.border=`1px solid ${border}`;result.style.color=color;result.textContent=`คะแนนรวม ${total}/30 — ${level}`}
+}
+function getAssess10Text(){
+  if(!Object.keys(_assess10).length)return''
+  const total=Object.values(_assess10).reduce((a,b)=>a+b,0)
+  const level=total<=14?'ผ่านเกณฑ์ดี':total<=19?'ต้องติดตาม':'ต้องการความช่วยเหลือเร่งด่วน'
+  const details=ASSESS10_DOMAINS.map(({id,title,opts})=>{
+    const s=_assess10[id];if(!s)return null
+    const opt=opts.find(o=>o[0]===s);return`${title.split('.')[0]}=${s}(${opt?opt[1]:'?'})`
+  }).filter(Boolean).join(' ')
+  return`\n[แบบ10ด้าน] รวม ${total}/30 → ${level} | ${details}`
+}
 
 function autoFillVillage(name){
   const found=allPatients.find(p=>p.name===name)
@@ -2147,7 +2223,8 @@ async function saveVisitRecord(){
     ?`\n[5 Red Flags] พบ: ${_redFlags.map(id=>RF_LABELS[id]).join(', ')}`
     :''
   const ytText=_visitType==='aosomo'?getYTText():''
-  const fullNote=(note+oasText+rfText+ytText).trim()
+  const a10Text=_visitType==='staff'?getAssess10Text():''
+  const fullNote=(note+oasText+rfText+ytText+a10Text).trim()
   try{
     const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer})
     if(error)throw error
