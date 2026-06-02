@@ -279,6 +279,10 @@ function renderDashboard(el) {
 }
 
 // ─── Patients ────────────────────────────────────────────────────
+const PT_PAGE_SIZE = 50
+let _ptFiltered = []
+let _ptShown = 0
+
 function renderPatients(el) {
   const pts = allPatients
   const villages=[...new Set(pts.map(p=>p.village).filter(Boolean))].sort()
@@ -302,20 +306,31 @@ function renderPatients(el) {
     <button class="filter-chip active" data-vf="all" onclick="setVF('all')">ทุกหมู่บ้าน</button>
     ${villages.map(v=>`<button class="filter-chip" data-vf="${esc(v)}" onclick="setVF('${esc(v)}')">${esc(v)}</button>`).join('')}
   </div>
-  <div id="pt-list">${pts.map(patientCard).join('')}</div>
+  <div id="pt-list"></div>
   </div>`
+  filterPts()
 }
 function filterPts() {
   const q=(document.getElementById('pt-search')?.value||'').toLowerCase()
   const gf=window._gf||'all', vf=window._vf||'all'
-  const out=allPatients.filter(p=>{
+  _ptFiltered=allPatients.filter(p=>{
     if(gf!=='all'&&p.group_color!==gf)return false
     if(vf!=='all'&&p.village!==vf)return false
     if(q&&!(p.name||'').toLowerCase().includes(q))return false
     return true
   })
+  _ptShown=0
+  renderPtPage()
+}
+function renderPtPage(){
   const list=document.getElementById('pt-list')
-  if(list)list.innerHTML=out.length?out.map(patientCard).join(''):'<div class="empty"><p>ไม่พบผู้ป่วย</p></div>'
+  if(!list)return
+  if(!_ptFiltered.length){list.innerHTML='<div class="empty"><p>ไม่พบผู้ป่วย</p></div>';return}
+  const chunk=_ptFiltered.slice(0,_ptShown+PT_PAGE_SIZE)
+  _ptShown=chunk.length
+  const hasMore=_ptShown<_ptFiltered.length
+  list.innerHTML=chunk.map(patientCard).join('')+
+    (hasMore?`<div style="text-align:center;padding:16px"><button onclick="renderPtPage()" style="padding:10px 28px;border-radius:10px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">โหลดเพิ่ม (${_ptFiltered.length-_ptShown} รายการ)</button></div>`:'')
 }
 function setGF(gf){window._gf=gf;document.querySelectorAll('[data-gf]').forEach(e=>e.classList.toggle('active',e.dataset.gf===gf));filterPts()}
 function setVF(vf){window._vf=vf;document.querySelectorAll('[data-vf]').forEach(e=>e.classList.toggle('active',e.dataset.vf===vf));filterPts()}
