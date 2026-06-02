@@ -518,8 +518,8 @@ async function renderVisit(el) {
   <div class="page-title">เยี่ยมบ้าน</div>
   <div class="page-sub">บันทึกการเยี่ยมผู้ป่วยจิตเวช</div>
   <div style="display:flex;gap:10px;margin-bottom:16px">
-    ${canDo('record')?`<button onclick="openVisitForm('staff')" class="btn btn-primary" style="flex:1">🏥 เยี่ยม (เจ้าหน้าที่)</button>`:''}
-    <button onclick="openVisitForm('aosomo')" class="btn ${canDo('record')?'btn-outline':'btn-primary'}" style="flex:1;${canDo('record')?'border-color:var(--primary);color:var(--primary)':''}">🏡 เยี่ยม (อสม.)</button>
+    ${currentRole!=='aosomo'?`<button onclick="openVisitForm('staff')" class="btn btn-primary" style="flex:1">🏥 เยี่ยม (เจ้าหน้าที่)</button>`:''}
+    ${currentRole!=='staff'?`<button onclick="openVisitForm('aosomo')" class="btn ${currentRole==='aosomo'?'btn-primary':'btn-outline'}" style="flex:1;${currentRole!=='aosomo'?'border-color:var(--primary);color:var(--primary)':''}">🏡 เยี่ยม (อสม.)</button>`:''}
   </div>
   <div class="tab-bar">
     <button class="tab-btn active" onclick="setVTab('all',this)">ทั้งหมด (${visits.length})</button>
