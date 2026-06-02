@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   try {
-    const { message, groupId } = await req.json()
+    const { message, groupId, token: tokenOverride } = await req.json()
 
     const sb = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -23,8 +23,8 @@ serve(async (req) => {
       .in('setting_key', ['line_token', 'line_group_id'])
 
     const cfg = Object.fromEntries((data || []).map((d: any) => [d.setting_key, d.setting_value]))
-    const token   = cfg.line_token
-    const target  = groupId || cfg.line_group_id
+    const token  = tokenOverride || cfg.line_token
+    const target = groupId || cfg.line_group_id
 
     if (!token)  throw new Error('ยังไม่ได้ตั้งค่า LINE Token')
     if (!target) throw new Error('ยังไม่ได้ตั้งค่า LINE Group ID')

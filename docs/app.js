@@ -1161,8 +1161,10 @@ async function renderAdmin(el) {
         <div style="width:32px;height:32px;background:#ea580c;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">🏥</div>
         <div><div style="font-size:13px;font-weight:700;color:#9a3412">กลุ่ม รพ. แม่ข่าย (รับเคสส่งต่อเท่านั้น)</div><div style="font-size:11px;color:var(--text3)">แจ้งเตือนเมื่อเจ้าหน้าที่กดส่งต่อ รพ. — LINE และ/หรือ Telegram</div></div>
       </div>
-      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">LINE Token (กลุ่ม รพ. แม่ข่าย)</div>
-      <input id="refer-line-token-input" type="text" value="${esc(settings.refer_line_token||'')}" placeholder="LINE Channel Access Token ของกลุ่ม รพ." style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">LINE Group ID (กลุ่ม รพ. แม่ข่าย) <span style="color:var(--red)">*</span></div>
+      <input id="refer-line-groupid-input" type="text" value="${esc(settings.refer_line_group_id||'')}" placeholder="C... หรือ G... (Group ID ของกลุ่ม LINE รพ.)" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">LINE Token <span style="font-weight:400;color:var(--text3)">(ถ้าใช้ LINE OA คนละอัน — ไม่จำเป็นหากใช้ OA เดิม)</span></div>
+      <input id="refer-line-token-input" type="text" value="${esc(settings.refer_line_token||'')}" placeholder="เว้นว่างหากใช้ LINE OA เดิม" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">Telegram Chat ID (กลุ่ม รพ. แม่ข่าย)</div>
       <input id="refer-tg-chatid-input" type="text" value="${esc(settings.refer_telegram_chatid||'')}" placeholder="-1001234567890" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">Telegram Bot Token</div>
@@ -1572,19 +1574,22 @@ async function sendLineVisitReport(visitData){
 async function sendReferralToHospital(visitData){
   try{
     const s=await getSettings()
+    const lineGroupId=s.refer_line_group_id||''
     const lineToken=s.refer_line_token||''
     const tgToken=s.refer_telegram_token||''
     const tgChatId=s.refer_telegram_chatid||''
-    if(!lineToken&&(!tgToken||!tgChatId))return
+    if(!lineGroupId&&(!tgToken||!tgChatId))return
     const oasMax=Math.max(visitData.oasScores?.s1||0,visitData.oasScores?.s2||0,visitData.oasScores?.s3||0)
     const oasLine=oasMax>0?`\n📊 OAS ระดับ ${oasMax} — ต่อตนเอง:${visitData.oasScores.s1} ต่อผู้อื่น:${visitData.oasScores.s2} ต่อทรัพย์สิน:${visitData.oasScores.s3}`:''
     const a10Line=visitData.assess10Total?`\n📋 แบบ10ด้าน: ${visitData.assess10Total}/30 — ${visitData.assess10Level}`+
       (visitData.assess10Detail?` (${visitData.assess10Detail})`:''):''
     const rfLine=visitData.redFlags?.length?`\n🚩 Red Flags: ${visitData.redFlags.join(', ')}`:''
-    const noteLine=visitData.note?`\n📝 บันทึก: ${visitData.note.split('\n')[0]}`:'';
+    const noteLine=visitData.note?`\n📝 บันทึก: ${visitData.note.split('\n')[0]}`:''
     const msg=`🏥 ใบส่งต่อ รพ. แม่ข่าย\n━━━━━━━━━━━━━━━\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}  🏥 เจ้าหน้าที่: ${visitData.visitor||'-'}\n✅ รายการผ่าน: ${visitData.score} ข้อ${oasLine}${a10Line}${rfLine}${noteLine}\n━━━━━━━━━━━━━━━\n⚠️ ต้องการส่งต่อ/รายงานเร่งด่วน — ${hospitalName}`
-    if(lineToken){
-      await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:msg,refer_token:lineToken})})
+    if(lineGroupId){
+      const body={message:msg,groupId:lineGroupId}
+      if(lineToken)body.token=lineToken
+      await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
     }
     if(tgToken&&tgChatId){
       await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:msg})})
@@ -1593,6 +1598,7 @@ async function sendReferralToHospital(visitData){
 }
 
 async function saveReferSettings(){
+  const lineGroupId=(document.getElementById('refer-line-groupid-input')?.value||'').trim()
   const lineToken=(document.getElementById('refer-line-token-input')?.value||'').trim()
   const tgChatId=(document.getElementById('refer-tg-chatid-input')?.value||'').trim()
   const tgToken=(document.getElementById('refer-tg-token-input')?.value||'').trim()
@@ -1600,7 +1606,7 @@ async function saveReferSettings(){
   const status=document.getElementById('refer-status')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   const errs=[]
-  const saves=[['refer_line_token',lineToken],['refer_telegram_chatid',tgChatId],['refer_telegram_token',tgToken]]
+  const saves=[['refer_line_group_id',lineGroupId],['refer_line_token',lineToken],['refer_telegram_chatid',tgChatId],['refer_telegram_token',tgToken]]
   for(const[k,v] of saves){
     if(v){const{error}=await sb.from('app_settings').upsert({setting_key:k,setting_value:v},{onConflict:'setting_key'});if(error)errs.push(error.message)}
   }
@@ -1610,18 +1616,23 @@ async function saveReferSettings(){
 }
 
 async function testReferNotify(){
+  const lineGroupId=(document.getElementById('refer-line-groupid-input')?.value||'').trim()
   const lineToken=(document.getElementById('refer-line-token-input')?.value||'').trim()
   const tgToken=(document.getElementById('refer-tg-token-input')?.value||'').trim()
   const tgChatId=(document.getElementById('refer-tg-chatid-input')?.value||'').trim()
   const btn=document.getElementById('refer-test-btn')
   const status=document.getElementById('refer-status')
-  if(!lineToken&&(!tgToken||!tgChatId)){status.style.color='var(--red)';status.textContent='❌ กรุณากรอก LINE Token หรือ Telegram ก่อน';return}
+  if(!lineGroupId&&(!tgToken||!tgChatId)){status.style.color='var(--red)';status.textContent='❌ กรุณากรอก LINE Group ID หรือ Telegram ก่อน';return}
   btn.disabled=true;btn.textContent='กำลังส่ง...'
   const testMsg=`🏥 ทดสอบ — ใบส่งต่อ รพ. แม่ข่าย\n👤 ผู้ป่วยทดสอบ (หมู่ 1)\n📅 ${todayISO()}  🏥 เจ้าหน้าที่: admin\n✅ รายการผ่าน: 6 ข้อ\n📊 OAS ระดับ 2\n📋 แบบ10ด้าน: 22/30 — ต้องติดตาม\n⚠️ ต้องการส่งต่อ/รายงานเร่งด่วน — ${hospitalName}`
   const errs=[]
-  if(lineToken){
-    try{await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:testMsg,refer_token:lineToken})})}
-    catch(e){errs.push('LINE: '+e.message)}
+  if(lineGroupId){
+    try{
+      const body={message:testMsg,groupId:lineGroupId}
+      if(lineToken)body.token=lineToken
+      const res=await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
+      const d=await res.json();if(d.error)errs.push('LINE: '+d.error)
+    }catch(e){errs.push('LINE: '+e.message)}
   }
   if(tgToken&&tgChatId){
     try{
