@@ -1156,6 +1156,23 @@ async function renderAdmin(el) {
         <label class="toggle"><input type="checkbox" ${settings.cloud_backup==='1'?'checked':''} onchange="toggleSetting('cloud_backup',this.checked)"><span class="toggle-slider"></span></label>
       </div>
     </div>
+    <div style="background:#fff7ed;border-radius:10px;padding:12px 14px;margin-top:10px;border:1.5px solid #fed7aa">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="width:32px;height:32px;background:#ea580c;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">🏥</div>
+        <div><div style="font-size:13px;font-weight:700;color:#9a3412">กลุ่ม รพ. แม่ข่าย (รับเคสส่งต่อเท่านั้น)</div><div style="font-size:11px;color:var(--text3)">แจ้งเตือนเมื่อเจ้าหน้าที่กดส่งต่อ รพ. — LINE และ/หรือ Telegram</div></div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">LINE Token (กลุ่ม รพ. แม่ข่าย)</div>
+      <input id="refer-line-token-input" type="text" value="${esc(settings.refer_line_token||'')}" placeholder="LINE Channel Access Token ของกลุ่ม รพ." style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">Telegram Chat ID (กลุ่ม รพ. แม่ข่าย)</div>
+      <input id="refer-tg-chatid-input" type="text" value="${esc(settings.refer_telegram_chatid||'')}" placeholder="-1001234567890" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">Telegram Bot Token</div>
+      <input id="refer-tg-token-input" type="text" value="${esc(settings.refer_telegram_token||'')}" placeholder="123456789:AABBCCDDaabbccddeeff" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
+      <div style="display:flex;gap:8px">
+        <button onclick="saveReferSettings()" id="refer-save-btn" style="flex:1;padding:7px;background:#ea580c;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก</button>
+        <button onclick="testReferNotify()" id="refer-test-btn" style="flex:1;padding:7px;background:#fff;color:#ea580c;border:1.5px solid #ea580c;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📨 ทดสอบส่ง</button>
+      </div>
+      <div id="refer-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
+    </div>
   </div>
   ${canDo('manage_users')?`
   <div class="form-section">
@@ -1550,6 +1567,71 @@ async function sendLineVisitReport(visitData){
     const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
     await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:msg})})
   }catch(e){console.warn('LINE notify error:',e)}
+}
+
+async function sendReferralToHospital(visitData){
+  try{
+    const s=await getSettings()
+    const lineToken=s.refer_line_token||''
+    const tgToken=s.refer_telegram_token||''
+    const tgChatId=s.refer_telegram_chatid||''
+    if(!lineToken&&(!tgToken||!tgChatId))return
+    const oasMax=Math.max(visitData.oasScores?.s1||0,visitData.oasScores?.s2||0,visitData.oasScores?.s3||0)
+    const oasLine=oasMax>0?`\n📊 OAS ระดับ ${oasMax} — ต่อตนเอง:${visitData.oasScores.s1} ต่อผู้อื่น:${visitData.oasScores.s2} ต่อทรัพย์สิน:${visitData.oasScores.s3}`:''
+    const a10Line=visitData.assess10Total?`\n📋 แบบ10ด้าน: ${visitData.assess10Total}/30 — ${visitData.assess10Level}`+
+      (visitData.assess10Detail?` (${visitData.assess10Detail})`:''):''
+    const rfLine=visitData.redFlags?.length?`\n🚩 Red Flags: ${visitData.redFlags.join(', ')}`:''
+    const noteLine=visitData.note?`\n📝 บันทึก: ${visitData.note.split('\n')[0]}`:'';
+    const msg=`🏥 ใบส่งต่อ รพ. แม่ข่าย\n━━━━━━━━━━━━━━━\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}  🏥 เจ้าหน้าที่: ${visitData.visitor||'-'}\n✅ รายการผ่าน: ${visitData.score} ข้อ${oasLine}${a10Line}${rfLine}${noteLine}\n━━━━━━━━━━━━━━━\n⚠️ ต้องการส่งต่อ/รายงานเร่งด่วน — ${hospitalName}`
+    if(lineToken){
+      await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:msg,refer_token:lineToken})})
+    }
+    if(tgToken&&tgChatId){
+      await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:msg})})
+    }
+  }catch(e){console.warn('Referral notify error:',e)}
+}
+
+async function saveReferSettings(){
+  const lineToken=(document.getElementById('refer-line-token-input')?.value||'').trim()
+  const tgChatId=(document.getElementById('refer-tg-chatid-input')?.value||'').trim()
+  const tgToken=(document.getElementById('refer-tg-token-input')?.value||'').trim()
+  const btn=document.getElementById('refer-save-btn')
+  const status=document.getElementById('refer-status')
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  const errs=[]
+  const saves=[['refer_line_token',lineToken],['refer_telegram_chatid',tgChatId],['refer_telegram_token',tgToken]]
+  for(const[k,v] of saves){
+    if(v){const{error}=await sb.from('app_settings').upsert({setting_key:k,setting_value:v},{onConflict:'setting_key'});if(error)errs.push(error.message)}
+  }
+  btn.disabled=false;btn.textContent='💾 บันทึก'
+  if(errs.length){status.style.color='var(--red)';status.textContent='❌ '+errs.join(', ')}
+  else{status.style.color='var(--green)';status.textContent='✅ บันทึกสำเร็จ'}
+}
+
+async function testReferNotify(){
+  const lineToken=(document.getElementById('refer-line-token-input')?.value||'').trim()
+  const tgToken=(document.getElementById('refer-tg-token-input')?.value||'').trim()
+  const tgChatId=(document.getElementById('refer-tg-chatid-input')?.value||'').trim()
+  const btn=document.getElementById('refer-test-btn')
+  const status=document.getElementById('refer-status')
+  if(!lineToken&&(!tgToken||!tgChatId)){status.style.color='var(--red)';status.textContent='❌ กรุณากรอก LINE Token หรือ Telegram ก่อน';return}
+  btn.disabled=true;btn.textContent='กำลังส่ง...'
+  const testMsg=`🏥 ทดสอบ — ใบส่งต่อ รพ. แม่ข่าย\n👤 ผู้ป่วยทดสอบ (หมู่ 1)\n📅 ${todayISO()}  🏥 เจ้าหน้าที่: admin\n✅ รายการผ่าน: 6 ข้อ\n📊 OAS ระดับ 2\n📋 แบบ10ด้าน: 22/30 — ต้องติดตาม\n⚠️ ต้องการส่งต่อ/รายงานเร่งด่วน — ${hospitalName}`
+  const errs=[]
+  if(lineToken){
+    try{await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:testMsg,refer_token:lineToken})})}
+    catch(e){errs.push('LINE: '+e.message)}
+  }
+  if(tgToken&&tgChatId){
+    try{
+      const res=await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:testMsg})})
+      const d=await res.json();if(!d.ok)errs.push('Telegram: '+(d.description||'ส่งไม่สำเร็จ'))
+    }catch(e){errs.push('Telegram: '+e.message)}
+  }
+  btn.disabled=false;btn.textContent='📨 ทดสอบส่ง'
+  if(errs.length){status.style.color='var(--red)';status.textContent='❌ '+errs.join(' | ')}
+  else{status.style.color='var(--green)';status.textContent='✅ ส่งสำเร็จ! ตรวจสอบกลุ่ม รพ. แม่ข่าย'}
 }
 
 async function saveTelegramSettings(){
@@ -2503,6 +2585,13 @@ async function saveVisitRecord(){
     const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer})
     if(error)throw error
     sendLineVisitReport({patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,score:_visitChecks.length,refer})
+    if(refer&&_visitType==='staff'){
+      const RF_LABELS2={rf1:'ไม่หลับไม่นอน',rf2:'เดินไปเดินมา',rf3:'พูดจาคนเดียว',rf4:'หงุดหงิดฉุนเฉียว',rf5:'หวาดระแวง'}
+      const a10Total=Object.keys(_assess10).length?Object.values(_assess10).reduce((a,b)=>a+b,0):0
+      const a10Level=a10Total?a10Total<=14?'ผ่านเกณฑ์ดี':a10Total<=19?'ต้องติดตาม':'ต้องการความช่วยเหลือเร่งด่วน':''
+      const a10Detail=ASSESS10_DOMAINS.map(({id,opts})=>{const s=_assess10[id];if(!s)return null;const o=opts.find(x=>x[0]===s);return`${id}=${s}(${o?o[1]:'?'})`}).filter(Boolean).join(' ')
+      sendReferralToHospital({patient_name:name,village,visit_date:date,visitor,score:_visitChecks.length,oasScores:{..._oasScores},redFlags:_redFlags.map(id=>RF_LABELS2[id]),assess10Total:a10Total||null,assess10Level:a10Level,assess10Detail:a10Detail,note})
+    }
     closeVisitModal()
     if(location.hash==='#visit')navigate('visit')
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
