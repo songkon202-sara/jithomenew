@@ -985,9 +985,8 @@ async function createAosomoAccount(){
     const tmp=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false}})
     const{data,error}=await tmp.auth.signUp({email,password})
     if(error){
-      if(error.message?.includes('already registered'))
-        result.style.color='var(--red)';result.textContent='❌ เบอร์โทรนี้มีบัญชีอยู่แล้ว'
-      else {result.style.color='var(--red)';result.textContent='❌ '+error.message}
+      if(error.message?.includes('already registered')){result.style.color='var(--red)';result.textContent='❌ เบอร์โทรนี้มีบัญชีอยู่แล้ว'}
+      else{result.style.color='var(--red)';result.textContent='❌ '+error.message}
       btn.disabled=false;btn.textContent='🏡 สร้างบัญชี อสม.';return
     }
     const uid=data?.user?.id
