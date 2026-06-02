@@ -514,6 +514,32 @@ async function renderOverview(el) {
 async function renderVisit(el) {
   const visits=await getVisits()
   window._allVisits=visits
+  // โหลด referrals สำหรับ staff/admin
+  let referralHtml=''
+  if(canDo('record')){
+    const{data:refs}=await sb.from('home_visits')
+      .select('patient_name,village,visit_date,visitor,note')
+      .eq('refer',true).eq('visit_type','aosomo')
+      .order('visit_date',{ascending:false}).limit(20)
+    const staffVisitedNames=new Set(visits.filter(v=>v.visit_type==='staff').map(v=>v.patient_name))
+    const pending=(refs||[]).filter(r=>!staffVisitedNames.has(r.patient_name))
+    if(pending.length){
+      referralHtml=`<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:10px">⚠️ รายการส่งต่อจาก อสม. รอเจ้าหน้าที่ลงเยี่ยม (${pending.length} ราย)</div>
+        ${pending.map(r=>`<div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #fecaca;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div style="min-width:0">
+            <div style="font-size:13px;font-weight:700;color:var(--text1)">${esc(r.patient_name)}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(r.village||'')} · อสม.${esc(r.visitor||'')} · ${r.visit_date||''}</div>
+            ${r.note?`<div style="font-size:11px;color:#b91c1c;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.note.split('\n')[0])}</div>`:''}
+          </div>
+          <button onclick="openVisitFormFor('${esc(r.patient_name)}','${esc(r.village||'')}')"
+            style="flex-shrink:0;padding:7px 12px;background:#b91c1c;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
+            🏥 ลงเยี่ยม
+          </button>
+        </div>`).join('')}
+      </div>`
+    }
+  }
   el.innerHTML=`<div class="page">
   <div class="page-title">เยี่ยมบ้าน</div>
   <div class="page-sub">บันทึกการเยี่ยมผู้ป่วยจิตเวช</div>
@@ -521,6 +547,7 @@ async function renderVisit(el) {
     ${currentRole!=='aosomo'?`<button onclick="openVisitForm('staff')" class="btn btn-primary" style="flex:1">🏥 เยี่ยม (เจ้าหน้าที่)</button>`:''}
     ${currentRole!=='staff'?`<button onclick="openVisitForm('aosomo')" class="btn ${currentRole==='aosomo'?'btn-primary':'btn-outline'}" style="flex:1;${currentRole!=='aosomo'?'border-color:var(--primary);color:var(--primary)':''}">🏡 เยี่ยม (อสม.)</button>`:''}
   </div>
+  ${referralHtml}
   <div class="tab-bar">
     <button class="tab-btn active" onclick="setVTab('all',this)">ทั้งหมด (${visits.length})</button>
     <button class="tab-btn" onclick="setVTab('staff',this)">เจ้าหน้าที่ (${visits.filter(v=>v.visit_type==='staff').length})</button>
@@ -528,6 +555,14 @@ async function renderVisit(el) {
   </div>
   <div id="visit-list">${renderVisitList(visits)}</div>
   </div>`
+}
+function openVisitFormFor(name,village){
+  openVisitForm('staff')
+  setTimeout(()=>{
+    const n=document.getElementById('v-name');if(n)n.value=name
+    const sel=document.getElementById('v-village')
+    if(sel)for(const o of sel.options)if(o.value===village){o.selected=true;break}
+  },50)
 }
 function renderVisitList(visits){
   if(!visits.length)return'<div class="empty"><p>ไม่มีบันทึกการเยี่ยมบ้าน</p></div>'
