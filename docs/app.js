@@ -139,7 +139,7 @@ function patientCard(p) {
     <div class="pc-top">
       <div>
         <div class="pc-name">${esc(p.name)}</div>
-        <div class="pc-village">${esc(p.village||'')}</div>
+        <div class="pc-village">${esc(p.village||'')}${p.house_no?` · ${esc(p.house_no)}`:''}</div>
       </div>
       <span class="days-chip ${chip.cls}">${chip.label}</span>
     </div>
@@ -1226,7 +1226,7 @@ async function mergeAndSavePatients(records, confirmMsg){
   if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return false}
   if(!confirm(confirmMsg))return false
   // fetch existing patients to merge
-  const{data:existing}=await sb.from('patients').select('id,name,village,note,national_id,disease_code,disease_name,visit_interval,inject_interval,medication_name')
+  const{data:existing}=await sb.from('patients').select('id,name,house_no,village,note,national_id,disease_code,disease_name,visit_interval,inject_interval,medication_name')
   const exMap={}
   existing?.forEach(p=>{exMap[p.name]=p})
   // deduplicate records by name (last row wins within file)
@@ -1241,6 +1241,7 @@ async function mergeAndSavePatients(records, confirmMsg){
     else{
       // fill only empty fields, keep existing data
       const upd={
+        house_no:ex.house_no||rec.house_no||'',
         village:ex.village||rec.village||'',
         note:ex.note||rec.note||'',
         national_id:ex.national_id||rec.national_id||null,
@@ -1278,14 +1279,15 @@ async function importPatientFile(input){
     if(rows.length<2){alert('ไม่พบข้อมูล (ต้องมีแถว header และข้อมูลอย่างน้อย 1 แถว)');return}
     const records=rows.slice(1).filter(r=>r[0]).map(r=>({
       name:String(r[0]||'').trim(),
-      village:String(r[1]||'').trim(),
-      note:String(r[2]||'').trim(),
-      national_id:String(r[3]||'').replace(/\D/g,'').slice(0,13)||null,
-      disease_code:String(r[4]||'').trim()||null,
-      disease_name:String(r[5]||'').trim()||null,
-      visit_interval:parseInt(r[6])||null,
-      inject_interval:parseInt(r[7])||null,
-      medication_name:String(r[8]||'').trim()||null,
+      house_no:String(r[1]||'').trim(),
+      village:String(r[2]||'').trim()||'หมู่ 1',
+      note:String(r[3]||'').trim(),
+      national_id:String(r[4]||'').replace(/\D/g,'').slice(0,13)||null,
+      disease_code:String(r[5]||'').trim()||null,
+      disease_name:String(r[6]||'').trim()||null,
+      visit_interval:parseInt(r[7])||null,
+      inject_interval:parseInt(r[8])||null,
+      medication_name:String(r[9]||'').trim()||null,
     })).filter(r=>r.name)
     await mergeAndSavePatients(records,`นำเข้า ${records.length} รายชื่อผู้ป่วย ใช่หรือไม่?`)
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
@@ -1305,11 +1307,11 @@ async function importHospitalFile(input){
       const firstName=String(r[2]||'').trim()
       const lastName=String(r[3]||'').trim()
       const name=firstName+(lastName?' '+lastName:'')
-      const addrStr=String(r[6]||'')
-      const m=addrStr.match(/หมู่(?:ที่)?\s*(\d+)/)
-      const village=m?`หมู่ ${m[1]}`:''
+      const house_no=String(r[6]||'').trim()
       const nid=String(r[4]||'').replace(/\D/g,'').slice(0,13)||null
       const namemooban=String(r[7]||'').trim()
+      const mMatch=namemooban.match(/หมู่(?:ที่)?\s*(\d+)/)
+      const village=mMatch?`หมู่ ${mMatch[1]}`:''
       const subdistrict=String(r[8]||'').trim()
       const district=String(r[9]||'').trim()
       const province=String(r[10]||'').trim()
@@ -1319,7 +1321,7 @@ async function importHospitalFile(input){
       const note=[...new Set(addressParts)].join(' ')
       const colorTh=String(r[13]||'').trim()
       const group_color=colorMap[colorTh]||'yellow'
-      const rec={name,village,note,group_color,disease_code,disease_name}
+      const rec={name,house_no,village,note,group_color,disease_code,disease_name}
       if(nid)rec.national_id=nid
       return rec
     }).filter(r=>r.name)
@@ -1626,12 +1628,12 @@ function downloadTemplate(type){
       'นายประสิทธิ์ ทองดี,หมู่ 3,0856789012'
     filename='ตัวอย่าง_รายชื่ออสม.csv'
   } else {
-    csv='ชื่อ-นามสกุล,หมู่บ้าน,หมายเหตุ,เลขบัตรประชาชน,รหัสโรค,ชื่อโรค,เยี่ยมบ้านทุก(เดือน),ฉีดยาทุก(เดือน),รายการยาที่ฉีด\n'+
-      'นายสมศักดิ์ ใจเย็น,หมู่ 1,โรคจิตเภท ติดตามทุกเดือน,1100100123456,F20,Schizophrenia,1,1,Invega 100mg\n'+
-      'นางสาวอรุณี สว่างจิต,หมู่ 2,,1100200234567,F102,Alcohol Dependence,1,3,DEPO-A\n'+
-      'นายวิชัย มั่นคง,หมู่ 3,ผู้ดูแลคือนางสมศรี โทร 089-xxx,,F150,,1,,\n'+
-      'นางประภา รุ่งเรือง,หมู่ 1,,,,,,,\n'+
-      'นายธนพล ใจกว้าง,หมู่ 4,แพ้ยา Haloperidol,,F152,,1,1,Flupentixol 40mg'
+    csv='ชื่อ-นามสกุล,บ้านเลขที่,หมู่บ้าน,หมายเหตุ,เลขบัตรประชาชน,รหัสโรค,ชื่อโรค,เยี่ยมบ้านทุก(เดือน),ฉีดยาทุก(เดือน),รายการยาที่ฉีด\n'+
+      'นายสมศักดิ์ ใจเย็น,123/4,หมู่ 1,โรคจิตเภท ติดตามทุกเดือน,1100100123456,F20,Schizophrenia,1,1,Invega 100mg\n'+
+      'นางสาวอรุณี สว่างจิต,45/2,หมู่ 2,,1100200234567,F102,Alcohol Dependence,1,3,DEPO-A\n'+
+      'นายวิชัย มั่นคง,78,หมู่ 3,ผู้ดูแลคือนางสมศรี โทร 089-xxx,,F150,,1,,\n'+
+      'นางประภา รุ่งเรือง,,หมู่ 1,,,,,,,\n'+
+      'นายธนพล ใจกว้าง,90/1,หมู่ 4,แพ้ยา Haloperidol,,F152,,1,1,Flupentixol 40mg'
     filename='ตัวอย่าง_รายชื่อผู้ป่วย.csv'
   }
   const a=document.createElement('a')
@@ -1698,16 +1700,19 @@ async function openModal(id){
     </div>`}).join('')
     ct.innerHTML=`
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
-      <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')} · ${esc(hospitalName)}</div></div>
+      <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')}${p.house_no?` · 🏠 ${esc(p.house_no)}`:''} · ${esc(hospitalName)}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
-        ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${esc(p.name)}','${esc(p.village||'')}','${esc(p.note||'')}','${esc(p.staff_responsible||'')}','${esc(p.aosomo_responsible||'')}','${esc(p.national_id||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
+        ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${esc(p.name)}','${esc(p.village||'')}','${esc(p.house_no||'')}','${esc(p.note||'')}','${esc(p.staff_responsible||'')}','${esc(p.aosomo_responsible||'')}','${esc(p.national_id||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
         <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>
     <div id="edit-patient-wrap" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#166534">✏️ แก้ไขข้อมูลผู้ป่วย</div>
       <div class="form-group"><label>ชื่อ-นามสกุล</label><input type="text" id="edit-pt-name" style="width:100%;box-sizing:border-box"></div>
-      <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village" onchange="refreshAosomoByVillage(this.value)">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village" onchange="refreshAosomoByVillage(this.value)">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+        <div class="form-group"><label>🏠 บ้านเลขที่</label><input type="text" id="edit-pt-house-no" placeholder="เช่น 123/4" style="width:100%;box-sizing:border-box"></div>
+      </div>
       <div class="form-group"><label>👨‍⚕️ เจ้าหน้าที่รับผิดชอบ</label><select id="edit-pt-staff" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>🏡 อสม. รับผิดชอบ <span id="edit-pt-aosomo-village" style="font-size:11px;color:#7c3aed;font-weight:400"></span></label><select id="edit-pt-aosomo" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
@@ -1839,7 +1844,7 @@ function closeEditPatient(){
   const w=document.getElementById('edit-patient-wrap')
   if(w)w.style.display='none'
 }
-async function openEditPatient(id,name,village,note,staffResp,aosomoResp,nationalId){
+async function openEditPatient(id,name,village,houseNo,note,staffResp,aosomoResp,nationalId){
   const w=document.getElementById('edit-patient-wrap')
   if(!w)return
   if(w.style.display!=='none'){w.style.display='none';return}
@@ -1851,6 +1856,8 @@ async function openEditPatient(id,name,village,note,staffResp,aosomoResp,nationa
   if(nEl)nEl.value=name||''
   if(ntEl)ntEl.value=note||''
   if(nidEl)nidEl.value=formatNationalIdInput(nationalId||'')
+  const hnEl=document.getElementById('edit-pt-house-no')
+  if(hnEl)hnEl.value=houseNo||''
   // ตั้งค่า dropdown หมู่บ้าน
   if(vEl){
     let matched=false
@@ -1951,7 +1958,8 @@ async function saveEditPatient(id){
     const visit_interval=parseInt(document.getElementById('edit-pt-visit-interval')?.value)||null
     const inject_interval=parseInt(document.getElementById('edit-pt-inject-interval')?.value)||null
     const medication_name=(document.getElementById('edit-pt-medication')?.value||'').trim()||null
-    const updates={name,village,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name}
+    const house_no=(document.getElementById('edit-pt-house-no')?.value||'').trim()
+    const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name}
     if(canDo('admin'))updates.national_id=nidRaw
     if(file){
       btn.textContent='กำลังอัพโหลดไฟล์...'
@@ -2535,7 +2543,10 @@ function openAddPatient(){
     <div style="flex:1;height:1px;background:var(--border)"></div>
   </div>
   <div class="form-group"><label>ชื่อ-นามสกุล *</label><input type="text" id="np-name" placeholder="เช่น นายสมชาย ใจดี"></div>
-  <div class="form-group"><label>หมู่บ้าน</label><select id="np-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div class="form-group"><label>หมู่บ้าน</label><select id="np-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+    <div class="form-group"><label>🏠 บ้านเลขที่</label><input type="text" id="np-house-no" placeholder="เช่น 123/4"></div>
+  </div>
   <div class="form-group"><label>กลุ่มสี</label>
     <select id="np-group">
       <option value="yellow">🟡 กลุ่มสีเหลือง</option>
@@ -2599,7 +2610,8 @@ async function saveNewPatient(){
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const{error:pe}=await sb.from('patients').insert({name,village,note:'',national_id,visit_interval,inject_interval,medication_name})
+    const house_no=(document.getElementById('np-house-no')?.value||'').trim()
+    const{error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name})
     if(pe){
       if(pe.message?.includes('unique'))throw new Error(`ชื่อ "${name}" มีในระบบแล้ว กรุณาใช้ชื่ออื่น`)
       throw pe
