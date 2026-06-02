@@ -118,6 +118,7 @@ function patientCard(p) {
   const over = parseInt(p.days_until) < 0
   const gl   = p.group_label || groupLabel(p.group_color)
   const cls  = `patient-card ${p.group_color}${over?' overdue':''} fade-up`
+  const disease = p.disease_code||p.disease_name ? `<div class="pc-note" style="color:#0369a1;background:#f0f9ff">${p.disease_code?`<strong>${esc(p.disease_code)}</strong> `:''}${esc(p.disease_name||'')}</div>` : ''
   const note = p.note ? `<div class="pc-note">${esc(p.note)}</div>` : ''
   return `<div class="${cls}" onclick="openModal(${p.id})" data-id="${p.id}" data-group="${p.group_color}" data-village="${esc(p.village||'')}">
     <div class="pc-top">
@@ -134,7 +135,7 @@ function patientCard(p) {
         นัด ${thDate(p.next_date)}
       </span>
     </div>
-    ${note}
+    ${disease}${note}
   </div>`
 }
 
@@ -1236,15 +1237,13 @@ async function importHospitalFile(input){
       const subdistrict=String(r[8]||'').trim()
       const district=String(r[9]||'').trim()
       const province=String(r[10]||'').trim()
-      const diseaseCode=String(r[11]||'').trim()
-      const diseaseName=String(r[12]||'').trim()
+      const disease_code=String(r[11]||'').trim()
+      const disease_name=String(r[12]||'').trim()
       const addressParts=[namemooban,subdistrict&&`ต.${subdistrict}`,district&&`อ.${district}`,province&&`จ.${province}`].filter(Boolean)
-      const addressStr=[...new Set(addressParts)].join(' ')
-      const diseaseStr=[diseaseCode,diseaseName].filter(Boolean).join(' ')
-      const note=[addressStr,diseaseStr].filter(Boolean).join(' | ')
+      const note=[...new Set(addressParts)].join(' ')
       const colorTh=String(r[13]||'').trim()
       const group_color=colorMap[colorTh]||'yellow'
-      const rec={name,village,note,group_color}
+      const rec={name,village,note,group_color,disease_code,disease_name}
       if(nid)rec.national_id=nid
       return rec
     }).filter(r=>r.name)
@@ -1681,6 +1680,13 @@ async function openModal(id){
       <div>
         <div style="font-size:10px;color:var(--text3);font-weight:600">เลขบัตรประชาชน ${canDo('admin')?'':' <span style="background:#e5e7eb;color:#6b7280;padding:0 5px;border-radius:4px;font-size:10px">PDPA</span>'}</div>
         <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${canDo('admin')?'#92400e':'var(--text3)'}">${maskNationalId(p.national_id)}</div>
+      </div>
+    </div>`:''}
+    ${p.disease_code||p.disease_name?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+      <div style="font-size:20px">🏥</div>
+      <div>
+        ${p.disease_code?`<div style="font-size:12px;font-weight:700;color:#0369a1;letter-spacing:.5px">${esc(p.disease_code)}</div>`:''}
+        ${p.disease_name?`<div style="font-size:12px;color:#0c4a6e">${esc(p.disease_name)}</div>`:''}
       </div>
     </div>`:''}
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
