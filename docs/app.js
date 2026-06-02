@@ -2005,6 +2005,8 @@ async function saveModalRecord(pid,gc){
 
 // ─── Visit Modal ─────────────────────────────────────────────────
 function openVisitForm(type){
+  if(type==='staff' && currentRole==='aosomo'){alert('อสม. ไม่มีสิทธิ์บันทึกแบบเจ้าหน้าที่');return}
+  if(type==='aosomo' && currentRole==='staff'){alert('เจ้าหน้าที่ ไม่มีสิทธิ์บันทึกแบบ อสม.');return}
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
   _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={}
