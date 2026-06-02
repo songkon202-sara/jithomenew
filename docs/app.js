@@ -888,6 +888,17 @@ async function renderAdmin(el) {
       </div>
       <input type="file" id="patient-import-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importPatientFile(this)">
     </div>
+    <div style="background:#fefce8;border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid #fde68a">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:#d97706;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px">H</div>
+          <div><div style="font-size:13px;font-weight:700">นำเข้าจาก HOSxP / JHCIS</div><div style="font-size:11px;color:var(--text3)">ชื่อ, สกุล, เลขบัตร, เลขที่, รหัสโรค, สีกลุ่ม</div></div>
+        </div>
+        <button onclick="document.getElementById('hospital-import-input').click()" style="padding:5px 12px;background:#d97706;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📎 นำเข้า</button>
+      </div>
+      <div style="font-size:11px;color:#92400e;background:#fff;border-radius:6px;padding:6px 10px">คอลัมน์ที่ใช้: <strong>C=ชื่อ, D=สกุล, E=เลขบัตร, G=เลขที่(หมู่บ้าน), L=รหัสโรค, M=ชื่อโรค, N=สี</strong></div>
+      <input type="file" id="hospital-import-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importHospitalFile(this)">
+    </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
@@ -1196,6 +1207,42 @@ async function importPatientFile(input){
     })).filter(r=>r.name)
     if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
     if(!confirm(`นำเข้า ${records.length} รายชื่อผู้ป่วย ใช่หรือไม่?`))return
+    const{error}=await sb.from('patients').insert(records)
+    if(error)throw error
+    alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
+    await loadPatients()
+  }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
+}
+
+async function importHospitalFile(input){
+  const file=input.files[0];if(!file)return;input.value=''
+  try{
+    const data=await file.arrayBuffer()
+    const wb=XLSX.read(data)
+    const ws=wb.Sheets[wb.SheetNames[0]]
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}).filter(r=>r.length>1)
+    if(rows.length<2){alert('ไม่พบข้อมูล');return}
+    // คอลัมน์: A=ลำดับ B=HN C=ชื่อ D=สกุล E=เลขบัตร F=อายุ G=เลขที่ H=namemooban I=subdistrict J=district K=province L=รหัสโรค M=ชื่อโรค N=สี O=สถานะ
+    const colorMap={'เขียว':'green','เหลือง':'yellow','แดง':'red','ส้ม':'yellow'}
+    const records=rows.slice(1).filter(r=>String(r[2]||'').trim()).map(r=>{
+      const firstName=String(r[2]||'').trim()
+      const lastName=String(r[3]||'').trim()
+      const name=firstName+(lastName?' '+lastName:'')
+      const addrStr=String(r[6]||'')
+      const m=addrStr.match(/หมู่(?:ที่)?\s*(\d+)/)
+      const village=m?`หมู่ ${m[1]}`:''
+      const nid=String(r[4]||'').replace(/\D/g,'').slice(0,13)||null
+      const diseaseCode=String(r[11]||'').trim()
+      const diseaseName=String(r[12]||'').trim()
+      const note=[diseaseCode,diseaseName].filter(Boolean).join(' ')
+      const colorTh=String(r[13]||'').trim()
+      const group_color=colorMap[colorTh]||'yellow'
+      const rec={name,village,note,group_color}
+      if(nid)rec.national_id=nid
+      return rec
+    }).filter(r=>r.name)
+    if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
+    if(!confirm(`นำเข้า ${records.length} รายชื่อผู้ป่วย (รูปแบบ HOSxP/JHCIS) ใช่หรือไม่?`))return
     const{error}=await sb.from('patients').insert(records)
     if(error)throw error
     alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
