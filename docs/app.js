@@ -1222,6 +1222,9 @@ async function importPatientFile(input){
       national_id:String(r[3]||'').replace(/\D/g,'').slice(0,13)||null,
       disease_code:String(r[4]||'').trim()||null,
       disease_name:String(r[5]||'').trim()||null,
+      visit_interval:parseInt(r[6])||null,
+      inject_interval:parseInt(r[7])||null,
+      medication_name:String(r[8]||'').trim()||null,
     })).filter(r=>r.name)
     if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
     if(!confirm(`นำเข้า ${records.length} รายชื่อผู้ป่วย ใช่หรือไม่?`))return
@@ -1572,12 +1575,12 @@ function downloadTemplate(type){
       'นายประสิทธิ์ ทองดี,หมู่ 3,0856789012'
     filename='ตัวอย่าง_รายชื่ออสม.csv'
   } else {
-    csv='ชื่อ-นามสกุล,หมู่บ้าน,หมายเหตุ,เลขบัตรประชาชน,รหัสโรค,ชื่อโรค\n'+
-      'นายสมศักดิ์ ใจเย็น,หมู่ 1,โรคจิตเภท ติดตามทุกเดือน,1100100123456,F20,Schizophrenia\n'+
-      'นางสาวอรุณี สว่างจิต,หมู่ 2,,1100200234567,F102,Alcohol Dependence\n'+
-      'นายวิชัย มั่นคง,หมู่ 3,ผู้ดูแลคือนางสมศรี โทร 089-xxx,,F150,\n'+
-      'นางประภา รุ่งเรือง,หมู่ 1,,,, \n'+
-      'นายธนพล ใจกว้าง,หมู่ 4,แพ้ยา Haloperidol,,F152,'
+    csv='ชื่อ-นามสกุล,หมู่บ้าน,หมายเหตุ,เลขบัตรประชาชน,รหัสโรค,ชื่อโรค,เยี่ยมบ้านทุก(เดือน),ฉีดยาทุก(เดือน),รายการยาที่ฉีด\n'+
+      'นายสมศักดิ์ ใจเย็น,หมู่ 1,โรคจิตเภท ติดตามทุกเดือน,1100100123456,F20,Schizophrenia,1,1,Invega 100mg\n'+
+      'นางสาวอรุณี สว่างจิต,หมู่ 2,,1100200234567,F102,Alcohol Dependence,1,3,DEPO-A\n'+
+      'นายวิชัย มั่นคง,หมู่ 3,ผู้ดูแลคือนางสมศรี โทร 089-xxx,,F150,,1,,\n'+
+      'นางประภา รุ่งเรือง,หมู่ 1,,,,,,,\n'+
+      'นายธนพล ใจกว้าง,หมู่ 4,แพ้ยา Haloperidol,,F152,,1,1,Flupentixol 40mg'
     filename='ตัวอย่าง_รายชื่อผู้ป่วย.csv'
   }
   const a=document.createElement('a')
@@ -1662,6 +1665,17 @@ async function openModal(id){
         <input type="text" id="edit-pt-nid" placeholder="X-XXXX-XXXXX-XX-X" maxlength="17" inputmode="numeric"
           oninput="this.value=formatNationalIdInput(this.value)" style="letter-spacing:1px">
       </div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group"><label>🏡 เยี่ยมบ้านทุก (เดือน)</label><select id="edit-pt-visit-interval">
+          <option value="">— ไม่ระบุ —</option>
+          ${[1,2,3,6].map(n=>`<option value="${n}">${n} เดือน</option>`).join('')}
+        </select></div>
+        <div class="form-group"><label>💉 ฉีดยาทุก (เดือน)</label><select id="edit-pt-inject-interval">
+          <option value="">— ไม่ระบุ —</option>
+          ${[1,2,3,6].map(n=>`<option value="${n}">${n} เดือน</option>`).join('')}
+        </select></div>
+      </div>
+      <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="edit-pt-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
       <div class="form-group">
         <label>📎 แนบไฟล์ใหม่ (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
         ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--primary);margin-bottom:6px;text-decoration:none">📄 ไฟล์ปัจจุบัน (คลิกดู) — อัปโหลดใหม่เพื่อแทนที่</a>`:''}
@@ -1698,6 +1712,11 @@ async function openModal(id){
         <div style="font-size:10px;color:var(--text3);font-weight:600">เลขบัตรประชาชน ${canDo('admin')?'':' <span style="background:#e5e7eb;color:#6b7280;padding:0 5px;border-radius:4px;font-size:10px">PDPA</span>'}</div>
         <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${canDo('admin')?'#92400e':'var(--text3)'}">${maskNationalId(p.national_id)}</div>
       </div>
+    </div>`:''}
+    ${(p.visit_interval||p.inject_interval||p.medication_name)?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:10px">
+      ${p.visit_interval?`<div style="font-size:12px"><span style="color:var(--text3)">🏡 เยี่ยมบ้าน</span> <strong style="color:#15803d">ทุก ${p.visit_interval} เดือน</strong></div>`:''}
+      ${p.inject_interval?`<div style="font-size:12px"><span style="color:var(--text3)">💉 ฉีดยา</span> <strong style="color:#15803d">ทุก ${p.inject_interval} เดือน</strong></div>`:''}
+      ${p.medication_name?`<div style="font-size:12px;width:100%"><span style="color:var(--text3)">💊 ยา:</span> <strong>${esc(p.medication_name)}</strong></div>`:''}
     </div>`:''}
     ${p.disease_code||p.disease_name?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
       <div style="font-size:20px">🏥</div>
@@ -1805,6 +1824,16 @@ async function openEditPatient(id,name,village,note,staffResp,aosomoResp,nationa
     if(staffResp&&!userNames.includes(staffResp)&&!dirNames.includes(staffResp))
       staffSel.innerHTML+=`<option value="${esc(staffResp)}" selected>${esc(staffResp)}</option>`
   }
+  // โหลดข้อมูลเพิ่มเติม (visit_interval, inject_interval, medication_name)
+  const {data:extra}=await sb.from('patients').select('visit_interval,inject_interval,medication_name').eq('id',id).single()
+  if(extra){
+    const vi=document.getElementById('edit-pt-visit-interval')
+    const ii=document.getElementById('edit-pt-inject-interval')
+    const med=document.getElementById('edit-pt-medication')
+    if(vi)vi.value=extra.visit_interval||''
+    if(ii)ii.value=extra.inject_interval||''
+    if(med)med.value=extra.medication_name||''
+  }
   // โหลด dropdown อสม. — ส่ง village ตรงจากข้อมูลผู้ป่วย (ไม่ผ่าน select element)
   await refreshAosomoByVillage(village, aosomoResp)
 }
@@ -1868,7 +1897,10 @@ async function saveEditPatient(id){
   const file=fileInput?.files?.[0]||null
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const updates={name,village,note,staff_responsible,aosomo_responsible}
+    const visit_interval=parseInt(document.getElementById('edit-pt-visit-interval')?.value)||null
+    const inject_interval=parseInt(document.getElementById('edit-pt-inject-interval')?.value)||null
+    const medication_name=(document.getElementById('edit-pt-medication')?.value||'').trim()||null
+    const updates={name,village,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name}
     if(canDo('admin'))updates.national_id=nidRaw
     if(file){
       btn.textContent='กำลังอัพโหลดไฟล์...'
@@ -2453,6 +2485,17 @@ function openAddPatient(){
       oninput="this.value=formatNationalIdInput(this.value)"
       style="letter-spacing:1px">
   </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div class="form-group"><label>🏡 เยี่ยมบ้านทุก (เดือน)</label><select id="np-visit-interval">
+      <option value="">— ไม่ระบุ —</option>
+      ${[1,2,3,6].map(n=>`<option value="${n}">${n} เดือน</option>`).join('')}
+    </select></div>
+    <div class="form-group"><label>💉 ฉีดยาทุก (เดือน)</label><select id="np-inject-interval">
+      <option value="">— ไม่ระบุ —</option>
+      ${[1,2,3,6].map(n=>`<option value="${n}">${n} เดือน</option>`).join('')}
+    </select></div>
+  </div>
+  <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="np-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
   <div class="form-group">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
       <label style="margin-bottom:0">📎 แนบไฟล์ (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
@@ -2493,6 +2536,9 @@ async function saveNewPatient(){
   const interval=document.getElementById('np-interval')?.value||'1 เดือน'
   const note=(document.getElementById('np-note')?.value||'').trim()
   const national_id=(document.getElementById('np-nid')?.value||'').replace(/\D/g,'')
+  const visit_interval=parseInt(document.getElementById('np-visit-interval')?.value)||null
+  const inject_interval=parseInt(document.getElementById('np-inject-interval')?.value)||null
+  const medication_name=(document.getElementById('np-medication')?.value||'').trim()||null
   const fileInput=document.getElementById('np-file')
   const file=fileInput?.files?.[0]||null
   const btn=document.getElementById('np-btn')
@@ -2512,7 +2558,7 @@ async function saveNewPatient(){
       file_url=publicUrl
     }
     btn.textContent='กำลังบันทึก...'
-    const{error:pe}=await sb.from('patients').insert({name,village,national_id,file_url})
+    const{error:pe}=await sb.from('patients').insert({name,village,national_id,file_url,visit_interval,inject_interval,medication_name})
     if(pe)throw pe
     if(date){
       const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
