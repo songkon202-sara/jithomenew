@@ -892,11 +892,11 @@ async function renderAdmin(el) {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <div style="display:flex;align-items:center;gap:8px">
           <div style="width:32px;height:32px;background:#d97706;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px">H</div>
-          <div><div style="font-size:13px;font-weight:700">นำเข้าจาก HOSxP / JHCIS</div><div style="font-size:11px;color:var(--text3)">ชื่อ, สกุล, เลขบัตร, เลขที่, รหัสโรค, สีกลุ่ม</div></div>
+          <div><div style="font-size:13px;font-weight:700">นำเข้าจาก HOSxP / JHCIS</div><div style="font-size:11px;color:var(--text3)">ชื่อ, สกุล, เลขบัตร, ที่อยู่, รหัสโรค, สีกลุ่ม</div></div>
         </div>
         <button onclick="document.getElementById('hospital-import-input').click()" style="padding:5px 12px;background:#d97706;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📎 นำเข้า</button>
       </div>
-      <div style="font-size:11px;color:#92400e;background:#fff;border-radius:6px;padding:6px 10px">คอลัมน์ที่ใช้: <strong>C=ชื่อ, D=สกุล, E=เลขบัตร, G=เลขที่(หมู่บ้าน), L=รหัสโรค, M=ชื่อโรค, N=สี</strong></div>
+      <div style="font-size:11px;color:#92400e;background:#fff;border-radius:6px;padding:6px 10px">คอลัมน์: <strong>C=ชื่อ, D=สกุล, E=เลขบัตร, G=เลขที่(หมู่), H=namemooban, I=ตำบล, J=อำเภอ, K=จังหวัด, L=รหัสโรค, M=ชื่อโรค</strong></div>
       <input type="file" id="hospital-import-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importHospitalFile(this)">
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
@@ -1222,7 +1222,7 @@ async function importHospitalFile(input){
     const ws=wb.Sheets[wb.SheetNames[0]]
     const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}).filter(r=>r.length>1)
     if(rows.length<2){alert('ไม่พบข้อมูล');return}
-    // คอลัมน์: A=ลำดับ B=HN C=ชื่อ D=สกุล E=เลขบัตร F=อายุ G=เลขที่ H=namemooban I=subdistrict J=district K=province L=รหัสโรค M=ชื่อโรค N=สี O=สถานะ
+    // C=ชื่อ D=สกุล E=เลขบัตร G=เลขที่ H=namemooban I=subdistrict J=district K=province L=รหัสโรค M=ชื่อโรค N=สี
     const colorMap={'เขียว':'green','เหลือง':'yellow','แดง':'red','ส้ม':'yellow'}
     const records=rows.slice(1).filter(r=>String(r[2]||'').trim()).map(r=>{
       const firstName=String(r[2]||'').trim()
@@ -1232,9 +1232,16 @@ async function importHospitalFile(input){
       const m=addrStr.match(/หมู่(?:ที่)?\s*(\d+)/)
       const village=m?`หมู่ ${m[1]}`:''
       const nid=String(r[4]||'').replace(/\D/g,'').slice(0,13)||null
+      const namemooban=String(r[7]||'').trim()
+      const subdistrict=String(r[8]||'').trim()
+      const district=String(r[9]||'').trim()
+      const province=String(r[10]||'').trim()
       const diseaseCode=String(r[11]||'').trim()
       const diseaseName=String(r[12]||'').trim()
-      const note=[diseaseCode,diseaseName].filter(Boolean).join(' ')
+      const addressParts=[namemooban,subdistrict&&`ต.${subdistrict}`,district&&`อ.${district}`,province&&`จ.${province}`].filter(Boolean)
+      const addressStr=[...new Set(addressParts)].join(' ')
+      const diseaseStr=[diseaseCode,diseaseName].filter(Boolean).join(' ')
+      const note=[addressStr,diseaseStr].filter(Boolean).join(' | ')
       const colorTh=String(r[13]||'').trim()
       const group_color=colorMap[colorTh]||'yellow'
       const rec={name,village,note,group_color}
