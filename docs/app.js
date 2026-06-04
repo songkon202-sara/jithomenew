@@ -151,6 +151,7 @@ function patientCard(p) {
   const cls  = `patient-card ${p.group_color}${over?' overdue':''} fade-up`
   const disease = canDo('record') && (p.disease_code||p.disease_name) ? `<div class="pc-note" style="color:#0369a1;background:#f0f9ff">${p.disease_code?`<strong>${esc(p.disease_code)}</strong> `:''}${esc(p.disease_name||'')}</div>` : ''
   const note = p.note ? `<div class="pc-note">${esc(p.note)}</div>` : ''
+  const nid = canDo('record') && p.national_id ? `<div class="pc-note" style="color:#78350f;background:#fef9c3;font-family:monospace;letter-spacing:0.5px">🪪 ${maskNationalId(p.national_id)}</div>` : ''
   return `<div class="${cls}" onclick="openModal(${p.id})" data-id="${p.id}" data-group="${p.group_color}" data-village="${esc(p.village||'')}">
     <div class="pc-top">
       <div>
@@ -166,7 +167,7 @@ function patientCard(p) {
         ${p.next_visit_date?`<span style="color:#ea580c">🏡 ${thDate(p.next_visit_date)}</span>`:''}
       </span>
     </div>
-    ${disease}${note}
+    ${disease}${nid}${note}
   </div>`
 }
 
