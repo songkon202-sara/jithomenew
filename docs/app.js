@@ -121,6 +121,7 @@ function parseGroupColor(g) {
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
+function setSubtitle(el,text){if(!el)return;el.innerHTML=esc(text||'').replace(/\n/g,'<br>')}
 function todayISO() { return new Date().toISOString().slice(0,10) }
 function maskNationalId(id){
   const d=(id||'').replace(/\D/g,'')
@@ -221,7 +222,7 @@ async function navigate(page) {
   }
   const [t,s] = titles[page]
   document.getElementById('header-title').textContent = t
-  document.getElementById('header-sub').textContent   = s
+  setSubtitle(document.getElementById('header-sub'), s)
   const el = document.getElementById('page-content')
   el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text3)">⏳ กำลังโหลด...</div>'
   allPatients = await getPatients()
@@ -1890,9 +1891,8 @@ async function saveSettings(){
     if(sub){
       appSubtitle=sub
       localStorage.setItem('jh_app_subtitle',sub)
-      const ss=document.getElementById('sidebar-sub')
-      if(ss)ss.textContent=sub
-      document.getElementById('header-sub').textContent=sub
+      setSubtitle(document.getElementById('sidebar-sub'),sub)
+      setSubtitle(document.getElementById('header-sub'),sub)
     }
     btn.textContent='✅ บันทึกแล้ว'
     setTimeout(()=>{btn.textContent='บันทึกการตั้งค่า';btn.disabled=false},2000)
@@ -3105,7 +3105,7 @@ async function loadAndNav(){
   try{
     const s=await getSettings()
     if(s.hospital_name){hospitalName=s.hospital_name}
-    if(s.app_subtitle){appSubtitle=s.app_subtitle;const ss=document.getElementById('sidebar-sub');if(ss)ss.textContent=s.app_subtitle}
+    if(s.app_subtitle){appSubtitle=s.app_subtitle;setSubtitle(document.getElementById('sidebar-sub'),s.app_subtitle)}
     const{count}=await sb.from('patient_status').select('*',{count:'exact',head:true}).lt('days_until',0)
     if(count){const b=document.getElementById('notif-badge');if(b){b.textContent=count;b.style.display='flex'}}
   }catch(e){console.warn('loadAndNav:',e)}
@@ -3136,7 +3136,7 @@ async function init(){
       if(s.app_subtitle){appSubtitle=s.app_subtitle;localStorage.setItem('jh_app_subtitle',s.app_subtitle)}
       else{const cached=localStorage.getItem('jh_app_subtitle');if(cached)appSubtitle=cached}
     }catch(e){const cached=localStorage.getItem('jh_app_subtitle');if(cached)appSubtitle=cached}
-    const ss=document.getElementById('sidebar-sub');if(ss)ss.textContent=appSubtitle
+    setSubtitle(document.getElementById('sidebar-sub'),appSubtitle)
     showAuthWall('login');return
   }
   currentUser=user
