@@ -1207,6 +1207,7 @@ async function renderAdmin(el) {
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">สร้างบัญชีให้ อสม. ที่ไม่มีอีเมล — ใช้เบอร์โทรแทน</div>
     <div class="form-group"><label>ชื่อ-นามสกุล อสม. *</label><input type="text" id="ca-name" placeholder="เช่น นางสมศรี ใจดี" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>เบอร์โทรศัพท์ * (ใช้เป็นชื่อผู้ใช้และรหัสผ่าน)</label><input type="tel" id="ca-phone" placeholder="0812345678" maxlength="10" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>เลขบัตรประชาชน 🪪 (ไม่บังคับ)</label><input type="text" id="ca-nid" placeholder="เช่น 1234567890123" maxlength="13" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>หมู่บ้าน</label>
       <select id="ca-village" style="width:100%">
         ${villages.map(v=>`<option>${v}</option>`).join('')}
@@ -1228,11 +1229,13 @@ async function renderAdmin(el) {
 async function createAosomoAccount(){
   const name=(document.getElementById('ca-name')?.value||'').trim()
   const phone=(document.getElementById('ca-phone')?.value||'').replace(/\D/g,'')
+  const nid=(document.getElementById('ca-nid')?.value||'').replace(/\D/g,'')
   const village=document.getElementById('ca-village')?.value||''
   const result=document.getElementById('ca-result')
   const btn=document.getElementById('ca-btn')
   if(!name){result.style.color='var(--red)';result.textContent='❌ กรุณากรอกชื่อ';return}
   if(phone.length<9){result.style.color='var(--red)';result.textContent='❌ เบอร์โทรไม่ถูกต้อง';return}
+  if(nid&&nid.length!==13){result.style.color='var(--red)';result.textContent='❌ เลขบัตรประชาชนต้องมี 13 หลัก';return}
   const email=phone+'@jithome.local'
   const password=phone
   btn.disabled=true;btn.textContent='กำลังสร้างบัญชี...'
@@ -1249,10 +1252,9 @@ async function createAosomoAccount(){
     const uid=data?.user?.id
     if(uid){
       // สร้าง profile ทันที ไม่ต้องรอ login ครั้งแรก
-      await sb.from('user_profiles').upsert({
-        id:uid,email,display_name:name,role:'aosomo',village,
-        last_login:new Date().toISOString()
-      },{onConflict:'id'})
+      const prof={id:uid,email,display_name:name,role:'aosomo',village,last_login:new Date().toISOString()}
+      if(nid)prof.national_id=nid
+      await sb.from('user_profiles').upsert(prof,{onConflict:'id'})
     }
     // แสดงข้อมูลล็อกอินให้แอดมินส่งต่อ
     result.innerHTML=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;margin-top:4px">
@@ -1260,12 +1262,13 @@ async function createAosomoAccount(){
       <div style="font-size:12px;line-height:1.8">
         👤 ชื่อผู้ใช้: <strong>${esc(email)}</strong><br>
         🔑 รหัสผ่าน: <strong>${esc(phone)}</strong><br>
-        🏡 หมู่บ้าน: <strong>${esc(village)}</strong>
+        🏡 หมู่บ้าน: <strong>${esc(village)}</strong>${nid?`<br>🪪 บัตรประชาชน: <strong>${maskNationalId(nid)}</strong>`:''}
       </div>
       <div style="font-size:11px;color:var(--text3);margin-top:6px">💡 แนะนำให้เปลี่ยนรหัสผ่านหลังเข้าสู่ระบบครั้งแรก</div>
     </div>`
     document.getElementById('ca-name').value=''
     document.getElementById('ca-phone').value=''
+    document.getElementById('ca-nid').value=''
     loadMembersList()
   }catch(e){result.style.color='var(--red)';result.textContent='❌ '+e.message}
   btn.disabled=false;btn.textContent='🏡 สร้างบัญชี อสม.'
@@ -1285,6 +1288,7 @@ function memberCard(p,showVillage=false){
             ${canEdit?`<button onclick="editMemberName('${p.id}','${esc(p.display_name||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
           </div>
           <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
+          ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace;margin-top:1px">🪪 ${maskNationalId(p.national_id)}</div>`:''}
         </div>
       </div>
       ${isSelf?`<span style="font-size:10px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">(คุณ)</span>`:`
