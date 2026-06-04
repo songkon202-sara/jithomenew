@@ -2209,41 +2209,42 @@ async function openModal(id){
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden">
       <div style="padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text2)">📋 ข้อมูลพื้นฐาน</div>
       <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
-        ${p.national_id?`<div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
           <span style="font-size:18px;flex-shrink:0">🪪</span>
           <div style="flex:1;min-width:0">
             <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">เลขบัตรประชาชน${canDo('admin')?'':' <span style="background:#e5e7eb;color:#6b7280;padding:0 4px;border-radius:3px;font-size:9px">PDPA</span>'}</div>
-            <div style="font-size:13px;font-weight:700;letter-spacing:1.5px;color:${canDo('admin')?'#92400e':'var(--text2)'};font-family:monospace">${maskNationalId(p.national_id)}</div>
+            ${p.national_id
+              ? `<div style="font-size:13px;font-weight:700;letter-spacing:1.5px;color:${canDo('admin')?'#92400e':'var(--text2)'};font-family:monospace">${maskNationalId(p.national_id)}</div>`
+              : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้ระบุ</div>`}
           </div>
-        </div>`:''}
-        ${p.oral_medication?`<div style="display:flex;align-items:flex-start;gap:10px">
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px">
           <span style="font-size:18px;flex-shrink:0">💊</span>
           <div>
             <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">ยาที่ใช้ปัจจุบัน</div>
-            <div style="font-size:13px;font-weight:600;color:var(--text1)">${esc(p.oral_medication)}</div>
+            ${p.oral_medication
+              ? `<div style="font-size:13px;font-weight:600;color:var(--text1)">${esc(p.oral_medication)}</div>`
+              : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้ระบุ</div>`}
           </div>
-        </div>`:''}
-        ${p.medication_name?`<div style="display:flex;align-items:flex-start;gap:10px">
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px">
           <span style="font-size:18px;flex-shrink:0">💉</span>
           <div>
             <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">ยาฉีด${p.inject_interval?` · ทุก ${p.inject_interval} เดือน`:''}</div>
-            <div style="font-size:13px;font-weight:600;color:#15803d">${esc(p.medication_name)}</div>
+            ${p.medication_name
+              ? `<div style="font-size:13px;font-weight:600;color:#15803d">${esc(p.medication_name)}</div>`
+              : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้ระบุ</div>`}
           </div>
-        </div>`:p.inject_interval?`<div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:18px;flex-shrink:0">💉</span>
-          <div style="font-size:13px;color:var(--text2)">ฉีดยาทุก <strong>${p.inject_interval} เดือน</strong></div>
-        </div>`:''}
-        ${p.visit_interval?`<div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:18px;flex-shrink:0">🏡</span>
-          <div style="font-size:13px;color:var(--text2)">เยี่ยมบ้านทุก <strong>${p.visit_interval} เดือน</strong></div>
-        </div>`:''}
-        ${p.photo_url?`<div style="display:flex;align-items:flex-start;gap:10px">
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px">
           <span style="font-size:18px;flex-shrink:0">📷</span>
           <div style="flex:1;min-width:0">
             <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:4px">ภาพถ่ายบริบท / สภาพแวดล้อม</div>
-            <a href="${esc(p.photo_url)}" target="_blank"><img src="${esc(p.photo_url)}" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>
+            ${p.photo_url
+              ? `<a href="${esc(p.photo_url)}" target="_blank"><img src="${esc(p.photo_url)}" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>`
+              : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้อัปโหลด</div>`}
           </div>
-        </div>`:''}
+        </div>
         <div style="display:flex;align-items:center;gap:10px;padding-top:6px;border-top:1px solid var(--border)">
           <span style="font-size:16px">${p.consent_given?'✅':'⚠️'}</span>
           <div style="flex:1">
