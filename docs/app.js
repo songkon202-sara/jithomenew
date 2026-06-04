@@ -155,8 +155,7 @@ function patientCard(p) {
     <div class="pc-meta">
       <span class="badge ${p.group_color}"><span class="badge-dot"></span>${esc(gl)}</span>
       <span class="pc-date">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        นัด ${thDate(p.next_date)}
+        ${p.last_record_type==='visit'?'🏡':'💉'} ${thDate(p.next_date)}
       </span>
     </div>
     ${disease}${note}
@@ -1027,14 +1026,22 @@ async function renderAdmin(el) {
     </div>
   </div>
   <div class="form-section">
-    <h3>💉 บันทึกนัดฉีดยา</h3>
+    <h3>📋 บันทึกนัดหมาย</h3>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <label onclick="toggleAdmType('injection')" id="adm-type-inj-label" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:8px;border:2px solid var(--primary);background:var(--primary-lt);cursor:pointer;font-size:13px;font-weight:700;color:var(--primary);font-family:'Sarabun',sans-serif">
+        <input type="radio" name="adm-type" id="adm-type-inj" value="injection" checked style="display:none"> 💉 ฉีดยา
+      </label>
+      <label onclick="toggleAdmType('visit')" id="adm-type-vis-label" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:8px;border:2px solid var(--border);background:var(--bg);cursor:pointer;font-size:13px;font-weight:700;color:var(--text3);font-family:'Sarabun',sans-serif">
+        <input type="radio" name="adm-type" id="adm-type-vis" value="visit" style="display:none"> 🏡 เยี่ยมบ้าน
+      </label>
+    </div>
     <div class="form-group"><label>ชื่อ-นามสกุล</label><input list="adm-names" id="adm-name" placeholder="พิมพ์หรือเลือกชื่อ" autocomplete="off"><datalist id="adm-names">${nameOpts}</datalist></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group"><label>หมู่บ้าน</label><select id="adm-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
       <div class="form-group"><label>กลุ่มสี</label><select id="adm-group"><option value="สีแดง">สีแดง</option><option value="สีเหลือง" selected>สีเหลือง</option><option value="สีเขียว">สีเขียว</option></select></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="form-group"><label>วันที่ฉีดยา</label><input type="date" id="adm-date" value="${todayISO()}"></div>
+      <div class="form-group"><label id="adm-date-label">วันที่ฉีดยา</label><input type="date" id="adm-date" value="${todayISO()}"></div>
       <div class="form-group"><label>รอบนัดต่อไป</label><select id="adm-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
     </div>
     <div class="form-group">
@@ -1853,7 +1860,8 @@ async function saveAdminRecord(){
     const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
     if(!found)throw new Error('ไม่พบผู้ป่วย')
     await sb.from('patients').update({village}).eq('id',found.id)
-    const{error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str:interval,interval_days:parseInterval(interval),note})
+    const record_type=document.querySelector('input[name="adm-type"]:checked')?.value||'injection'
+    const{error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str:interval,interval_days:parseInterval(interval),note,record_type})
     if(error)throw error
     btn.textContent='✅ บันทึกสำเร็จ'
     document.getElementById('adm-name').value=''
@@ -1883,6 +1891,23 @@ function exportCSV(){
   const csv=[hdr,...rows].map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n')
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));a.download='jithome.csv';a.click()
 }
+function toggleAdmType(type){
+  const injLabel=document.getElementById('adm-type-inj-label')
+  const visLabel=document.getElementById('adm-type-vis-label')
+  const dateLabel=document.getElementById('adm-date-label')
+  document.getElementById('adm-type-inj').checked=type==='injection'
+  document.getElementById('adm-type-vis').checked=type==='visit'
+  if(type==='injection'){
+    injLabel.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:8px;border:2px solid var(--primary);background:var(--primary-lt);cursor:pointer;font-size:13px;font-weight:700;color:var(--primary);font-family:\'Sarabun\',sans-serif'
+    visLabel.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:8px;border:2px solid var(--border);background:var(--bg);cursor:pointer;font-size:13px;font-weight:700;color:var(--text3);font-family:\'Sarabun\',sans-serif'
+    if(dateLabel)dateLabel.textContent='วันที่ฉีดยา'
+  }else{
+    visLabel.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:8px;border:2px solid #ea580c;background:#fff7ed;cursor:pointer;font-size:13px;font-weight:700;color:#ea580c;font-family:\'Sarabun\',sans-serif'
+    injLabel.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:8px;border:2px solid var(--border);background:var(--bg);cursor:pointer;font-size:13px;font-weight:700;color:var(--text3);font-family:\'Sarabun\',sans-serif'
+    if(dateLabel)dateLabel.textContent='วันที่เยี่ยมบ้าน'
+  }
+}
+
 function exportJSON(){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(allPatients,null,2)],{type:'application/json'}));a.download='jithome.json';a.click()
 }
@@ -1975,9 +2000,11 @@ async function openModal(id){
       const isFuture=h.injection_date>todayStr
       const isFirstPast=!isFuture&&pastRecs[0]?.id===h.id
       const dotColor=isFuture?'#f59e0b':isFirstPast?'var(--primary)':'var(--border)'
+      const typeLabel=h.record_type==='visit'?'🏡 เยี่ยมบ้าน':'💉 ฉีดยา'
+      const typeBadge=`<span style="font-size:10px;background:${h.record_type==='visit'?'#fff7ed':'#f0fdf4'};color:${h.record_type==='visit'?'#c2410c':'#15803d'};padding:1px 6px;border-radius:4px;font-weight:700">${typeLabel}</span>`
       const badge=isFuture
-        ?`<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-weight:700">📅 นัดหมาย</span>`
-        :isFirstPast?`<span style="font-size:10px;background:var(--primary-lt);color:var(--primary);padding:1px 6px;border-radius:4px;font-weight:700">ล่าสุด</span>`:''
+        ?`<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-weight:700">📅 นัดหมาย</span> ${typeBadge}`
+        :isFirstPast?`<span style="font-size:10px;background:var(--primary-lt);color:var(--primary);padding:1px 6px;border-radius:4px;font-weight:700">ล่าสุด</span> ${typeBadge}`:typeBadge
       const rowBg=isFuture?'background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px;margin-bottom:4px':''
       return`
     <div class="history-item" id="hist-${h.id}" style="${rowBg}">
