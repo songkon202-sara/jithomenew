@@ -676,7 +676,7 @@ async function saveEditVisit(id){
   if(photoFile){
     btn.textContent='กำลังอัพโหลดรูป...'
     const ext=photoFile.name.split('.').pop()
-    const filename=`visits/${Date.now()}_${(name||'visit').replace(/\s+/g,'_')}.${ext}`
+    const filename=`visits/${Date.now()}.${ext}`
     const{error:ue}=await sb.storage.from('patient-files').upload(filename,photoFile)
     if(!ue){const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename);updates.photo_url=publicUrl}
     btn.textContent='กำลังบันทึก...'
@@ -2457,7 +2457,7 @@ async function saveEditPatient(id){
     if(photoFile){
       btn.textContent='กำลังอัพโหลดรูป...'
       const ext=photoFile.name.split('.').pop()
-      const filename=`photos/${Date.now()}_${name.replace(/\s+/g,'_')}.${ext}`
+      const filename=`photos/${Date.now()}.${ext}`
       const{error:pe}=await sb.storage.from('patient-files').upload(filename,photoFile)
       if(pe)throw new Error('อัพโหลดรูปไม่สำเร็จ: '+pe.message)
       const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
@@ -2873,7 +2873,7 @@ async function saveVisitRecord(){
   if(photoFile){
     btn.textContent='กำลังอัพโหลดรูป...'
     const ext=photoFile.name.split('.').pop()
-    const filename=`visits/${Date.now()}_${(name||'visit').replace(/\s+/g,'_')}.${ext}`
+    const filename=`visits/${Date.now()}.${ext}`
     const{error:ue}=await sb.storage.from('patient-files').upload(filename,photoFile)
     if(!ue){const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename);photoUrl=publicUrl}
     btn.textContent='กำลังบันทึก...'
