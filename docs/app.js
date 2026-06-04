@@ -1059,7 +1059,8 @@ async function renderAdmin(el) {
   <div class="form-section">
     <h3>⚙️ ตั้งค่า</h3>
     <div class="form-group"><label>ชื่อโรงพยาบาล / หน่วยงาน</label><input id="s-hospital" value="${esc(settings.hospital_name||hospitalName)}"></div>
-    <div class="form-group"><label>ข้อความใต้ชื่อแอป (หน้าหลัก) — กด Enter เพื่อขึ้นบรรทัดใหม่</label><textarea id="s-subtitle" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font-family:'Sarabun',sans-serif;font-size:14px" placeholder="ระบบติดตามผู้ป่วยจิตเวช">${esc(settings.app_subtitle||appSubtitle)}</textarea></div>
+    <div class="form-group"><label>ข้อความใต้ชื่อแอป — บรรทัด 1</label><input id="s-subtitle-1" value="${esc((settings.app_subtitle||appSubtitle).split('\n')[0]||'')}"></div>
+    <div class="form-group"><label>ข้อความใต้ชื่อแอป — บรรทัด 2 (ไม่บังคับ)</label><input id="s-subtitle-2" value="${esc((settings.app_subtitle||appSubtitle).split('\n')[1]||'')}"></div>
     <button class="btn btn-primary" style="width:auto;padding:9px 20px" id="settings-btn" onclick="saveSettings()">บันทึกการตั้งค่า</button>
   </div>
   <div class="form-section">
@@ -1877,7 +1878,9 @@ async function saveAdminRecord(){
 
 async function saveSettings(){
   const val=document.getElementById('s-hospital')?.value?.trim()
-  const sub=document.getElementById('s-subtitle')?.value?.trim()
+  const sub1=document.getElementById('s-subtitle-1')?.value?.trim()||''
+  const sub2=document.getElementById('s-subtitle-2')?.value?.trim()||''
+  const sub=sub2?sub1+'\n'+sub2:sub1
   const btn=document.getElementById('settings-btn')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
