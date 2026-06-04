@@ -2131,12 +2131,15 @@ async function openModal(id){
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
     ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:700">ประวัติการฉีดยา (${pastRecs.length} ครั้ง)${futureRecs.length>0?`<span style="font-size:11px;font-weight:400;color:#92400e;margin-left:6px">📅 นัดหมาย ${futureRecs.length} รายการ</span>`:''}</div>
+      <div style="font-size:13px;font-weight:700">ประวัติการนัดหมาย (${pastRecs.length} ครั้ง)${futureRecs.length>0?`<span style="font-size:11px;font-weight:400;color:#92400e;margin-left:6px">📅 นัดหมาย ${futureRecs.length} รายการ</span>`:''}</div>
       <button onclick="toggleRecordForm()" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">+ บันทึก</button>
     </div>
     <div id="record-form-wrap" style="display:none;background:var(--primary-lt);border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid rgba(10,126,164,.2)">
-      <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--primary)">บันทึกการฉีดยา</div>
-      <div class="form-group"><label>วันที่ฉีดยา</label><input type="date" id="rec-date" value="${todayISO()}"></div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button type="button" id="rec-type-inj" onclick="toggleRecType('injection')" style="flex:1;padding:6px;border-radius:8px;border:2px solid var(--primary);background:var(--primary-lt);color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💉 ฉีดยา</button>
+        <button type="button" id="rec-type-vis" onclick="toggleRecType('visit')" style="flex:1;padding:6px;border-radius:8px;border:2px solid var(--border);background:#fff;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🏡 เยี่ยมบ้าน</button>
+      </div>
+      <div class="form-group"><label id="rec-date-label">วันที่ฉีดยา</label><input type="date" id="rec-date" value="${todayISO()}"></div>
       <div class="form-group"><label>รอบนัดต่อไป</label><select id="rec-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="rec-note" placeholder="ผลการฉีดยา, อาการ..."></div>
       <div style="display:flex;gap:8px">
@@ -2330,6 +2333,20 @@ async function saveEditPatient(id){
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
 }
 function toggleRecordForm(){const w=document.getElementById('record-form-wrap');if(w)w.style.display=w.style.display==='none'?'':'none'}
+function toggleRecType(type){
+  const inj=document.getElementById('rec-type-inj')
+  const vis=document.getElementById('rec-type-vis')
+  const lbl=document.getElementById('rec-date-label')
+  if(type==='injection'){
+    inj.style.cssText='flex:1;padding:6px;border-radius:8px;border:2px solid var(--primary);background:var(--primary-lt);color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;font-family:\'Sarabun\',sans-serif'
+    vis.style.cssText='flex:1;padding:6px;border-radius:8px;border:2px solid var(--border);background:#fff;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer;font-family:\'Sarabun\',sans-serif'
+    if(lbl)lbl.textContent='วันที่ฉีดยา'
+  }else{
+    vis.style.cssText='flex:1;padding:6px;border-radius:8px;border:2px solid #ea580c;background:#fff7ed;color:#ea580c;font-size:12px;font-weight:700;cursor:pointer;font-family:\'Sarabun\',sans-serif'
+    inj.style.cssText='flex:1;padding:6px;border-radius:8px;border:2px solid var(--border);background:#fff;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer;font-family:\'Sarabun\',sans-serif'
+    if(lbl)lbl.textContent='วันที่เยี่ยมบ้าน'
+  }
+}
 
 async function saveModalRecord(pid,gc){
   const date=document.getElementById('rec-date')?.value
@@ -2340,7 +2357,8 @@ async function saveModalRecord(pid,gc){
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const{error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note})
+    const record_type=document.getElementById('rec-type-vis')?.style.borderColor==='rgb(234, 88, 12)'?'visit':'injection'
+    const{error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note,record_type})
     if(error)throw error
     closeModal();allPatients=await getPatients()
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
