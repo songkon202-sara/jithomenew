@@ -2169,15 +2169,7 @@ async function openModal(id){
           ${[1,2,3,6].map(n=>`<option value="${n}">${n} เดือน</option>`).join('')}
         </select></div>
       </div>
-      <div class="form-group">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <label style="margin-bottom:0">💊 ยาทานปัจจุบัน</label>
-          <button type="button" onclick="document.getElementById('ocr-photo-input').click()" style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📷 แปลงจากรูปภาพ</button>
-          <input type="file" id="ocr-photo-input" accept="image/*" style="display:none" onchange="extractMedsFromPhoto(this)">
-        </div>
-        <input type="text" id="edit-pt-oral-medication" placeholder="เช่น Risperidone 2mg, Haloperidol 5mg" style="width:100%;box-sizing:border-box">
-        <div id="ocr-status" style="font-size:11px;min-height:16px;margin-top:4px"></div>
-      </div>
+      <div class="form-group"><label>💊 ยาทานปัจจุบัน</label><input type="text" id="edit-pt-oral-medication" placeholder="เช่น Risperidone 2mg, Haloperidol 5mg" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>💉 ยาฉีด</label><input type="text" id="edit-pt-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
       <div class="form-group">
         <label>📷 ภาพถ่ายบริบท <span style="font-size:11px;font-weight:400;color:var(--text3)">เช่น บ้าน สภาพแวดล้อม สถานที่อยู่อาศัย</span></label>
@@ -2439,36 +2431,6 @@ async function giveConsent(id){
   if(error){alert('❌ '+error.message);return}
   openModal(id)
 }
-async function extractMedsFromPhoto(input){
-  const file=input.files?.[0];if(!file)return
-  input.value=''
-  const status=document.getElementById('ocr-status')
-  const field=document.getElementById('edit-pt-oral-medication')
-  if(!status||!field)return
-  status.style.color='var(--text3)';status.textContent='⏳ กำลังวิเคราะห์รูปภาพ...'
-  try{
-    const base64=await new Promise((res,rej)=>{
-      const r=new FileReader()
-      r.onload=()=>res(r.result.split(',')[1])
-      r.onerror=rej
-      r.readAsDataURL(file)
-    })
-    const resp=await fetch(`${SUPABASE_URL}/functions/v1/extract-medications`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':`Bearer ${SUPABASE_KEY}`,'apikey':SUPABASE_KEY},
-      body:JSON.stringify({image:base64,mimeType:file.type})
-    })
-    const data=await resp.json()
-    if(data.error)throw new Error(data.error)
-    if(data.medications&&data.medications!=='ไม่พบรายการยา'){
-      field.value=data.medications
-      status.style.color='var(--green)';status.textContent='✅ แปลงสำเร็จ กรุณาตรวจสอบก่อนบันทึก'
-    }else{
-      status.style.color='var(--red)';status.textContent='⚠️ ไม่พบรายการยาในรูปภาพ'
-    }
-  }catch(e){status.style.color='var(--red)';status.textContent='❌ '+e.message}
-}
-
 async function saveEditPatient(id){
   const name=(document.getElementById('edit-pt-name')?.value||'').trim()
   const village=document.getElementById('edit-pt-village')?.value||''
