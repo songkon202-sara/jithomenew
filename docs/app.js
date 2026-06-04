@@ -1058,7 +1058,7 @@ async function renderAdmin(el) {
   <div class="form-section">
     <h3>⚙️ ตั้งค่า</h3>
     <div class="form-group"><label>ชื่อโรงพยาบาล / หน่วยงาน</label><input id="s-hospital" value="${esc(settings.hospital_name||hospitalName)}"></div>
-    <div class="form-group"><label>ข้อความใต้ชื่อแอป (หน้าหลัก)</label><input id="s-subtitle" value="${esc(settings.app_subtitle||appSubtitle)}" placeholder="ระบบติดตามผู้ป่วยจิตเวช"></div>
+    <div class="form-group"><label>ข้อความใต้ชื่อแอป (หน้าหลัก) — กด Enter เพื่อขึ้นบรรทัดใหม่</label><textarea id="s-subtitle" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font-family:'Sarabun',sans-serif;font-size:14px" placeholder="ระบบติดตามผู้ป่วยจิตเวช">${esc(settings.app_subtitle||appSubtitle)}</textarea></div>
     <button class="btn btn-primary" style="width:auto;padding:9px 20px" id="settings-btn" onclick="saveSettings()">บันทึกการตั้งค่า</button>
   </div>
   <div class="form-section">
@@ -2780,7 +2780,7 @@ function showAuthWall(mode='login'){
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:40px;margin-bottom:6px">🏥</div>
       <div style="font-size:22px;font-weight:800;color:var(--primary)">JitHome</div>
-      <div style="font-size:12px;color:var(--text3);margin-top:2px">${appSubtitle}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px;white-space:pre-line;line-height:1.5">${esc(appSubtitle)}</div>
     </div>
     <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text1)">เข้าสู่ระบบ</div>
     <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="example@email.com" autocomplete="email"></div>
@@ -2823,7 +2823,7 @@ function showAuthWall(mode='login'){
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:40px;margin-bottom:6px">🏥</div>
       <div style="font-size:22px;font-weight:800;color:var(--primary)">JitHome</div>
-      <div style="font-size:12px;color:var(--text3);margin-top:2px">${appSubtitle}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px;white-space:pre-line;line-height:1.5">${esc(appSubtitle)}</div>
     </div>
     <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text1)">สมัครสมาชิก</div>
     <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="example@email.com" autocomplete="email"></div>
