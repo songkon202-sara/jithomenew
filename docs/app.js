@@ -3131,8 +3131,12 @@ async function init(){
 
   const{data:{user}}=await sb.auth.getUser()
   if(!user){
-    const cached=localStorage.getItem('jh_app_subtitle')
-    if(cached){appSubtitle=cached;const ss=document.getElementById('sidebar-sub');if(ss)ss.textContent=cached}
+    try{
+      const s=await getSettings()
+      if(s.app_subtitle){appSubtitle=s.app_subtitle;localStorage.setItem('jh_app_subtitle',s.app_subtitle)}
+      else{const cached=localStorage.getItem('jh_app_subtitle');if(cached)appSubtitle=cached}
+    }catch(e){const cached=localStorage.getItem('jh_app_subtitle');if(cached)appSubtitle=cached}
+    const ss=document.getElementById('sidebar-sub');if(ss)ss.textContent=appSubtitle
     showAuthWall('login');return
   }
   currentUser=user
