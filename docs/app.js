@@ -2779,7 +2779,7 @@ function showAuthWall(mode='login'){
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:40px;margin-bottom:6px">🏥</div>
       <div style="font-size:22px;font-weight:800;color:var(--primary)">JitHome</div>
-      <div style="font-size:12px;color:var(--text3);margin-top:2px">ระบบติดตามผู้ป่วยจิตเวช</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">${appSubtitle}</div>
     </div>
     <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text1)">เข้าสู่ระบบ</div>
     <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="example@email.com" autocomplete="email"></div>
@@ -2822,7 +2822,7 @@ function showAuthWall(mode='login'){
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:40px;margin-bottom:6px">🏥</div>
       <div style="font-size:22px;font-weight:800;color:var(--primary)">JitHome</div>
-      <div style="font-size:12px;color:var(--text3);margin-top:2px">ระบบติดตามผู้ป่วยจิตเวช</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">${appSubtitle}</div>
     </div>
     <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text1)">สมัครสมาชิก</div>
     <div class="form-group"><label>Email</label><input type="email" id="auth-email" placeholder="example@email.com" autocomplete="email"></div>
@@ -3129,7 +3129,10 @@ async function init(){
   }
 
   const{data:{user}}=await sb.auth.getUser()
-  if(!user){showAuthWall('login');return}
+  if(!user){
+    try{const s=await getSettings();if(s.app_subtitle){appSubtitle=s.app_subtitle;const ss=document.getElementById('sidebar-sub');if(ss)ss.textContent=s.app_subtitle}}catch(e){}
+    showAuthWall('login');return
+  }
   currentUser=user
   await loadProfile(user)
   await updateLastLogin(user.id)
