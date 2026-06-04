@@ -39,6 +39,7 @@ const AOSOMO_PROBLEMS = [
 
 // ─── State ───────────────────────────────────────────────────────
 let hospitalName = 'รพ.สต.สองคอน'
+let appSubtitle  = 'ระบบติดตามผู้ป่วยจิตเวช'
 let allPatients  = []
 let _visitChecks = []
 let _visitProblems = []
@@ -209,7 +210,7 @@ async function navigate(page) {
   if(currentRole==='viewer' && !_previewOrigRole && !VIEWER_PAGES.includes(page)) page='overview'
   document.querySelectorAll('[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === page))
   const titles = {
-    dashboard:['JitHome','ระบบติดตามผู้ป่วยจิตเวช'],
+    dashboard:['JitHome', appSubtitle],
     patients: ['ผู้ป่วยทั้งหมด','รายชื่อและสถานะ'],
     timeline: ['ตารางนัดหมาย','เรียงตามวันที่'],
     overview: ['ภาพรวม','สถิติและกราฟ'],
@@ -1056,7 +1057,8 @@ async function renderAdmin(el) {
   </div>
   <div class="form-section">
     <h3>⚙️ ตั้งค่า</h3>
-    <div class="form-group"><label>ชื่อโรงพยาบาล</label><input id="s-hospital" value="${esc(settings.hospital_name||hospitalName)}"></div>
+    <div class="form-group"><label>ชื่อโรงพยาบาล / หน่วยงาน</label><input id="s-hospital" value="${esc(settings.hospital_name||hospitalName)}"></div>
+    <div class="form-group"><label>ข้อความใต้ชื่อแอป (หน้าหลัก)</label><input id="s-subtitle" value="${esc(settings.app_subtitle||appSubtitle)}" placeholder="ระบบติดตามผู้ป่วยจิตเวช"></div>
     <button class="btn btn-primary" style="width:auto;padding:9px 20px" id="settings-btn" onclick="saveSettings()">บันทึกการตั้งค่า</button>
   </div>
   <div class="form-section">
@@ -1874,13 +1876,23 @@ async function saveAdminRecord(){
 
 async function saveSettings(){
   const val=document.getElementById('s-hospital')?.value?.trim()
+  const sub=document.getElementById('s-subtitle')?.value?.trim()
   const btn=document.getElementById('settings-btn')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const{error}=await sb.from('app_settings').upsert({setting_key:'hospital_name',setting_value:val},{onConflict:'setting_key'})
+    const upserts=[
+      {setting_key:'hospital_name',setting_value:val},
+      {setting_key:'app_subtitle',setting_value:sub||appSubtitle}
+    ]
+    const{error}=await sb.from('app_settings').upsert(upserts,{onConflict:'setting_key'})
     if(error)throw error
     hospitalName=val
-    document.getElementById('header-sub').textContent=val
+    if(sub){
+      appSubtitle=sub
+      const ss=document.getElementById('sidebar-sub')
+      if(ss)ss.textContent=sub
+      document.getElementById('header-sub').textContent=sub
+    }
     btn.textContent='✅ บันทึกแล้ว'
     setTimeout(()=>{btn.textContent='บันทึกการตั้งค่า';btn.disabled=false},2000)
   }catch(e){btn.textContent='❌ ผิดพลาด';btn.disabled=false}
@@ -3091,7 +3103,8 @@ async function saveNewPatient(){
 async function loadAndNav(){
   try{
     const s=await getSettings()
-    if(s.hospital_name){hospitalName=s.hospital_name;document.getElementById('header-sub').textContent=s.hospital_name}
+    if(s.hospital_name){hospitalName=s.hospital_name}
+    if(s.app_subtitle){appSubtitle=s.app_subtitle;const ss=document.getElementById('sidebar-sub');if(ss)ss.textContent=s.app_subtitle}
     const{count}=await sb.from('patient_status').select('*',{count:'exact',head:true}).lt('days_until',0)
     if(count){const b=document.getElementById('notif-badge');if(b){b.textContent=count;b.style.display='flex'}}
   }catch(e){console.warn('loadAndNav:',e)}
