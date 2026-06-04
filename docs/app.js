@@ -685,6 +685,15 @@ function renderMembers(el){
   <div class="section-hd"><h3>👥 จัดการสมาชิก</h3></div>
   <p style="font-size:13px;color:var(--text3);margin-bottom:20px">กำหนดสิทธิ์การเข้าถึงข้อมูลของสมาชิกแต่ละคน</p>
 
+  <!-- รอการอนุมัติ -->
+  <div id="pending-section" style="display:none;background:#fff;border:2px solid #ddd6fe;border-radius:14px;padding:16px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <div style="width:32px;height:32px;background:#7c3aed;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px">⏳</div>
+      <div><div style="font-size:14px;font-weight:700;color:#7c3aed">คำขอสมัคร อสม. รอการอนุมัติ</div><div style="font-size:11px;color:var(--text3)">กดอนุมัติหรือปฏิเสธแต่ละคำขอ</div></div>
+    </div>
+    <div id="group-pending"></div>
+  </div>
+
   <!-- เจ้าหน้าที่ -->
   <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -1358,11 +1367,38 @@ async function loadMembersList(){
   const staffEl=document.getElementById('group-staff')
   const aosomoEl=document.getElementById('group-aosomo')
   const viewerEl=document.getElementById('group-viewer')
+  const pendingEl=document.getElementById('group-pending')
+  const pendingSection=document.getElementById('pending-section')
   if(!staffEl)return
 
-  const staff=all.filter(p=>p.role==='staff'||p.role==='admin')
-  const aosomo=all.filter(p=>p.role==='aosomo')
-  const viewer=all.filter(p=>p.role==='viewer')
+  const pending=all.filter(p=>p.status==='pending')
+  const active=p=>p.status!=='pending'&&p.status!=='rejected'
+  const staff=all.filter(p=>(p.role==='staff'||p.role==='admin')&&active(p))
+  const aosomo=all.filter(p=>p.role==='aosomo'&&active(p))
+  const viewer=all.filter(p=>p.role==='viewer'&&active(p))
+
+  if(pendingEl&&pendingSection){
+    if(pending.length){
+      pendingSection.style.display=''
+      pendingEl.innerHTML=pending.map(p=>`
+        <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:12px 14px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
+              <div style="font-size:11px;color:var(--text3)">📱 ${esc(p.email.replace('@jithome.local',''))} · 🏡 ${esc(p.village||'—')}</div>
+              ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace">🪪 ${maskNationalId(p.national_id)}</div>`:''}
+              ${p.profile_file_url?`<a href="${esc(p.profile_file_url)}" target="_blank" style="font-size:11px;color:#7c3aed;text-decoration:none">📎 ดูไฟล์แนบ</a>`:''}
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button onclick="approvePendingMember('${p.id}')" style="padding:6px 12px;background:#166534;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✅ อนุมัติ</button>
+              <button onclick="rejectPendingMember('${p.id}')" style="padding:6px 12px;background:#fff;color:#dc2626;border:1px solid #dc2626;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">❌ ปฏิเสธ</button>
+            </div>
+          </div>
+        </div>`).join('')
+    } else {
+      pendingSection.style.display='none'
+    }
+  }
 
   const staffDirHtml=(staffDir||[]).length?`
     <div style="font-size:11px;font-weight:700;color:#0d9488;margin:12px 0 6px;padding-top:10px;border-top:2px dashed #ccfbf1">📋 รายชื่อเจ้าหน้าที่ที่นำเข้า (${staffDir.length} คน)</div>
@@ -1375,6 +1411,20 @@ async function loadMembersList(){
   aosomoEl.innerHTML=(aosomo.length?aosomo.map(p=>memberCard(p,true)).join(''):'')+dirHtml||`<div style="color:var(--text3);font-size:12px;padding:8px 0">ยังไม่มีรายชื่อ</div>`
 
   viewerEl.innerHTML=viewer.length?viewer.map(p=>memberCard(p,false)).join(''):`<div style="color:var(--text3);font-size:12px;padding:8px 0">ยังไม่มีผู้สังเกตการณ์</div>`
+}
+
+async function approvePendingMember(userId){
+  if(!confirm('อนุมัติสมาชิกคนนี้?'))return
+  const{error}=await sb.from('user_profiles').update({status:'active'}).eq('id',userId)
+  if(error){alert('❌ '+error.message);return}
+  loadMembersList()
+}
+
+async function rejectPendingMember(userId){
+  if(!confirm('ปฏิเสธและลบคำขอนี้?'))return
+  const{error}=await sb.from('user_profiles').update({status:'rejected'}).eq('id',userId)
+  if(error){alert('❌ '+error.message);return}
+  loadMembersList()
 }
 
 async function importAosomoFile(input){
@@ -2806,7 +2856,8 @@ function showAuthWall(mode='login'){
       🔒 <strong>นโยบายคุ้มครองข้อมูลส่วนบุคคล (PDPA)</strong><br>
       ระบบนี้ดำเนินการภายใต้กระทรวงสาธารณสุข เพื่อการดูแลผู้ป่วยจิตเวชในชุมชน ข้อมูลสุขภาพถูกเก็บรักษาอย่างปลอดภัย เข้าถึงได้เฉพาะบุคลากรที่ได้รับอนุญาต
     </div>
-    <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--text3)">ยังไม่มีบัญชี? <a href="#" onclick="showAuthWall('register');return false" style="color:var(--primary);font-weight:700">สมัครสมาชิก</a></div>`
+    <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--text3)">ยังไม่มีบัญชี? <a href="#" onclick="showAuthWall('register');return false" style="color:var(--primary);font-weight:700">สมัครสมาชิก</a></div>
+    <div style="text-align:center;margin-top:6px;font-size:12px"><a href="#" onclick="showAuthWall('register_aosomo');return false" style="color:#7c3aed;font-weight:700">🏡 อสม. — สมัครด้วยตนเองที่นี่</a></div>`
   } else if(mode==='forgot'){
     ct.innerHTML=`
     <div style="text-align:center;margin-bottom:24px">
@@ -2832,6 +2883,48 @@ function showAuthWall(mode='login'){
     <div class="form-group"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" id="auth-password2" placeholder="พิมพ์รหัสผ่านอีกครั้ง" onkeydown="if(event.key==='Enter')resetPassword()"></div>
     <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
     <button class="btn btn-primary btn-block" id="auth-btn" onclick="resetPassword()">บันทึกรหัสผ่านใหม่</button>`
+  } else if(mode==='register_aosomo'){
+    const vOpts=['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:36px;margin-bottom:6px">🏡</div>
+      <div style="font-size:20px;font-weight:800;color:#7c3aed">สมัครเป็น อสม.</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">กรอกข้อมูลเพื่อส่งคำขอสมัครสมาชิก</div>
+    </div>
+    <div class="form-group"><label>ชื่อ-นามสกุล *</label><input type="text" id="rg-name" placeholder="เช่น นางสมศรี ใจดี" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>เบอร์โทรศัพท์ * (ใช้เป็นชื่อผู้ใช้)</label><input type="tel" id="rg-phone" placeholder="0812345678" maxlength="10" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>เลขบัตรประชาชน (ไม่บังคับ)</label><input type="text" id="rg-nid" placeholder="1234567890123" maxlength="13" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>หมู่บ้าน</label><select id="rg-village" style="width:100%">${vOpts}</select></div>
+    <div class="form-group"><label>ไฟล์แนบ เช่น สำเนาบัตร อสม. (ไม่บังคับ)</label><input type="file" id="rg-file" accept="image/*,.pdf" style="width:100%;box-sizing:border-box"></div>
+    <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;padding:10px 12px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px">
+      <input type="checkbox" id="rg-consent" style="margin-top:2px;flex-shrink:0">
+      <label for="rg-consent" style="font-size:11px;color:#5b21b6;line-height:1.6;cursor:pointer">ข้าพเจ้ายินยอมให้ระบบ JitHome เก็บข้อมูลส่วนบุคคล (ชื่อ เบอร์โทร เลขบัตรประชาชน) เพื่อการดูแลสุขภาพในชุมชน ตาม พ.ร.บ. PDPA พ.ศ.2562</label>
+    </div>
+    <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="auth-btn" onclick="registerAosomo()" style="background:#7c3aed;border-color:#7c3aed">🏡 ส่งคำขอสมัคร อสม.</button>
+    <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)">มีบัญชีแล้ว? <a href="#" onclick="showAuthWall('login');return false" style="color:var(--primary);font-weight:700">เข้าสู่ระบบ</a></div>`
+  } else if(mode==='submitted'){
+    ct.innerHTML=`
+    <div style="text-align:center;padding:16px 0">
+      <div style="font-size:48px;margin-bottom:12px">✅</div>
+      <div style="font-size:20px;font-weight:800;color:#166534;margin-bottom:8px">ส่งคำขอสมัครแล้ว!</div>
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px;margin-bottom:16px;text-align:left">
+        <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:6px">ขั้นตอนถัดไป:</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.8">1. ผู้ดูแลระบบจะตรวจสอบข้อมูลของคุณ<br>2. เมื่ออนุมัติแล้ว คุณจะสามารถเข้าสู่ระบบได้<br>3. ใช้ <strong>เบอร์โทรศัพท์</strong> เป็นชื่อผู้ใช้และรหัสผ่าน</div>
+      </div>
+      <button class="btn btn-outline btn-block" onclick="showAuthWall('login')">← กลับหน้าเข้าสู่ระบบ</button>
+    </div>`
+  } else if(mode==='pending'){
+    ct.innerHTML=`
+    <div style="text-align:center;padding:16px 0">
+      <div style="font-size:48px;margin-bottom:12px">⏳</div>
+      <div style="font-size:20px;font-weight:800;color:#7c3aed;margin-bottom:8px">รอการอนุมัติ</div>
+      <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:#5b21b6;margin-bottom:6px">บัญชีของคุณกำลังรอการตรวจสอบ</div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.6">กรุณารอให้ผู้ดูแลระบบอนุมัติ<br>เมื่ออนุมัติแล้ว ลองเข้าสู่ระบบอีกครั้ง</div>
+      </div>
+      <button class="btn btn-outline btn-block" onclick="logoutUser()">ออกจากระบบ</button>
+    </div>`
   } else {
     ct.innerHTML=`
     <div style="text-align:center;margin-bottom:24px">
@@ -2870,8 +2963,9 @@ async function loginUser(){
   const{data,error}=await sb.auth.signInWithPassword({email,password})
   if(error){err.textContent='❌ '+(error.message==='Invalid login credentials'?'Email หรือรหัสผ่านไม่ถูกต้อง':error.message);btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return}
   currentUser=data.user
-  await loadProfile(data.user)
+  const prof=await loadProfile(data.user)
   await updateLastLogin(data.user.id)
+  if(prof?.status==='pending'){hideAuthWall();showAuthWall('pending');return}
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
@@ -2900,6 +2994,48 @@ async function registerUser(){
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
+}
+
+async function registerAosomo(){
+  const name=(document.getElementById('rg-name')?.value||'').trim()
+  const phone=(document.getElementById('rg-phone')?.value||'').replace(/\D/g,'')
+  const nid=(document.getElementById('rg-nid')?.value||'').replace(/\D/g,'')
+  const village=document.getElementById('rg-village')?.value||''
+  const file=document.getElementById('rg-file')?.files?.[0]||null
+  const consent=document.getElementById('rg-consent')?.checked
+  const btn=document.getElementById('auth-btn')
+  const err=document.getElementById('auth-error')
+  if(!name){err.textContent='❌ กรุณากรอกชื่อ-นามสกุล';return}
+  if(phone.length<9){err.textContent='❌ เบอร์โทรไม่ถูกต้อง (ต้องมีอย่างน้อย 9 หลัก)';return}
+  if(nid&&nid.length!==13){err.textContent='❌ เลขบัตรประชาชนต้องมี 13 หลัก';return}
+  if(!consent){err.textContent='❌ กรุณายืนยันความยินยอม PDPA';return}
+  const email=phone+'@jithome.local'
+  const password=phone
+  btn.disabled=true;btn.textContent='กำลังส่งคำขอ...'
+  err.textContent=''
+  try{
+    const{data,error}=await sb.auth.signUp({email,password})
+    if(error){
+      err.textContent=error.message?.includes('already registered')?'❌ เบอร์โทรนี้มีบัญชีอยู่แล้ว':'❌ '+error.message
+      btn.disabled=false;btn.textContent='🏡 ส่งคำขอสมัคร อสม.';return
+    }
+    const uid=data?.user?.id
+    if(!uid)throw new Error('สร้างบัญชีไม่สำเร็จ')
+    let fileUrl=null
+    if(file&&data.session){
+      btn.textContent='กำลังอัพโหลดไฟล์...'
+      const ext=file.name.split('.').pop()
+      const filename=`members/${Date.now()}_${phone}.${ext}`
+      const{error:ue}=await sb.storage.from('patient-files').upload(filename,file)
+      if(!ue){const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename);fileUrl=publicUrl}
+    }
+    const prof={id:uid,email,display_name:name,role:'aosomo',village,status:'pending',last_login:new Date().toISOString()}
+    if(nid)prof.national_id=nid
+    if(fileUrl)prof.profile_file_url=fileUrl
+    await sb.from('user_profiles').upsert(prof,{onConflict:'id'})
+    await sb.auth.signOut()
+    showAuthWall('submitted')
+  }catch(e){err.textContent='❌ '+e.message;btn.disabled=false;btn.textContent='🏡 ส่งคำขอสมัคร อสม.'}
 }
 
 async function logoutUser(){
@@ -3154,8 +3290,9 @@ async function init(){
     showAuthWall('login');return
   }
   currentUser=user
-  await loadProfile(user)
+  const profile=await loadProfile(user)
   await updateLastLogin(user.id)
+  if(profile?.status==='pending'){showAuthWall('pending');return}
   updateUserUI()
   await loadAndNav()
 }
