@@ -1616,6 +1616,7 @@ async function sendReferralToHospital(visitData){
       `━━━━━━━━━━━━━━━`,
       `👤 ${d.patient_name}`,
       `🏠 ${d.house_no?d.house_no+' ':''} ${d.village}`,
+      d.national_id?(()=>{const n=(d.national_id||'').replace(/\D/g,'').padEnd(13,'?');const fmt=s=>`${s.slice(0,1)}-${s.slice(1,5)}-${s.slice(5,10)}-${s.slice(10,12)}-${s.slice(12,13)}`;return`🪪 บัตรประชาชน: ${fmt('X'.repeat(4)+n.slice(4,8)+'X'.repeat(5))}`})():'',
       d.disease_code||d.disease_name?`🦠 โรค: ${[d.disease_code,d.disease_name].filter(Boolean).join(' — ')}`:'',
       d.group_label?`${colorIcon} กลุ่ม: ${d.group_label}`:'',
       d.medication_name?`💊 ยา: ${d.medication_name}`:'',
