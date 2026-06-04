@@ -1889,6 +1889,7 @@ async function saveSettings(){
     hospitalName=val
     if(sub){
       appSubtitle=sub
+      localStorage.setItem('jh_app_subtitle',sub)
       const ss=document.getElementById('sidebar-sub')
       if(ss)ss.textContent=sub
       document.getElementById('header-sub').textContent=sub
@@ -3130,7 +3131,8 @@ async function init(){
 
   const{data:{user}}=await sb.auth.getUser()
   if(!user){
-    try{const s=await getSettings();if(s.app_subtitle){appSubtitle=s.app_subtitle;const ss=document.getElementById('sidebar-sub');if(ss)ss.textContent=s.app_subtitle}}catch(e){}
+    const cached=localStorage.getItem('jh_app_subtitle')
+    if(cached){appSubtitle=cached;const ss=document.getElementById('sidebar-sub');if(ss)ss.textContent=cached}
     showAuthWall('login');return
   }
   currentUser=user
