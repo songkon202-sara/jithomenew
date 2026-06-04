@@ -2201,11 +2201,6 @@ async function openModal(id){
       <div style="font-size:16px;font-weight:700;color:var(--primary)">${thDateFull(correctedNextDate)}</div>
       <div style="font-size:12px;color:var(--text3);margin-top:2px">รอบการฉีดยา: ${esc(futureRecs.length>0?futureRecs[0].interval_str:p.interval_str||'')}</div>
     </div>
-    ${(p.staff_responsible||p.aosomo_responsible)?`
-    <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap">
-      ${p.staff_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">👨‍⚕️ เจ้าหน้าที่:</span> <strong>${esc(p.staff_responsible)}</strong></div>`:''}
-      ${p.aosomo_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">🏡 อสม.:</span> <strong>${esc(p.aosomo_responsible)}</strong></div>`:''}
-    </div>`:''}
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden">
       <div style="padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text2)">📋 ข้อมูลพื้นฐาน</div>
       <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
@@ -2263,6 +2258,11 @@ async function openModal(id){
     </div>`:''}
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
     ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
+    ${(p.staff_responsible||p.aosomo_responsible)?`
+    <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap">
+      ${p.staff_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">👨‍⚕️ เจ้าหน้าที่:</span> <strong>${esc(p.staff_responsible)}</strong></div>`:''}
+      ${p.aosomo_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">🏡 อสม.:</span> <strong>${esc(p.aosomo_responsible)}</strong></div>`:''}
+    </div>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <div style="font-size:13px;font-weight:700">ประวัติการนัดหมาย (${pastRecs.length} ครั้ง)${futureRecs.length>0?`<span style="font-size:11px;font-weight:400;color:#92400e;margin-left:6px">📅 นัดหมาย ${futureRecs.length} รายการ</span>`:''}</div>
       <button onclick="toggleRecordForm()" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">+ บันทึก</button>
