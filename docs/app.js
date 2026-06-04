@@ -2459,7 +2459,9 @@ async function saveEditPatient(id){
       const ext=photoFile.name.split('.').pop()
       const filename=`photos/${Date.now()}_${name.replace(/\s+/g,'_')}.${ext}`
       const{error:pe}=await sb.storage.from('patient-files').upload(filename,photoFile)
-      if(!pe){const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename);updates.photo_url=publicUrl}
+      if(pe)throw new Error('อัพโหลดรูปไม่สำเร็จ: '+pe.message)
+      const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
+      updates.photo_url=publicUrl
       btn.textContent='กำลังบันทึก...'
     }
     if(file){
