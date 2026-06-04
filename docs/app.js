@@ -2077,6 +2077,8 @@ async function openModal(id){
   try{
     const{data:p}=await sb.from('patient_status').select('*').eq('id',id).single()
     if(!p)throw new Error('ไม่พบผู้ป่วย')
+    const{data:pExtra}=await sb.from('patients').select('photo_url').eq('id',id).single()
+    p.photo_url=pExtra?.photo_url||null
     p.group_label=groupLabel(p.group_color)
     const hist=await getHistory(id)
     const todayStr=todayISO()
@@ -2128,6 +2130,10 @@ async function openModal(id){
       </div>
     </div>`}).join('')
     ct.innerHTML=`
+    ${p.photo_url?`<div style="margin:-16px -16px 16px -16px;position:relative;overflow:hidden;border-radius:14px 14px 0 0">
+      <img src="${esc(p.photo_url)}" alt="รูปผู้ป่วย" style="width:100%;max-height:220px;object-fit:cover;object-position:center top;display:block">
+      <div style="position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(transparent,rgba(0,0,0,0.4))"></div>
+    </div>`:''}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')}${p.house_no?` · 🏠 ${esc(p.house_no)}`:''} · ${esc(hospitalName)}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
@@ -2162,7 +2168,12 @@ async function openModal(id){
       </div>
       <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="edit-pt-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
       <div class="form-group">
-        <label>📎 แนบไฟล์ใหม่ (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
+        <label>📷 รูปถ่ายผู้ป่วย (ข้อมูลพื้นฐาน)</label>
+        ${p.photo_url?`<div style="margin-bottom:8px"><img src="${esc(p.photo_url)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:cover;object-position:center top"><div style="font-size:11px;color:var(--text3);margin-top:2px">📷 รูปปัจจุบัน — อัปโหลดใหม่เพื่อแทนที่</div></div>`:''}
+        <input type="file" id="edit-pt-photo" accept="image/*" capture="environment" style="width:100%;box-sizing:border-box">
+      </div>
+      <div class="form-group">
+        <label>📎 แนบไฟล์เอกสาร (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
         ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--primary);margin-bottom:6px;text-decoration:none">📄 ไฟล์ปัจจุบัน (คลิกดู) — อัปโหลดใหม่เพื่อแทนที่</a>`:''}
         <div id="edit-pt-file-wrap" onclick="document.getElementById('edit-pt-file').click()"
           style="border:2px dashed var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer;background:#fff">
@@ -2408,6 +2419,16 @@ async function saveEditPatient(id){
     const house_no=(document.getElementById('edit-pt-house-no')?.value||'').trim()
     const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name}
     if(canDo('admin'))updates.national_id=nidRaw
+    const photoInput=document.getElementById('edit-pt-photo')
+    const photoFile=photoInput?.files?.[0]||null
+    if(photoFile){
+      btn.textContent='กำลังอัพโหลดรูป...'
+      const ext=photoFile.name.split('.').pop()
+      const filename=`photos/${Date.now()}_${name.replace(/\s+/g,'_')}.${ext}`
+      const{error:pe}=await sb.storage.from('patient-files').upload(filename,photoFile)
+      if(!pe){const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename);updates.photo_url=publicUrl}
+      btn.textContent='กำลังบันทึก...'
+    }
     if(file){
       btn.textContent='กำลังอัพโหลดไฟล์...'
       const ext=file.name.split('.').pop()
