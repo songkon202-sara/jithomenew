@@ -144,7 +144,7 @@ function patientCard(p) {
   const over = parseInt(p.days_until) < 0
   const gl   = p.group_label || groupLabel(p.group_color)
   const cls  = `patient-card ${p.group_color}${over?' overdue':''} fade-up`
-  const disease = p.disease_code||p.disease_name ? `<div class="pc-note" style="color:#0369a1;background:#f0f9ff">${p.disease_code?`<strong>${esc(p.disease_code)}</strong> `:''}${esc(p.disease_name||'')}</div>` : ''
+  const disease = canDo('record') && (p.disease_code||p.disease_name) ? `<div class="pc-note" style="color:#0369a1;background:#f0f9ff">${p.disease_code?`<strong>${esc(p.disease_code)}</strong> `:''}${esc(p.disease_name||'')}</div>` : ''
   const note = p.note ? `<div class="pc-note">${esc(p.note)}</div>` : ''
   return `<div class="${cls}" onclick="openModal(${p.id})" data-id="${p.id}" data-group="${p.group_color}" data-village="${esc(p.village||'')}">
     <div class="pc-top">
@@ -2138,7 +2138,7 @@ async function openModal(id){
       ${p.inject_interval?`<div style="font-size:12px"><span style="color:var(--text3)">💉 ฉีดยา</span> <strong style="color:#15803d">ทุก ${p.inject_interval} เดือน</strong></div>`:''}
       ${p.medication_name?`<div style="font-size:12px;width:100%"><span style="color:var(--text3)">💊 ยา:</span> <strong>${esc(p.medication_name)}</strong></div>`:''}
     </div>`:''}
-    ${p.disease_code||p.disease_name?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+    ${canDo('record')&&(p.disease_code||p.disease_name)?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
       <div style="font-size:20px">🏥</div>
       <div>
         ${p.disease_code?`<div style="font-size:12px;font-weight:700;color:#0369a1;letter-spacing:.5px">${esc(p.disease_code)}</div>`:''}
