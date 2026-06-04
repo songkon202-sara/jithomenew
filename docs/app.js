@@ -154,8 +154,9 @@ function patientCard(p) {
     </div>
     <div class="pc-meta">
       <span class="badge ${p.group_color}"><span class="badge-dot"></span>${esc(gl)}</span>
-      <span class="pc-date">
-        ${p.last_record_type==='visit'?'🏡':'💉'} ${thDate(p.next_date)}
+      <span class="pc-date" style="display:flex;gap:8px;flex-wrap:wrap">
+        ${p.next_date?`<span>💉 ${thDate(p.next_date)}</span>`:''}
+        ${p.next_visit_date?`<span style="color:#ea580c">🏡 ${thDate(p.next_visit_date)}</span>`:''}
       </span>
     </div>
     ${disease}${note}
