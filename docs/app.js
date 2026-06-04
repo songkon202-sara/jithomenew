@@ -2077,8 +2077,9 @@ async function openModal(id){
   try{
     const{data:p}=await sb.from('patient_status').select('*').eq('id',id).single()
     if(!p)throw new Error('ไม่พบผู้ป่วย')
-    const{data:pExtra}=await sb.from('patients').select('photo_url').eq('id',id).single()
+    const{data:pExtra}=await sb.from('patients').select('photo_url,oral_medication').eq('id',id).single()
     p.photo_url=pExtra?.photo_url||null
+    p.oral_medication=pExtra?.oral_medication||null
     p.group_label=groupLabel(p.group_color)
     const hist=await getHistory(id)
     const todayStr=todayISO()
@@ -2168,7 +2169,8 @@ async function openModal(id){
           ${[1,2,3,6].map(n=>`<option value="${n}">${n} เดือน</option>`).join('')}
         </select></div>
       </div>
-      <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="edit-pt-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
+      <div class="form-group"><label>💊 ยาทานปัจจุบัน</label><input type="text" id="edit-pt-oral-medication" placeholder="เช่น Risperidone 2mg, Haloperidol 5mg" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group"><label>💉 ยาฉีด</label><input type="text" id="edit-pt-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
       <div class="form-group">
         <label>📷 ภาพถ่ายบริบท <span style="font-size:11px;font-weight:400;color:var(--text3)">เช่น บ้าน สภาพแวดล้อม สถานที่อยู่อาศัย</span></label>
         ${p.photo_url?`<div style="margin-bottom:8px;border-radius:8px;overflow:hidden;border:1px solid var(--border)"><img src="${esc(p.photo_url)}" style="max-width:100%;max-height:140px;object-fit:cover;display:block"><div style="font-size:11px;color:var(--text3);padding:4px 8px;background:#f9fafb">อัปโหลดใหม่เพื่อแทนที่</div></div>`:''}
@@ -2204,28 +2206,53 @@ async function openModal(id){
       ${p.staff_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">👨‍⚕️ เจ้าหน้าที่:</span> <strong>${esc(p.staff_responsible)}</strong></div>`:''}
       ${p.aosomo_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">🏡 อสม.:</span> <strong>${esc(p.aosomo_responsible)}</strong></div>`:''}
     </div>`:''}
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-      ${p.national_id?`<div style="flex:1;min-width:0;background:${canDo('admin')?'#fefce8':'#f9fafb'};border:1px solid ${canDo('admin')?'#fde68a':'var(--border)'};border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px">
-        <span style="font-size:14px">🪪</span>
-        <div>
-          <div style="font-size:10px;color:var(--text3);font-weight:600">เลขบัตรประชาชน${canDo('admin')?'':' <span style="background:#e5e7eb;color:#6b7280;padding:0 5px;border-radius:4px;font-size:9px">PDPA</span>'}</div>
-          <div style="font-size:13px;font-weight:700;letter-spacing:1px;color:${canDo('admin')?'#92400e':'var(--text3)'}">${maskNationalId(p.national_id)}</div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden">
+      <div style="padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text2)">📋 ข้อมูลพื้นฐาน</div>
+      <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+        ${p.national_id?`<div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:18px;flex-shrink:0">🪪</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">เลขบัตรประชาชน${canDo('admin')?'':' <span style="background:#e5e7eb;color:#6b7280;padding:0 4px;border-radius:3px;font-size:9px">PDPA</span>'}</div>
+            <div style="font-size:13px;font-weight:700;letter-spacing:1.5px;color:${canDo('admin')?'#92400e':'var(--text2)'};font-family:monospace">${maskNationalId(p.national_id)}</div>
+          </div>
+        </div>`:''}
+        ${p.oral_medication?`<div style="display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:18px;flex-shrink:0">💊</span>
+          <div>
+            <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">ยาที่ใช้ปัจจุบัน</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text1)">${esc(p.oral_medication)}</div>
+          </div>
+        </div>`:''}
+        ${p.medication_name?`<div style="display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:18px;flex-shrink:0">💉</span>
+          <div>
+            <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">ยาฉีด${p.inject_interval?` · ทุก ${p.inject_interval} เดือน`:''}</div>
+            <div style="font-size:13px;font-weight:600;color:#15803d">${esc(p.medication_name)}</div>
+          </div>
+        </div>`:p.inject_interval?`<div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:18px;flex-shrink:0">💉</span>
+          <div style="font-size:13px;color:var(--text2)">ฉีดยาทุก <strong>${p.inject_interval} เดือน</strong></div>
+        </div>`:''}
+        ${p.visit_interval?`<div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:18px;flex-shrink:0">🏡</span>
+          <div style="font-size:13px;color:var(--text2)">เยี่ยมบ้านทุก <strong>${p.visit_interval} เดือน</strong></div>
+        </div>`:''}
+        ${p.photo_url?`<div style="display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:18px;flex-shrink:0">📷</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:4px">ภาพถ่ายบริบท / สภาพแวดล้อม</div>
+            <a href="${esc(p.photo_url)}" target="_blank"><img src="${esc(p.photo_url)}" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>
+          </div>
+        </div>`:''}
+        <div style="display:flex;align-items:center;gap:10px;padding-top:6px;border-top:1px solid var(--border)">
+          <span style="font-size:16px">${p.consent_given?'✅':'⚠️'}</span>
+          <div style="flex:1">
+            <span style="font-size:12px;font-weight:700;color:${p.consent_given?'#15803d':'#b91c1c'}">${p.consent_given?'ความยินยอม PDPA: ยินยอมแล้ว'+(p.consent_date?' · '+thDate(p.consent_date):''):'ยังไม่ได้รับความยินยอม PDPA'}</span>
+          </div>
+          ${canDo('record')&&!p.consent_given?`<button onclick="giveConsent(${p.id})" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">รับยินยอม</button>`:''}
         </div>
-      </div>`:''}
-      <div style="background:${p.consent_given?'#f0fdf4':'#fef2f2'};border:1px solid ${p.consent_given?'#86efac':'#fca5a5'};border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px">
-        <span style="font-size:16px">${p.consent_given?'✅':'⚠️'}</span>
-        <div>
-          <div style="font-size:10px;color:var(--text3);font-weight:600">ความยินยอม PDPA</div>
-          <div style="font-size:12px;font-weight:700;color:${p.consent_given?'#15803d':'#b91c1c'}">${p.consent_given?('ยินยอมแล้ว'+(p.consent_date?' · '+thDate(p.consent_date):'')):'ยังไม่ได้รับความยินยอม'}</div>
-        </div>
-        ${canDo('record')&&!p.consent_given?`<button onclick="giveConsent(${p.id})" style="margin-left:4px;padding:4px 8px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;flex-shrink:0">รับยินยอม</button>`:''}
       </div>
     </div>
-    ${(p.visit_interval||p.inject_interval||p.medication_name)?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:10px">
-      ${p.visit_interval?`<div style="font-size:12px"><span style="color:var(--text3)">🏡 เยี่ยมบ้าน</span> <strong style="color:#15803d">ทุก ${p.visit_interval} เดือน</strong></div>`:''}
-      ${p.inject_interval?`<div style="font-size:12px"><span style="color:var(--text3)">💉 ฉีดยา</span> <strong style="color:#15803d">ทุก ${p.inject_interval} เดือน</strong></div>`:''}
-      ${p.medication_name?`<div style="font-size:12px;width:100%"><span style="color:var(--text3)">💊 ยา:</span> <strong>${esc(p.medication_name)}</strong></div>`:''}
-    </div>`:''}
     ${canDo('record')&&(p.disease_code||p.disease_name)?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
       <div style="font-size:20px">🏥</div>
       <div>
@@ -2233,8 +2260,8 @@ async function openModal(id){
         ${p.disease_name?`<div style="font-size:12px;color:#0c4a6e">${esc(p.disease_name)}</div>`:''}
       </div>
     </div>`:''}
-    ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
-    ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
+    ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
+    ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <div style="font-size:13px;font-weight:700">ประวัติการนัดหมาย (${pastRecs.length} ครั้ง)${futureRecs.length>0?`<span style="font-size:11px;font-weight:400;color:#92400e;margin-left:6px">📅 นัดหมาย ${futureRecs.length} รายการ</span>`:''}</div>
       <button onclick="toggleRecordForm()" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">+ บันทึก</button>
@@ -2337,15 +2364,17 @@ async function openEditPatient(id,name,village,houseNo,note,staffResp,aosomoResp
     if(staffResp&&!userNames.includes(staffResp)&&!dirNames.includes(staffResp))
       staffSel.innerHTML+=`<option value="${esc(staffResp)}" selected>${esc(staffResp)}</option>`
   }
-  // โหลดข้อมูลเพิ่มเติม (visit_interval, inject_interval, medication_name)
-  const {data:extra}=await sb.from('patients').select('visit_interval,inject_interval,medication_name').eq('id',id).single()
+  // โหลดข้อมูลเพิ่มเติม
+  const {data:extra}=await sb.from('patients').select('visit_interval,inject_interval,medication_name,oral_medication').eq('id',id).single()
   if(extra){
     const vi=document.getElementById('edit-pt-visit-interval')
     const ii=document.getElementById('edit-pt-inject-interval')
     const med=document.getElementById('edit-pt-medication')
+    const oral=document.getElementById('edit-pt-oral-medication')
     if(vi)vi.value=extra.visit_interval||''
     if(ii)ii.value=extra.inject_interval||''
     if(med)med.value=extra.medication_name||''
+    if(oral)oral.value=extra.oral_medication||''
   }
   // โหลด dropdown อสม. — ส่ง village ตรงจากข้อมูลผู้ป่วย (ไม่ผ่าน select element)
   await refreshAosomoByVillage(village, aosomoResp)
@@ -2418,8 +2447,9 @@ async function saveEditPatient(id){
     const visit_interval=parseInt(document.getElementById('edit-pt-visit-interval')?.value)||null
     const inject_interval=parseInt(document.getElementById('edit-pt-inject-interval')?.value)||null
     const medication_name=(document.getElementById('edit-pt-medication')?.value||'').trim()||null
+    const oral_medication=(document.getElementById('edit-pt-oral-medication')?.value||'').trim()||null
     const house_no=(document.getElementById('edit-pt-house-no')?.value||'').trim()
-    const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name}
+    const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name,oral_medication}
     if(canDo('admin'))updates.national_id=nidRaw
     const photoInput=document.getElementById('edit-pt-photo')
     const photoFile=photoInput?.files?.[0]||null
