@@ -128,6 +128,11 @@ function maskNationalId(id){
   if(!d)return''
   const fmt=n=>`${n.slice(0,1)}-${n.slice(1,5)}-${n.slice(5,10)}-${n.slice(10,12)}-${n.slice(12,13)}`
   if(canDo('admin'))return fmt(d.padEnd(13,'?'))
+  if(canDo('record')){
+    // PDPA: แสดงเฉพาะหลักที่ 5-8, ซ่อนส่วนที่เหลือ
+    const p=d.padEnd(13,'?')
+    return fmt('X'.repeat(4)+p.slice(4,8)+'X'.repeat(5))
+  }
   return'X-XXXX-XXXXX-XX-X'
 }
 function formatNationalIdInput(v){
