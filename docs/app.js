@@ -2130,9 +2130,11 @@ async function openModal(id){
       </div>
     </div>`}).join('')
     ct.innerHTML=`
-    ${p.photo_url?`<div style="margin:-16px -16px 16px -16px;position:relative;overflow:hidden;border-radius:14px 14px 0 0">
-      <img src="${esc(p.photo_url)}" alt="รูปผู้ป่วย" style="width:100%;max-height:220px;object-fit:cover;object-position:center top;display:block">
-      <div style="position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(transparent,rgba(0,0,0,0.4))"></div>
+    ${p.photo_url?`<div style="margin-bottom:14px;border-radius:10px;overflow:hidden;border:1px solid var(--border)">
+      <a href="${esc(p.photo_url)}" target="_blank">
+        <img src="${esc(p.photo_url)}" alt="ภาพถ่ายบริบท" style="width:100%;max-height:200px;object-fit:cover;display:block;cursor:pointer">
+      </a>
+      <div style="padding:6px 10px;background:#f9fafb;font-size:11px;color:var(--text3)">📷 ภาพถ่ายบริบท / สภาพแวดล้อม — กดรูปเพื่อดูขนาดเต็ม</div>
     </div>`:''}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')}${p.house_no?` · 🏠 ${esc(p.house_no)}`:''} · ${esc(hospitalName)}</div></div>
@@ -2168,8 +2170,8 @@ async function openModal(id){
       </div>
       <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="edit-pt-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
       <div class="form-group">
-        <label>📷 รูปถ่ายผู้ป่วย (ข้อมูลพื้นฐาน)</label>
-        ${p.photo_url?`<div style="margin-bottom:8px"><img src="${esc(p.photo_url)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:cover;object-position:center top"><div style="font-size:11px;color:var(--text3);margin-top:2px">📷 รูปปัจจุบัน — อัปโหลดใหม่เพื่อแทนที่</div></div>`:''}
+        <label>📷 ภาพถ่ายบริบท <span style="font-size:11px;font-weight:400;color:var(--text3)">เช่น บ้าน สภาพแวดล้อม สถานที่อยู่อาศัย</span></label>
+        ${p.photo_url?`<div style="margin-bottom:8px;border-radius:8px;overflow:hidden;border:1px solid var(--border)"><img src="${esc(p.photo_url)}" style="max-width:100%;max-height:140px;object-fit:cover;display:block"><div style="font-size:11px;color:var(--text3);padding:4px 8px;background:#f9fafb">อัปโหลดใหม่เพื่อแทนที่</div></div>`:''}
         <input type="file" id="edit-pt-photo" accept="image/*" capture="environment" style="width:100%;box-sizing:border-box">
       </div>
       <div class="form-group">
