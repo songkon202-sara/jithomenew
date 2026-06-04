@@ -609,7 +609,8 @@ function renderVisitList(visits){
         </div>
       </div>
       <div style="font-size:12px;color:var(--text2)">${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'} ${esc(v.visitor||'')}${v.refer?` <span style="color:#b91c1c;font-weight:700">⚠️ ส่งต่อ</span>`:''}</div>
-      ${v.note?`<div style="font-size:12px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">${esc(v.note)}</div>`:''}
+      ${v.note?`<div style="font-size:12px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:pre-line">${esc(v.note)}</div>`:''}
+      ${v.photo_url?`<div style="margin-top:8px"><a href="${esc(v.photo_url)}" target="_blank"><img src="${esc(v.photo_url)}" alt="รูปถ่ายการเยี่ยมบ้าน" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer"></a></div>`:''}
     </div>`
   }).join('')
 }
@@ -647,6 +648,9 @@ async function openEditVisit(id){
     const noteLines=(v.note||'').split('\n')
     const cleanNote=noteLines.filter(l=>!l.startsWith('[')&&!l.startsWith('●')&&l.trim()).join('\n')
     const ntEl=document.getElementById('v-note');if(ntEl)ntEl.value=cleanNote
+    // แสดงรูปเดิม (ถ้ามี)
+    const prevEl=document.getElementById('v-photo-preview')
+    if(prevEl&&v.photo_url)prevEl.innerHTML=`<a href="${esc(v.photo_url)}" target="_blank"><img src="${esc(v.photo_url)}" style="max-width:100%;max-height:120px;border-radius:8px;object-fit:cover"></a><div style="font-size:11px;color:var(--text3);margin-top:2px">📷 รูปเดิม — อัปโหลดใหม่เพื่อแทนที่</div>`
     // เปลี่ยนปุ่มบันทึกเป็น saveEditVisit
     const saveBtn=document.getElementById('v-save-btn')
     if(saveBtn){saveBtn.textContent='💾 บันทึกการแก้ไข';saveBtn.onclick=()=>saveEditVisit(id)}
@@ -667,7 +671,17 @@ async function saveEditVisit(id){
   const note=(noteRaw+rfText+ytText+a10Text+probText).trim()
   const btn=document.getElementById('v-save-btn')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
-  const{error}=await sb.from('home_visits').update({patient_name:name,village,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note,refer}).eq('id',id)
+  const photoFile=document.getElementById('v-photo')?.files?.[0]||null
+  const updates={patient_name:name,village,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note,refer}
+  if(photoFile){
+    btn.textContent='กำลังอัพโหลดรูป...'
+    const ext=photoFile.name.split('.').pop()
+    const filename=`visits/${Date.now()}_${(name||'visit').replace(/\s+/g,'_')}.${ext}`
+    const{error:ue}=await sb.storage.from('patient-files').upload(filename,photoFile)
+    if(!ue){const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename);updates.photo_url=publicUrl}
+    btn.textContent='กำลังบันทึก...'
+  }
+  const{error}=await sb.from('home_visits').update(updates).eq('id',id)
   if(error){btn.textContent='❌ '+error.message;btn.disabled=false;return}
   closeVisitModal()
   if(location.hash==='#visit')navigate('visit')
@@ -2600,6 +2614,7 @@ function openVisitForm(type){
   </div>`:''}
 
   <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="v-note" rows="3" style="resize:none;font-family:'Sarabun',sans-serif" placeholder="อาการ สิ่งที่พบ ข้อสังเกต..."></textarea></div>
+  <div class="form-group"><label>📷 รูปถ่าย (ไม่บังคับ)</label><input type="file" id="v-photo" accept="image/*" capture="environment" style="width:100%;box-sizing:border-box"><div id="v-photo-preview" style="margin-top:6px"></div></div>
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:8px;margin-bottom:14px">
     <div><div style="font-size:13px;font-weight:700;color:var(--red)">ต้องการส่งต่อ / รายงานเร่งด่วน</div><div style="font-size:11px;color:var(--text3)">กรณีพบความเสี่ยงสูง</div></div>
     <label class="toggle"><input type="checkbox" id="v-refer"><span class="toggle-slider"></span></label>
@@ -2797,8 +2812,18 @@ async function saveVisitRecord(){
   const a10Text=_visitType==='staff'?getAssess10Text():''
   const probText=_visitProblems.length>0?`\n[ปัญหาที่พบ] ${_visitProblems.map(id=>AOSOMO_PROBLEMS.find(([pid])=>pid===id)?.[1]||id).join(' | ')}`:''
   const fullNote=(note+oasText+rfText+ytText+a10Text+probText).trim()
+  const photoFile=document.getElementById('v-photo')?.files?.[0]||null
+  let photoUrl=null
+  if(photoFile){
+    btn.textContent='กำลังอัพโหลดรูป...'
+    const ext=photoFile.name.split('.').pop()
+    const filename=`visits/${Date.now()}_${(name||'visit').replace(/\s+/g,'_')}.${ext}`
+    const{error:ue}=await sb.storage.from('patient-files').upload(filename,photoFile)
+    if(!ue){const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename);photoUrl=publicUrl}
+    btn.textContent='กำลังบันทึก...'
+  }
   try{
-    const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer})
+    const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer,photo_url:photoUrl})
     if(error)throw error
     sendLineVisitReport({patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,score:_visitChecks.length,refer})
     if(refer&&_visitType==='staff'){
