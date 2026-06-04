@@ -2131,12 +2131,6 @@ async function openModal(id){
       </div>
     </div>`}).join('')
     ct.innerHTML=`
-    ${p.photo_url?`<div style="margin-bottom:14px;border-radius:10px;overflow:hidden;border:1px solid var(--border)">
-      <a href="${esc(p.photo_url)}" target="_blank">
-        <img src="${esc(p.photo_url)}" alt="ภาพถ่ายบริบท" style="width:100%;max-height:200px;object-fit:cover;display:block;cursor:pointer">
-      </a>
-      <div style="padding:6px 10px;background:#f9fafb;font-size:11px;color:var(--text3)">📷 ภาพถ่ายบริบท / สภาพแวดล้อม — กดรูปเพื่อดูขนาดเต็ม</div>
-    </div>`:''}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')}${p.house_no?` · 🏠 ${esc(p.house_no)}`:''} · ${esc(hospitalName)}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
