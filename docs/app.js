@@ -2077,8 +2077,9 @@ async function openModal(id){
   try{
     const{data:p}=await sb.from('patient_status').select('*').eq('id',id).single()
     if(!p)throw new Error('ไม่พบผู้ป่วย')
-    const{data:pExtra}=await sb.from('patients').select('photo_url,oral_medication').eq('id',id).single()
+    const{data:pExtra}=await sb.from('patients').select('photo_url,photo_urls,oral_medication').eq('id',id).single()
     p.photo_url=pExtra?.photo_url||null
+    p.photo_urls=pExtra?.photo_urls||[]
     p.oral_medication=pExtra?.oral_medication||null
     p.group_label=groupLabel(p.group_color)
     const hist=await getHistory(id)
@@ -2167,7 +2168,7 @@ async function openModal(id){
       <div class="form-group"><label>💉 ยาฉีด</label><input type="text" id="edit-pt-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
       <div class="form-group">
         <label>📷 ภาพถ่ายบริบท <span style="font-size:11px;font-weight:400;color:var(--text3)">เช่น บ้าน สภาพแวดล้อม สถานที่อยู่อาศัย</span></label>
-        ${p.photo_url?`<div style="margin-bottom:8px;border-radius:8px;overflow:hidden;border:1px solid var(--border)"><img src="${esc(p.photo_url)}" style="max-width:100%;max-height:140px;object-fit:cover;display:block"><div style="font-size:11px;color:var(--text3);padding:4px 8px;background:#f9fafb">อัปโหลดใหม่เพื่อแทนที่</div></div>`:''}
+        ${(p.photo_urls&&p.photo_urls.length>0)?`<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:6px">${p.photo_urls.map((url,i)=>`<div style="border-radius:8px;overflow:hidden;border:1px solid var(--border);position:relative"><img src="${esc(url)}" style="max-width:100%;max-height:120px;object-fit:cover;display:block"><button onclick="removePatientPhoto(${p.id},${i})" style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,0.85);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;font-family:'Sarabun',sans-serif">×</button></div>`).join('')}</div>`:''}
         <input type="file" id="edit-pt-photo" accept="image/*" capture="environment" style="width:100%;box-sizing:border-box">
       </div>
       <div class="form-group">
@@ -2229,8 +2230,8 @@ async function openModal(id){
           <span style="font-size:18px;flex-shrink:0">📷</span>
           <div style="flex:1;min-width:0">
             <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:4px">ภาพถ่ายบริบท / สภาพแวดล้อม</div>
-            ${p.photo_url
-              ? `<a href="${esc(p.photo_url)}" target="_blank"><img src="${esc(p.photo_url)}" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>`
+            ${(p.photo_urls&&p.photo_urls.length>0)
+              ? p.photo_urls.map(url=>`<a href="${esc(url)}" target="_blank" style="display:block;margin-bottom:6px"><img src="${esc(url)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>`).join('')
               : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้อัปโหลด</div>`}
           </div>
         </div>
@@ -2279,6 +2280,15 @@ async function openModal(id){
   }catch(e){ct.innerHTML=`<div style="padding:20px;color:var(--red)">เกิดข้อผิดพลาด: ${esc(e.message)}</div>`}
 }
 function closeModal(){document.getElementById('modal-overlay').style.display='none'}
+
+async function removePatientPhoto(patientId,index){
+  if(!confirm('ลบรูปนี้ออก?'))return
+  const{data}=await sb.from('patients').select('photo_urls').eq('id',patientId).single()
+  const urls=[...(data?.photo_urls||[])]
+  urls.splice(index,1)
+  await sb.from('patients').update({photo_urls:urls}).eq('id',patientId)
+  await openModal(patientId)
+}
 
 function toggleEditRecord(id,date,interval,note){
   const wrap=document.getElementById('edit-rec-'+id)
@@ -2455,7 +2465,8 @@ async function saveEditPatient(id){
       const{error:pe}=await sb.storage.from('patient-files').upload(filename,photoFile)
       if(pe)throw new Error('อัพโหลดรูปไม่สำเร็จ: '+pe.message)
       const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
-      updates.photo_url=publicUrl
+      const{data:cur}=await sb.from('patients').select('photo_urls').eq('id',id).single()
+      updates.photo_urls=[...(cur?.photo_urls||[]),publicUrl]
       btn.textContent='กำลังบันทึก...'
     }
     if(file){
