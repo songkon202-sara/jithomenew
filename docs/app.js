@@ -48,7 +48,7 @@ let _oasScores   = {s1:0, s2:0, s3:0}
 let _redFlags    = []
 let _ytAssess    = {ya:null, yati:null, sara:null}
 let _assess10    = {}
-let _mhAssess    = { twoq:{q1:null,q2:null,q3:null}, rq:[5,5,5], st5:new Array(5).fill(null), burnout:new Array(9).fill(null) }
+let _mhAssess    = { twoq:{q1:null,q2:null,q3:null}, rq:[5,5,5], st5:new Array(5).fill(null) }
 const AIMS_ITEMS=['กล้ามเนื้อใบหน้า','ริมฝีปาก / รอบปาก','ขากรรไกร','ลิ้น','แขนส่วนบน (ไหล่/ข้อศอก/ข้อมือ)','แขนส่วนล่าง (ข้อเข่า/ข้อเท้า)','มือและนิ้ว','การเคลื่อนไหวแขนและมือโดยรวม','คอ ไหล่ สะโพก','ลำตัว','การเคลื่อนไหวลำตัวโดยรวม','ความรุนแรงโดยรวม']
 const CGB_ITEMS=['ผู้ป่วยขอความช่วยเหลือมากเกินไป','ไม่มีเวลาส่วนตัวเพราะต้องดูแล','เครียดเมื่อดูแลควบคู่กับหน้าที่อื่น','รู้สึกอายเพราะพฤติกรรมของผู้ป่วย','รู้สึกโกรธเมื่ออยู่ใกล้ผู้ป่วย','ผู้ป่วยกระทบความสัมพันธ์กับครอบครัว','กลัวเรื่องอนาคตของผู้ป่วย','สุขภาพของท่านแย่ลงเพราะการดูแล','ตึงเครียดเมื่ออยู่ใกล้ผู้ป่วย','ชีวิตทางสังคมแย่ลงเพราะการดูแล','รู้สึกหมดแรงเพราะการดูแล','การดูแลมีผลต่อชีวิตโดยรวม']
 let _gaf=null
@@ -618,11 +618,6 @@ function renderMHAssessResult(a){
     const[bg,color,lbl]=s<=17?['#fef2f2','#b91c1c',`RQ: ${s} พลังใจต่ำ`]:s<=23?['#fefce8','#854d0e',`RQ: ${s} ปานกลาง`]:['#f0fdf4','#15803d',`RQ: ${s} พลังใจดี`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
   }
-  if(a.burnout?.total!==undefined&&a.burnout.scores?.some(v=>v!==null)){
-    const s=a.burnout.total
-    const[bg,color,lbl]=s<=9?['#f0fdf4','#15803d',`Burnout: ${s} ไม่มี`]:s<=18?['#fff7ed','#c2410c',`Burnout: ${s} ปานกลาง`]:['#fef2f2','#b91c1c',`Burnout: ${s} สูง`]
-    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
-  }
   if(a.gaf!==null&&a.gaf!==undefined){
     const s=a.gaf
     const[bg,color]=s>=71?['#f0fdf4','#15803d']:s>=51?['#fefce8','#854d0e']:s>=31?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
@@ -632,9 +627,6 @@ function renderMHAssessResult(a){
     const s=a.aims.total
     const[bg,color]=s===0?['#f0fdf4','#15803d']:s<=4?['#fefce8','#854d0e']:s<=8?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">AIMS: ${s}</span>`)
-  }
-  if(a.symptoms?.length){
-    chips.push(`<span style="background:#fef2f2;color:#b91c1c;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">⚠️ พบอาการ ${a.symptoms.length} รายการ</span>`)
   }
   if(a.medAdhere!==null&&a.medAdhere!==undefined){
     const[bg,color,lbl]=a.medAdhere.taken?['#f0fdf4','#15803d','💊 กินยาครบ']:['#fef2f2','#b91c1c',`💊 ขาดยา ${a.medAdhere.missedDays||0} วัน`]
@@ -2579,7 +2571,7 @@ function openVisitForm(type){
   if(type==='aosomo' && currentRole==='staff'){alert('เจ้าหน้าที่ ไม่มีสิทธิ์บันทึกแบบ อสม.');return}
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
-  _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={};_mhAssess={twoq:{q1:null,q2:null,q3:null},rq:[5,5,5],st5:new Array(5).fill(null),burnout:new Array(9).fill(null)};_gaf=null;_aims=new Array(12).fill(0);_cgb=new Array(12).fill(0);_symptoms=[];_medAdhere=null;_medReasons=[]
+  _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={};_mhAssess={twoq:{q1:null,q2:null,q3:null},rq:[5,5,5],st5:new Array(5).fill(null)};_gaf=null;_aims=new Array(12).fill(0);_cgb=new Array(12).fill(0);_medAdhere=null;_medReasons=[]
   const cl=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
   const nameOpts=allPatients.map(p=>`<option value="${esc(p.name)}" data-village="${esc(p.village||'')}">`).join('')
   ct.innerHTML=`
@@ -2759,30 +2751,6 @@ function openVisitForm(type){
     <div id="yt-result" style="display:none;margin-top:4px;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;text-align:center"></div>
   </div>
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
-    <div style="font-size:13px;font-weight:700;margin-bottom:8px">👁️ แบบสังเกตอาการเบื้องต้น (โรคจิต)</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">สังเกตพฤติกรรมที่ผิดปกติ — กดเลือก "พบ" หากสังเกตเห็น</div>
-    ${[
-      ['sym1','หลงผิด / ความเชื่อผิดปกติ','เชื่อว่ามีคนทำร้าย หรือมีฤทธิ์พิเศษ'],
-      ['sym2','ประสาทหลอน','ได้ยินเสียง เห็นภาพที่คนอื่นไม่เห็น/ได้ยิน'],
-      ['sym3','พูดคนเดียว / หัวเราะคนเดียว','พูด ยิ้ม หัวเราะโดยไม่มีเหตุ'],
-      ['sym4','ก้าวร้าว / หุนหันพลันแล่น','ตีคน ขว้างของ ทำลาย'],
-      ['sym5','แยกตัว / ไม่ยอมออกจากห้อง','ไม่พูดคุย หลีกเลี่ยงสังคม'],
-      ['sym6','ดูแลตนเองไม่ได้','ไม่อาบน้ำ ไม่กินข้าว ไม่แต่งกาย'],
-      ['sym7','นอนไม่หลับ / ผิดปกติ','นอนดึกมาก หรือนอนมากผิดปกติ'],
-      ['sym8','กินยาไม่สม่ำเสมอ / ขาดยา','ไม่กินยาตามที่แพทย์สั่ง'],
-    ].map(([id,title,desc])=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#fff;border-radius:8px;margin-bottom:6px;border:1px solid var(--border)" id="sym-row-${id}">
-      <div style="flex:1;min-width:0;margin-right:10px">
-        <div style="font-size:12px;font-weight:700;color:var(--text1)">${title}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:1px">${desc}</div>
-      </div>
-      <div style="display:flex;gap:4px;flex-shrink:0">
-        <button type="button" id="sym-yes-${id}" onclick="toggleSymptom('${id}',true)" style="padding:6px 10px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">พบ</button>
-        <button type="button" id="sym-no-${id}" onclick="toggleSymptom('${id}',false)" style="padding:6px 10px;border-radius:6px;border:2px solid var(--primary);background:var(--primary-lt);color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">ไม่พบ</button>
-      </div>
-    </div>`).join('')}
-  </div>
-  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px">💊 แบบติดตามการรับประทานยา</div>
     <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid var(--border);margin-bottom:8px">
       <div style="font-size:12px;font-weight:700;margin-bottom:6px">กินยาครบทุกวันในสัปดาห์ที่ผ่านมาหรือไม่</div>
@@ -2875,18 +2843,6 @@ function openVisitForm(type){
         </div>`).join('')}
         <div id="rq-score" style="display:none"></div>
       </div>
-      <!-- Burnout -->
-      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:4px">
-        <div style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:8px">🔥 แบบประเมินภาวะหมดไฟ (Burnout)</div>
-        ${['รู้สึกขาดแรงใจ / ความกระตือรือร้น','รู้สึกไม่อยากสนใจคนรอบข้าง','รู้สึกไม่ประสบความสำเร็จเท่าที่ควร','รู้สึกเหนื่อยล้าทั้งร่างกายและจิตใจ','รู้สึกว่างานที่ทำไม่มีความหมาย','รู้สึกว่าตนเองทำงานได้ไม่ดีเหมือนเดิม','รู้สึกหงุดหงิด หรืออารมณ์แปรปรวนง่าย','รู้สึกว่าตนเองโดดเดี่ยว ขาดการสนับสนุน','รู้สึกไม่อยากมาทำงาน / ทำกิจกรรมที่ต้องทำ'].map((q,i)=>`
-        <div style="margin-bottom:8px">
-          <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${q}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-            ${['แทบไม่มี','เป็นบางครั้ง','บ่อยครั้ง','เป็นประจำ'].map((opt,j)=>`<button type="button" id="burnout-${i}-${j}" onclick="setMHOption('burnout',${i},${j})" style="padding:6px 4px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:11px;font-weight:600;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">${opt}</button>`).join('')}
-          </div>
-        </div>`).join('')}
-        <div id="burnout-score" style="display:none"></div>
-      </div>
     </div>
   </div>
   <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="v-note" rows="3" style="resize:none;font-family:'Sarabun',sans-serif" placeholder="อาการ สิ่งที่พบ ข้อสังเกต..."></textarea></div>
@@ -2950,26 +2906,9 @@ function setAIMS(idx,val){
   result.style.cssText=`margin-top:4px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
   result.textContent=txt
 }
-// ── อสม. Symptom / Medication / Caregiver ────────────────────
-let _symptoms=[]
+// ── อสม. Medication / Caregiver ──────────────────────────────
 let _medAdhere=null
 let _medReasons=[]
-function toggleSymptom(id,found){
-  const yes=document.getElementById(`sym-yes-${id}`),no=document.getElementById(`sym-no-${id}`)
-  const row=document.getElementById(`sym-row-${id}`)
-  if(found){
-    const idx=_symptoms.indexOf(id)
-    if(idx===-1)_symptoms.push(id)
-    if(yes){yes.style.background='#fef2f2';yes.style.borderColor='#ef4444';yes.style.color='#b91c1c'}
-    if(no){no.style.background='#f3f4f6';no.style.borderColor='#d1d5db';no.style.color='var(--text2)'}
-    if(row)row.style.background='#fef2f2'
-  }else{
-    _symptoms=_symptoms.filter(s=>s!==id)
-    if(yes){yes.style.background='#f3f4f6';yes.style.borderColor='#d1d5db';yes.style.color='var(--text2)'}
-    if(no){no.style.background='var(--primary-lt)';no.style.borderColor='var(--primary)';no.style.color='var(--primary)'}
-    if(row)row.style.background='#fff'
-  }
-}
 function setMedAdhere(taken){
   _medAdhere=taken
   const yes=document.getElementById('med-yes'),no=document.getElementById('med-no')
@@ -3073,17 +3012,6 @@ function updateMHScores(type){
     else{txt=`ST-5: ${s} คะแนน${partial} — เครียดมาก`;bg='#fef2f2';color='#b91c1c'}
     el.style.cssText=`display:block;margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
     el.textContent=txt
-  } else if(type==='burnout'){
-    const ans=_mhAssess.burnout,filled=ans.filter(v=>v!==null)
-    if(!filled.length){el.style.display='none';return}
-    const s=filled.reduce((a,b)=>a+b,0)
-    const partial=filled.length<ans.length?` (${filled.length}/${ans.length} ข้อ)`:''
-    let txt,bg,color
-    if(s<=9){txt=`Burnout: ${s} คะแนน${partial} — ไม่มีภาวะหมดไฟ`;bg='#f0fdf4';color='#15803d'}
-    else if(s<=18){txt=`Burnout: ${s} คะแนน${partial} — หมดไฟระดับปานกลาง`;bg='#fff7ed';color='#c2410c'}
-    else{txt=`Burnout: ${s} คะแนน${partial} — หมดไฟระดับสูง`;bg='#fef2f2';color='#b91c1c'}
-    el.style.cssText=`display:block;margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
-    el.textContent=txt
   } else if(type==='rq'){
     const s=_mhAssess.rq.reduce((a,b)=>a+b,0)
     let txt,bg,color
@@ -3095,18 +3023,16 @@ function updateMHScores(type){
   }
 }
 function getMHAssessJSON(){
-  const {twoq,rq,st5,burnout}=_mhAssess
-  const anyMHFilled=[twoq.q1,twoq.q2,...st5,...burnout].some(v=>v!==null)
-  const anyNewFilled=_gaf!==null||_aims.some(v=>v>0)||_symptoms.length>0||_medAdhere!==null||_cgb.some(v=>v>0)
+  const {twoq,rq,st5}=_mhAssess
+  const anyMHFilled=[twoq.q1,twoq.q2,...st5].some(v=>v!==null)
+  const anyNewFilled=_gaf!==null||_aims.some(v=>v>0)||_medAdhere!==null||_cgb.some(v=>v>0)
   if(!anyMHFilled&&rq.every(v=>v===5)&&!anyNewFilled)return null
   return{
     twoq:{q1:twoq.q1,q2:twoq.q2,q3:twoq.q3,score:(twoq.q1||0)+(twoq.q2||0),suicide:twoq.q3===1},
     rq:{scores:rq,total:rq.reduce((a,b)=>a+b,0)},
     st5:{scores:st5,total:st5.filter(v=>v!==null).reduce((a,b)=>a+b,0)},
-    burnout:{scores:burnout,total:burnout.filter(v=>v!==null).reduce((a,b)=>a+b,0)},
     gaf:_gaf,
     aims:_aims.some(v=>v>0)?{scores:[..._aims],total:_aims.reduce((a,b)=>a+b,0)}:null,
-    symptoms:_symptoms.length>0?[..._symptoms]:null,
     medAdhere:_medAdhere!==null?{taken:_medAdhere,missedDays:parseInt(document.getElementById('med-missed-days')?.value||0),reasons:[..._medReasons],sideEffects:document.getElementById('med-side-effects')?.value||''}:null,
     cgb:_cgb.some(v=>v>0)?{scores:[..._cgb],total:_cgb.reduce((a,b)=>a+b,0)}:null
   }
