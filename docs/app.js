@@ -2704,11 +2704,8 @@ function openVisitForm(type){
   </div>`:''}
 
   <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none" onclick="const w=document.getElementById('mh-assess-wrap');const ic=document.getElementById('mh-assess-ic');w.style.display=w.style.display==='none'?'block':'none';ic.textContent=w.style.display==='none'?'▶':'▼'">
-      <div style="font-size:13px;font-weight:700;color:#0369a1">🧠 แบบประเมินสุขภาพใจ <span style="font-size:11px;font-weight:400;color:var(--text3)">(ไม่บังคับ)</span></div>
-      <span id="mh-assess-ic" style="color:#0369a1;font-size:12px">▶</span>
-    </div>
-    <div id="mh-assess-wrap" style="display:none;margin-top:12px">
+    <div style="font-size:13px;font-weight:700;color:#0369a1;margin-bottom:12px">🧠 แบบประเมินสุขภาพใจ <span style="font-size:11px;font-weight:400;color:var(--text3)">(ไม่บังคับ)</span></div>
+    <div id="mh-assess-wrap">
       <!-- 2Q+ -->
       <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
         <div style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:8px">📋 แบบคัดกรองภาวะซึมเศร้า (2Q+)</div>
