@@ -2520,9 +2520,9 @@ async function saveEditPatient(id){
     if(file){
       btn.textContent='กำลังอัพโหลดไฟล์...'
       const ext=file.name.split('.').pop()
-      const filename=`${Date.now()}_${name.replace(/\s+/g,'_')}.${ext}`
+      const filename=`docs/${Date.now()}.${ext}`
       const{error:ue}=await sb.storage.from('patient-files').upload(filename,file)
-      if(ue)throw ue
+      if(ue)throw new Error('อัพโหลดไฟล์ไม่สำเร็จ: '+ue.message)
       const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
       updates.file_url=publicUrl
       btn.textContent='กำลังบันทึก...'
