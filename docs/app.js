@@ -2495,7 +2495,7 @@ async function saveEditPatient(id){
       if(pe)throw new Error('อัพโหลดรูปไม่สำเร็จ: '+pe.message)
       const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
       const{data:cur}=await sb.from('patients').select('photo_urls').eq('id',id).single()
-      updates.photo_urls=[...(cur?.photo_urls||[]),publicUrl]
+      updates.photo_urls=[publicUrl,...(cur?.photo_urls||[])]
       btn.textContent='กำลังบันทึก...'
     }
     if(file){
