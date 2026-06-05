@@ -49,11 +49,9 @@ let _redFlags    = []
 let _ytAssess    = {ya:null, yati:null, sara:null}
 let _assess10    = {}
 let _mhAssess    = { twoq:{q1:null,q2:null,q3:null}, rq:[5,5,5], st5:new Array(5).fill(null), burnout:new Array(9).fill(null) }
-const BPRS_ITEMS=['ความกังวลใจด้านร่างกาย','ความวิตกกังวล','การถอนตัวทางอารมณ์','ความไม่เป็นระเบียบของความคิด','ความรู้สึกผิด','ความตึงเครียด','ท่าทางและพฤติกรรมแปลก','ความยิ่งใหญ่','อารมณ์ซึมเศร้า','ความเป็นศัตรู','ความระแวง','อาการประสาทหลอน','การชะลอทางจิตพลศาสตร์','ความไม่ร่วมมือ','เนื้อหาความคิดผิดปกติ','อารมณ์ทื่อ/แบน','ความตื่นเต้นเกินปกติ','การสับสน/ไม่รู้วัน เวลา สถานที่']
 const AIMS_ITEMS=['กล้ามเนื้อใบหน้า','ริมฝีปาก / รอบปาก','ขากรรไกร','ลิ้น','แขนส่วนบน (ไหล่/ข้อศอก/ข้อมือ)','แขนส่วนล่าง (ข้อเข่า/ข้อเท้า)','มือและนิ้ว','การเคลื่อนไหวแขนและมือโดยรวม','คอ ไหล่ สะโพก','ลำตัว','การเคลื่อนไหวลำตัวโดยรวม','ความรุนแรงโดยรวม']
 const CGB_ITEMS=['ผู้ป่วยขอความช่วยเหลือมากเกินไป','ไม่มีเวลาส่วนตัวเพราะต้องดูแล','เครียดเมื่อดูแลควบคู่กับหน้าที่อื่น','รู้สึกอายเพราะพฤติกรรมของผู้ป่วย','รู้สึกโกรธเมื่ออยู่ใกล้ผู้ป่วย','ผู้ป่วยกระทบความสัมพันธ์กับครอบครัว','กลัวเรื่องอนาคตของผู้ป่วย','สุขภาพของท่านแย่ลงเพราะการดูแล','ตึงเครียดเมื่ออยู่ใกล้ผู้ป่วย','ชีวิตทางสังคมแย่ลงเพราะการดูแล','รู้สึกหมดแรงเพราะการดูแล','การดูแลมีผลต่อชีวิตโดยรวม']
 let _gaf=null
-let _bprs=new Array(18).fill(1)
 let _aims=new Array(12).fill(0)
 let _cgb=new Array(12).fill(0)
 
@@ -629,11 +627,6 @@ function renderMHAssessResult(a){
     const s=a.gaf
     const[bg,color]=s>=71?['#f0fdf4','#15803d']:s>=51?['#fefce8','#854d0e']:s>=31?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">GAF: ${s}</span>`)
-  }
-  if(a.bprs?.total){
-    const s=a.bprs.total
-    const[bg,color]=s<=30?['#f0fdf4','#15803d']:s<=45?['#fefce8','#854d0e']:s<=60?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
-    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">BPRS: ${s}</span>`)
   }
   if(a.aims?.total!==undefined){
     const s=a.aims.total
@@ -2586,7 +2579,7 @@ function openVisitForm(type){
   if(type==='aosomo' && currentRole==='staff'){alert('เจ้าหน้าที่ ไม่มีสิทธิ์บันทึกแบบ อสม.');return}
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
-  _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={};_mhAssess={twoq:{q1:null,q2:null,q3:null},rq:[5,5,5],st5:new Array(5).fill(null),burnout:new Array(9).fill(null)};_gaf=null;_bprs=new Array(18).fill(1);_aims=new Array(12).fill(0);_cgb=new Array(12).fill(0);_symptoms=[];_medAdhere=null;_medReasons=[]
+  _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={};_mhAssess={twoq:{q1:null,q2:null,q3:null},rq:[5,5,5],st5:new Array(5).fill(null),burnout:new Array(9).fill(null)};_gaf=null;_aims=new Array(12).fill(0);_cgb=new Array(12).fill(0);_symptoms=[];_medAdhere=null;_medReasons=[]
   const cl=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
   const nameOpts=allPatients.map(p=>`<option value="${esc(p.name)}" data-village="${esc(p.village||'')}">`).join('')
   ct.innerHTML=`
@@ -2685,20 +2678,7 @@ function openVisitForm(type){
     </div>
     <div id="gaf-desc" style="font-size:12px;padding:6px 10px;background:#fff;border-radius:6px;border:1px solid var(--border);color:var(--text2)">ปานกลาง — มีอาการหรือความบกพร่องในการทำงานระดับปานกลาง</div>
   </div>
-  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div style="font-size:13px;font-weight:700">📊 BPRS — ประเมินอาการทางจิต 18 ด้าน</div>
-      <span id="bprs-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">18 คะแนน</span>
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">1=ไม่มี · 2=น้อยมาก · 3=น้อย · 4=ปานกลาง · 5=ค่อนข้างมาก · 6=มาก · 7=มากที่สุด</div>
-    ${BPRS_ITEMS.map((item,i)=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-      <div style="flex:1;font-size:12px;color:var(--text1)">${i+1}. ${item}</div>
-      <input type="range" min="1" max="7" value="1" id="bprs-${i}" oninput="updateBPRS(${i},this.value)" style="width:90px;accent-color:#0a7ea4">
-      <span id="bprs-val-${i}" style="font-size:13px;font-weight:700;color:#0a7ea4;min-width:16px;text-align:center">1</span>
-    </div>`).join('')}
-    <div id="bprs-result" style="margin-top:8px;padding:8px 12px;border-radius:8px;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700">รวม: 18 — อาการน้อย</div>
-  </div>
+
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div>
@@ -2949,23 +2929,6 @@ function updateGAF(val){
   else txt='อันตราย — ต้องการการดูแลแบบ 24 ชั่วโมง'
   desc.textContent=txt
 }
-function updateBPRS(idx,val){
-  _bprs[idx]=parseInt(val)
-  const el=document.getElementById(`bprs-val-${idx}`)
-  if(el)el.textContent=val
-  const total=_bprs.reduce((a,b)=>a+b,0)
-  const badge=document.getElementById('bprs-badge')
-  const result=document.getElementById('bprs-result')
-  if(badge)badge.textContent=`${total} คะแนน`
-  if(!result)return
-  let txt,bg,color
-  if(total<=30){txt=`รวม: ${total} — อาการน้อย`;bg='#f0fdf4';color='#15803d'}
-  else if(total<=45){txt=`รวม: ${total} — อาการปานกลาง-น้อย`;bg='#fefce8';color='#854d0e'}
-  else if(total<=60){txt=`รวม: ${total} — อาการปานกลาง`;bg='#fff7ed';color='#c2410c'}
-  else{txt=`รวม: ${total} — อาการมาก`;bg='#fef2f2';color='#b91c1c'}
-  result.style.cssText=`margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
-  result.textContent=txt
-}
 function setAIMS(idx,val){
   _aims[idx]=val
   for(let j=0;j<5;j++){
@@ -3134,7 +3097,7 @@ function updateMHScores(type){
 function getMHAssessJSON(){
   const {twoq,rq,st5,burnout}=_mhAssess
   const anyMHFilled=[twoq.q1,twoq.q2,...st5,...burnout].some(v=>v!==null)
-  const anyNewFilled=_gaf!==null||_bprs.some(v=>v>1)||_aims.some(v=>v>0)||_symptoms.length>0||_medAdhere!==null||_cgb.some(v=>v>0)
+  const anyNewFilled=_gaf!==null||_aims.some(v=>v>0)||_symptoms.length>0||_medAdhere!==null||_cgb.some(v=>v>0)
   if(!anyMHFilled&&rq.every(v=>v===5)&&!anyNewFilled)return null
   return{
     twoq:{q1:twoq.q1,q2:twoq.q2,q3:twoq.q3,score:(twoq.q1||0)+(twoq.q2||0),suicide:twoq.q3===1},
@@ -3142,7 +3105,6 @@ function getMHAssessJSON(){
     st5:{scores:st5,total:st5.filter(v=>v!==null).reduce((a,b)=>a+b,0)},
     burnout:{scores:burnout,total:burnout.filter(v=>v!==null).reduce((a,b)=>a+b,0)},
     gaf:_gaf,
-    bprs:_gaf!==null||_bprs.some(v=>v>1)?{scores:[..._bprs],total:_bprs.reduce((a,b)=>a+b,0)}:null,
     aims:_aims.some(v=>v>0)?{scores:[..._aims],total:_aims.reduce((a,b)=>a+b,0)}:null,
     symptoms:_symptoms.length>0?[..._symptoms]:null,
     medAdhere:_medAdhere!==null?{taken:_medAdhere,missedDays:parseInt(document.getElementById('med-missed-days')?.value||0),reasons:[..._medReasons],sideEffects:document.getElementById('med-side-effects')?.value||''}:null,
