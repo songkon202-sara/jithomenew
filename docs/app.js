@@ -44,10 +44,11 @@ let allPatients  = []
 let _visitChecks = []
 let _visitProblems = []
 let _visitType   = 'aosomo'
-let _oasScores   = {s1:0, s2:0, s3:0}  // OAS: ต่อตนเอง, ต่อผู้อื่น, ต่อทรัพย์สิน
-let _redFlags    = []                   // 5 Red Flags
-let _ytAssess    = {ya:null, yati:null, sara:null} // ยาดี-ญาติดี-สารเสพติด
-let _assess10    = {}                   // แบบติดตาม 10 ด้าน
+let _oasScores   = {s1:0, s2:0, s3:0}
+let _redFlags    = []
+let _ytAssess    = {ya:null, yati:null, sara:null}
+let _assess10    = {}
+let _mhAssess    = { twoq:{q1:null,q2:null,q3:null}, rq:[5,5,5], st5:new Array(5).fill(null), burnout:new Array(9).fill(null) }
 
 const ASSESS10_DOMAINS = [
   {id:'d1',title:'1. ด้านอาการทางจิต',opts:[[1,'ไม่มีอาการ','รู้สึกดี ช่วยตนเองได้ ดำรงชีวิตได้'],[2,'มีบ้าง','พฤติกรรมผิดปกติ ≥10 วัน/เดือน'],[3,'มีมาก','พฤติกรรมผิดปกติ >10 วัน/เดือน']]},
@@ -593,6 +594,33 @@ function openVisitFormFor(name,village){
     if(sel)for(const o of sel.options)if(o.value===village){o.selected=true;break}
   },50)
 }
+function renderMHAssessResult(a){
+  if(!a)return''
+  const chips=[]
+  if(a.twoq?.q1!==null||a.twoq?.q2!==null){
+    const s=(a.twoq.q1||0)+(a.twoq.q2||0)
+    const suicide=a.twoq.suicide
+    const[bg,color,lbl]=suicide?['#fef2f2','#b91c1c','2Q+: ⚠️ ความเสี่ยงสูง']:s===0?['#f0fdf4','#15803d','2Q+: ไม่พบ']:['#fefce8','#854d0e',`2Q+: ${s}/2 ควรประเมินเพิ่ม`]
+    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
+  }
+  if(a.st5?.total!==undefined&&a.st5.scores?.some(v=>v!==null)){
+    const s=a.st5.total
+    const[bg,color,lbl]=s<=4?['#f0fdf4','#15803d',`ST-5: ${s} ไม่เครียด`]:s<=7?['#fefce8','#854d0e',`ST-5: ${s} เครียดน้อย`]:s<=9?['#fff7ed','#c2410c',`ST-5: ${s} เครียดปานกลาง`]:['#fef2f2','#b91c1c',`ST-5: ${s} เครียดมาก`]
+    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
+  }
+  if(a.rq?.total){
+    const s=a.rq.total
+    const[bg,color,lbl]=s<=17?['#fef2f2','#b91c1c',`RQ: ${s} พลังใจต่ำ`]:s<=23?['#fefce8','#854d0e',`RQ: ${s} ปานกลาง`]:['#f0fdf4','#15803d',`RQ: ${s} พลังใจดี`]
+    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
+  }
+  if(a.burnout?.total!==undefined&&a.burnout.scores?.some(v=>v!==null)){
+    const s=a.burnout.total
+    const[bg,color,lbl]=s<=9?['#f0fdf4','#15803d',`Burnout: ${s} ไม่มี`]:s<=18?['#fff7ed','#c2410c',`Burnout: ${s} ปานกลาง`]:['#fef2f2','#b91c1c',`Burnout: ${s} สูง`]
+    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
+  }
+  if(!chips.length)return''
+  return`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px"><span style="font-size:11px;color:var(--text3);margin-right:2px">🧠</span>${chips.join('')}</div>`
+}
 function renderVisitList(visits){
   if(!visits.length)return'<div class="empty"><p>ไม่มีบันทึกการเยี่ยมบ้าน</p></div>'
   return visits.map(v=>{
@@ -610,6 +638,7 @@ function renderVisitList(visits){
       </div>
       <div style="font-size:12px;color:var(--text2)">${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'} ${esc(v.visitor||'')}${v.refer?` <span style="color:#b91c1c;font-weight:700">⚠️ ส่งต่อ</span>`:''}</div>
       ${v.note?`<div style="font-size:12px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:pre-line">${esc(v.note)}</div>`:''}
+      ${v.assessment_json?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">${renderMHAssessResult(v.assessment_json)}</div>`:''}
       ${v.photo_url?`<div style="margin-top:8px"><a href="${esc(v.photo_url)}" target="_blank"><img src="${esc(v.photo_url)}" alt="รูปถ่ายการเยี่ยมบ้าน" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer"></a></div>`:''}
     </div>`
   }).join('')
@@ -2523,7 +2552,7 @@ function openVisitForm(type){
   if(type==='aosomo' && currentRole==='staff'){alert('เจ้าหน้าที่ ไม่มีสิทธิ์บันทึกแบบ อสม.');return}
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
-  _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={}
+  _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={};_mhAssess={twoq:{q1:null,q2:null,q3:null},rq:[5,5,5],st5:new Array(5).fill(null),burnout:new Array(9).fill(null)}
   const cl=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
   const nameOpts=allPatients.map(p=>`<option value="${esc(p.name)}" data-village="${esc(p.village||'')}">`).join('')
   ct.innerHTML=`
@@ -2674,6 +2703,76 @@ function openVisitForm(type){
     <div id="yt-result" style="display:none;margin-top:4px;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;text-align:center"></div>
   </div>`:''}
 
+  <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none" onclick="const w=document.getElementById('mh-assess-wrap');const ic=document.getElementById('mh-assess-ic');w.style.display=w.style.display==='none'?'block':'none';ic.textContent=w.style.display==='none'?'▶':'▼'">
+      <div style="font-size:13px;font-weight:700;color:#0369a1">🧠 แบบประเมินสุขภาพใจ <span style="font-size:11px;font-weight:400;color:var(--text3)">(ไม่บังคับ)</span></div>
+      <span id="mh-assess-ic" style="color:#0369a1;font-size:12px">▶</span>
+    </div>
+    <div id="mh-assess-wrap" style="display:none;margin-top:12px">
+      <!-- 2Q+ -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:8px">📋 แบบคัดกรองภาวะซึมเศร้า (2Q+)</div>
+        ${[['q1','ใน 2 สัปดาห์ที่ผ่านมา รู้สึก หดหู่ เศร้า หรือท้อแท้สิ้นหวัง'],['q2','ใน 2 สัปดาห์ที่ผ่านมา รู้สึก เบื่อ ทำอะไรก็ไม่เพลิดเพลิน']].map(([q,label])=>`
+        <div style="margin-bottom:8px">
+          <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${label}</div>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="2q-no-${q}" onclick="set2Q('${q}',0)" style="flex:1;padding:7px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">ไม่ใช่</button>
+            <button type="button" id="2q-yes-${q}" onclick="set2Q('${q}',1)" style="flex:1;padding:7px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">ใช่</button>
+          </div>
+        </div>`).join('')}
+        <div id="2q-q3-row" style="display:none;margin-bottom:8px;padding:8px;background:#fef9c3;border-radius:6px;border:1px solid #fde047">
+          <div style="font-size:11px;font-weight:700;color:#854d0e;margin-bottom:6px">⚠️ คำถามคัดกรองการฆ่าตัวตาย</div>
+          <div style="font-size:12px;color:var(--text1);margin-bottom:4px">ใน 1 เดือนที่ผ่านมา มีความรู้สึกทุกข์ใจไม่อยากมีชีวิตอยู่ หรือไม่</div>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="2q-no-q3" onclick="set2Q('q3',0)" style="flex:1;padding:7px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">ไม่ใช่</button>
+            <button type="button" id="2q-yes-q3" onclick="set2Q('q3',1)" style="flex:1;padding:7px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">ใช่</button>
+          </div>
+        </div>
+        <div id="2q-score" style="display:none"></div>
+      </div>
+      <!-- ST-5 -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:2px">😣 แบบประเมินความเครียด (ST-5)</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">ใน 2 สัปดาห์ที่ผ่านมา รวมวันนี้</div>
+        ${['มีปัญหาการนอน นอนไม่หลับ / นอนมากเกินไป','มีสมาธิน้อยลง','หุดหยิด / กระวนกระวาย / วิตกกังวล','รู้สึกเบื่อเซ็ง','ไม่อยากพบปะผู้คน'].map((q,i)=>`
+        <div style="margin-bottom:8px">
+          <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${q}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+            ${['แทบไม่มี','เป็นบางครั้ง','บ่อยครั้ง','เป็นประจำ'].map((opt,j)=>`<button type="button" id="st5-${i}-${j}" onclick="setMHOption('st5',${i},${j})" style="padding:6px 4px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:11px;font-weight:600;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">${opt}</button>`).join('')}
+          </div>
+        </div>`).join('')}
+        <div id="st5-score" style="display:none"></div>
+      </div>
+      <!-- RQ -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:2px">🧡 แบบประเมินพลังใจ (RQ)</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">ใน 2 สัปดาห์ที่ผ่านมา ระดับความเชื่อมั่น 1=น้อยที่สุด 10=มากที่สุด</div>
+        ${['ความยากลำบากทำให้ฉันแกร่งขึ้น','ฉันมีกำลังใจและได้รับการสนับสนุนจากคนรอบข้าง','การแก้ไขปัญหาทำให้ฉันมีประสบการณ์มากขึ้น'].map((q,i)=>`
+        <div style="margin-bottom:10px">
+          <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${q}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:16px">😔</span>
+            <input type="range" min="1" max="10" value="5" id="rq-${i}" oninput="updateRQSlider(${i},this.value)" style="flex:1;accent-color:#0a7ea4">
+            <span style="font-size:16px">😊</span>
+            <span id="rq-val-${i}" style="font-size:13px;font-weight:700;color:#0a7ea4;min-width:20px;text-align:right">5</span>
+          </div>
+        </div>`).join('')}
+        <div id="rq-score" style="display:none"></div>
+      </div>
+      <!-- Burnout -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:4px">
+        <div style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:8px">🔥 แบบประเมินภาวะหมดไฟ (Burnout)</div>
+        ${['รู้สึกขาดแรงใจ / ความกระตือรือร้น','รู้สึกไม่อยากสนใจคนรอบข้าง','รู้สึกไม่ประสบความสำเร็จเท่าที่ควร','รู้สึกเหนื่อยล้าทั้งร่างกายและจิตใจ','รู้สึกว่างานที่ทำไม่มีความหมาย','รู้สึกว่าตนเองทำงานได้ไม่ดีเหมือนเดิม','รู้สึกหงุดหงิด หรืออารมณ์แปรปรวนง่าย','รู้สึกว่าตนเองโดดเดี่ยว ขาดการสนับสนุน','รู้สึกไม่อยากมาทำงาน / ทำกิจกรรมที่ต้องทำ'].map((q,i)=>`
+        <div style="margin-bottom:8px">
+          <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${q}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+            ${['แทบไม่มี','เป็นบางครั้ง','บ่อยครั้ง','เป็นประจำ'].map((opt,j)=>`<button type="button" id="burnout-${i}-${j}" onclick="setMHOption('burnout',${i},${j})" style="padding:6px 4px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:11px;font-weight:600;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">${opt}</button>`).join('')}
+          </div>
+        </div>`).join('')}
+        <div id="burnout-score" style="display:none"></div>
+      </div>
+    </div>
+  </div>
   <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="v-note" rows="3" style="resize:none;font-family:'Sarabun',sans-serif" placeholder="อาการ สิ่งที่พบ ข้อสังเกต..."></textarea></div>
   <div class="form-group"><label>📷 รูปถ่าย (ไม่บังคับ)</label><input type="file" id="v-photo" accept="image/*" capture="environment" style="width:100%;box-sizing:border-box"><div id="v-photo-preview" style="margin-top:6px"></div></div>
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:8px;margin-bottom:14px">
@@ -2694,6 +2793,97 @@ async function resolveReferral(id){
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);if(btn){btn.textContent='✅ รับเรื่องแล้ว';btn.disabled=false}return}
   renderPage('admin')
 }
+// ── แบบประเมินสุขภาพใจ ──────────────────────────────────────
+function set2Q(q,val){
+  _mhAssess.twoq[q]=val
+  const yes=document.getElementById(`2q-yes-${q}`),no=document.getElementById(`2q-no-${q}`)
+  if(yes)yes.style.cssText=yes.style.cssText.replace(/background:[^;]+/,val===1?'background:#fef2f2':'background:#f3f4f6')
+  if(yes)yes.style.borderColor=val===1?'#ef4444':'#d1d5db'
+  if(no)no.style.cssText=no.style.cssText.replace(/background:[^;]+/,val===0?'background:#f0fdf4':'background:#f3f4f6')
+  if(no)no.style.borderColor=val===0?'#22c55e':'#d1d5db'
+  const q3row=document.getElementById('2q-q3-row')
+  if(q3row)q3row.style.display=(_mhAssess.twoq.q1===1||_mhAssess.twoq.q2===1)?'block':'none'
+  update2QScore()
+}
+function update2QScore(){
+  const el=document.getElementById('2q-score')
+  if(!el)return
+  const {q1,q2,q3}=_mhAssess.twoq
+  if(q1===null&&q2===null){el.style.display='none';return}
+  const s=(q1||0)+(q2||0)
+  const suicide=q3===1
+  let txt,bg,color
+  if(suicide){txt='⚠️ ความเสี่ยงสูง — ต้องส่งต่อด่วน';bg='#fef2f2';color='#b91c1c'}
+  else if(s===0){txt='ผลลัพธ์: ไม่พบภาวะซึมเศร้า';bg='#f0fdf4';color='#15803d'}
+  else{txt=`ผลลัพธ์: คะแนน ${s}/2 — ควรประเมินเพิ่มเติม (PHQ-9)`;bg='#fefce8';color='#854d0e'}
+  el.style.cssText=`display:block;margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
+  el.textContent=txt
+}
+function setMHOption(type,idx,val){
+  _mhAssess[type][idx]=val
+  const opts=['แทบไม่มี','เป็นบางครั้ง','บ่อยครั้ง','เป็นประจำ']
+  for(let i=0;i<4;i++){
+    const b=document.getElementById(`${type}-${idx}-${i}`)
+    if(!b)continue
+    if(i===val){b.style.background='#0a7ea4';b.style.color='#fff';b.style.borderColor='#0a7ea4'}
+    else{b.style.background='#f3f4f6';b.style.color='#374151';b.style.borderColor='#d1d5db'}
+  }
+  updateMHScores(type)
+}
+function updateRQSlider(idx,val){
+  _mhAssess.rq[idx]=parseInt(val)
+  const lbl=document.getElementById(`rq-val-${idx}`)
+  if(lbl)lbl.textContent=val
+  updateMHScores('rq')
+}
+function updateMHScores(type){
+  const el=document.getElementById(`${type}-score`)
+  if(!el)return
+  if(type==='st5'){
+    const ans=_mhAssess.st5,filled=ans.filter(v=>v!==null)
+    if(!filled.length){el.style.display='none';return}
+    const s=filled.reduce((a,b)=>a+b,0)
+    const full=ans.length,partial=filled.length<full?` (${filled.length}/${full} ข้อ)`:''
+    let txt,bg,color
+    if(s<=4){txt=`ST-5: ${s} คะแนน${partial} — ไม่มีความเครียด`;bg='#f0fdf4';color='#15803d'}
+    else if(s<=7){txt=`ST-5: ${s} คะแนน${partial} — เครียดเล็กน้อย`;bg='#fefce8';color='#854d0e'}
+    else if(s<=9){txt=`ST-5: ${s} คะแนน${partial} — เครียดปานกลาง`;bg='#fff7ed';color='#c2410c'}
+    else{txt=`ST-5: ${s} คะแนน${partial} — เครียดมาก`;bg='#fef2f2';color='#b91c1c'}
+    el.style.cssText=`display:block;margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
+    el.textContent=txt
+  } else if(type==='burnout'){
+    const ans=_mhAssess.burnout,filled=ans.filter(v=>v!==null)
+    if(!filled.length){el.style.display='none';return}
+    const s=filled.reduce((a,b)=>a+b,0)
+    const partial=filled.length<ans.length?` (${filled.length}/${ans.length} ข้อ)`:''
+    let txt,bg,color
+    if(s<=9){txt=`Burnout: ${s} คะแนน${partial} — ไม่มีภาวะหมดไฟ`;bg='#f0fdf4';color='#15803d'}
+    else if(s<=18){txt=`Burnout: ${s} คะแนน${partial} — หมดไฟระดับปานกลาง`;bg='#fff7ed';color='#c2410c'}
+    else{txt=`Burnout: ${s} คะแนน${partial} — หมดไฟระดับสูง`;bg='#fef2f2';color='#b91c1c'}
+    el.style.cssText=`display:block;margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
+    el.textContent=txt
+  } else if(type==='rq'){
+    const s=_mhAssess.rq.reduce((a,b)=>a+b,0)
+    let txt,bg,color
+    if(s<=17){txt=`RQ: ${s} คะแนน — พลังใจต่ำ`;bg='#fef2f2';color='#b91c1c'}
+    else if(s<=23){txt=`RQ: ${s} คะแนน — พลังใจปานกลาง`;bg='#fefce8';color='#854d0e'}
+    else{txt=`RQ: ${s} คะแนน — พลังใจดี`;bg='#f0fdf4';color='#15803d'}
+    el.style.cssText=`display:block;margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
+    el.textContent=txt
+  }
+}
+function getMHAssessJSON(){
+  const {twoq,rq,st5,burnout}=_mhAssess
+  const anyFilled=[twoq.q1,twoq.q2,...st5,...burnout].some(v=>v!==null)
+  if(!anyFilled&&rq.every(v=>v===5))return null
+  return{
+    twoq:{q1:twoq.q1,q2:twoq.q2,q3:twoq.q3,score:(twoq.q1||0)+(twoq.q2||0),suicide:twoq.q3===1},
+    rq:{scores:rq,total:rq.reduce((a,b)=>a+b,0)},
+    st5:{scores:st5,total:st5.filter(v=>v!==null).reduce((a,b)=>a+b,0)},
+    burnout:{scores:burnout,total:burnout.filter(v=>v!==null).reduce((a,b)=>a+b,0)}
+  }
+}
+// ──────────────────────────────────────────────────────────────
 function toggleCheck(id){
   const idx=_visitChecks.indexOf(id),cb=document.getElementById('cb-'+id)
   if(idx===-1){_visitChecks.push(id);cb?.classList.add('checked')}else{_visitChecks.splice(idx,1);cb?.classList.remove('checked')}
@@ -2884,7 +3074,8 @@ async function saveVisitRecord(){
     btn.textContent='กำลังบันทึก...'
   }
   try{
-    const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer,photo_url:photoUrl})
+    const assessment_json=getMHAssessJSON()
+    const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer,photo_url:photoUrl,assessment_json})
     if(error)throw error
     sendLineVisitReport({patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,score:_visitChecks.length,refer})
     if(refer&&_visitType==='staff'){
