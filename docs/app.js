@@ -376,6 +376,7 @@ function renderTimeline(el) {
 
 // ─── Overview ────────────────────────────────────────────────────
 async function renderOverview(el) {
+  el.innerHTML=`<div class="page"><div style="text-align:center;padding:40px;color:var(--text3)">⏳ กำลังโหลด...</div></div>`
   const pts=allPatients,total=pts.length
   const rc=pts.filter(p=>p.group_color==='red').length
   const yc=pts.filter(p=>p.group_color==='yellow').length
@@ -384,9 +385,87 @@ async function renderOverview(el) {
   const todayC=pts.filter(p=>parseInt(p.days_until)===0).length
   const soon=pts.filter(p=>{const d=parseInt(p.days_until);return d>0&&d<=7}).length
   const ok=pts.filter(p=>parseInt(p.days_until)>7).length
-  const [trends, visits] = await Promise.all([getTrend(), getVisits()])
 
-  // Donut
+  const now=new Date(),yy=now.getFullYear(),mm=String(now.getMonth()+1).padStart(2,'0')
+  const monthStart=`${yy}-${mm}-01`
+  const monthEnd=new Date(yy,now.getMonth()+1,1).toISOString().slice(0,10)
+  const sixAgo=new Date(yy,now.getMonth()-5,1).toISOString().slice(0,10)
+  const thMonthName=TH_MONTHS_F[now.getMonth()+1]
+
+  const [trendsData,allVisitsData,{data:tmvRaw},{data:arvRaw}]=await Promise.all([
+    getTrend(),getVisits(),
+    sb.from('home_visits').select('patient_name,visit_type,refer,assessment_json,visitor,village').gte('visit_date',monthStart).lt('visit_date',monthEnd),
+    sb.from('home_visits').select('visit_date,visit_type,refer,assessment_json').gte('visit_date',sixAgo).order('visit_date',{ascending:true})
+  ])
+  const tmv=tmvRaw||[],arv=arvRaw||[],trends=trendsData,visits=allVisitsData
+
+  // ── KPI 1: ความครอบคลุมการเยี่ยมเดือนนี้
+  const visitedNames=new Set(tmv.map(v=>v.patient_name))
+  const visitedCount=pts.filter(p=>visitedNames.has(p.name)).length
+  const visitPct=total>0?Math.round(visitedCount/total*100):0
+
+  // ── KPI 2: กลุ่มแดงได้รับการเยี่ยม
+  const redPts=pts.filter(p=>p.group_color==='red')
+  const redVisited=redPts.filter(p=>visitedNames.has(p.name)).length
+  const redPct=redPts.length>0?Math.round(redVisited/redPts.length*100):100
+
+  // ── KPI 3: อัตราการกินยาครบ
+  const medVis=tmv.filter(v=>v.assessment_json?.medAdhere!=null)
+  const medTaken=medVis.filter(v=>v.assessment_json.medAdhere.taken===true).length
+  const medPct=medVis.length>0?Math.round(medTaken/medVis.length*100):null
+
+  // ── KPI 4: อัตราส่งต่อ/กำเริบ
+  const referCount=tmv.filter(v=>v.refer).length
+  const referPct=tmv.length>0?Math.round(referCount/tmv.length*100):0
+
+  // ── Action list
+  const urgent=[
+    ...redPts.filter(p=>parseInt(p.days_until)<0&&!visitedNames.has(p.name)),
+    ...pts.filter(p=>p.group_color==='yellow'&&parseInt(p.days_until)<-3&&!visitedNames.has(p.name))
+  ].sort((a,b)=>parseInt(a.days_until)-parseInt(b.days_until)).slice(0,8)
+
+  // ── GAF average (6 months)
+  const gafData=arv.filter(v=>v.assessment_json?.gaf!=null)
+  const gafAvg=gafData.length>0?Math.round(gafData.reduce((a,v)=>a+v.assessment_json.gaf,0)/gafData.length):null
+
+  // ── 2Q+ screening (6 months)
+  const twoqData=arv.filter(v=>v.assessment_json?.twoq?.q1!=null)
+  const twoqPos=twoqData.filter(v=>(v.assessment_json.twoq.score||0)>=1).length
+  const twoqSuicide=twoqData.filter(v=>v.assessment_json.twoq.suicide===true).length
+
+  // ── Village breakdown
+  const villageMap={}
+  pts.forEach(p=>{
+    const v=p.village||'ไม่ระบุ'
+    if(!villageMap[v])villageMap[v]={total:0,visited:0,red:0,overdue:0}
+    villageMap[v].total++
+    if(visitedNames.has(p.name))villageMap[v].visited++
+    if(p.group_color==='red')villageMap[v].red++
+    if(parseInt(p.days_until)<0)villageMap[v].overdue++
+  })
+  const villages=Object.entries(villageMap).sort((a,b)=>b[1].total-a[1].total)
+
+  // ── Helpers
+  function kpiCard(icon,label,val,tot,pct,target,lowerBetter=false){
+    const pass=lowerBetter?pct<=target:pct>=target
+    const warn=lowerBetter?pct<=target*2:pct>=target*0.6
+    const col=pass?'#16a34a':warn?'#d97706':'#dc2626'
+    const bg=pass?'#f0fdf4':warn?'#fefce8':'#fef2f2'
+    const bd=pass?'#bbf7d0':warn?'#fde68a':'#fecaca'
+    const bw=Math.min(pct,100)
+    const badge=pass?`<span style="font-size:10px;color:${col};font-weight:700">✅ ผ่านเกณฑ์</span>`:`<span style="font-size:10px;color:${col};font-weight:700">${lowerBetter?'⚠️ เกินเกณฑ์':'⚠️ ต่ำกว่าเกณฑ์'}</span>`
+    return`<div style="background:${bg};border:1px solid ${bd};border-radius:12px;padding:14px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:11px;color:var(--text2);font-weight:600">${icon} ${label}</div>
+        <div style="font-size:10px;color:var(--text3)">เป้า ${lowerBetter?'<':'≥'}${target}%</div>
+      </div>
+      <div style="font-size:28px;font-weight:800;color:${col};line-height:1.1">${pct}<span style="font-size:13px;font-weight:600">%</span></div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px">${val} / ${tot} ราย</div>
+      <div style="background:#e5e7eb;border-radius:99px;height:5px;overflow:hidden;margin-bottom:4px">
+        <div style="background:${col};height:100%;width:${bw}%"></div>
+      </div>${badge}</div>`
+  }
+
   function donut(r,y,g){
     const tot=Math.max(r+y+g,1),R=40,cx=60,cy=60,circ=2*Math.PI*R
     const rd=r/tot*circ,yd=y/tot*circ,gd=g/tot*circ
@@ -397,7 +476,7 @@ async function renderOverview(el) {
     return`<svg width="120" height="120" viewBox="0 0 120 120" style="transform:rotate(-90deg)">${p}</svg>`
   }
 
-  // Line chart (injection trends)
+  // ── Line chart
   let lineHtml=''
   if(trends.length>=2){
     const W=320,H=130,pL=28,pR=12,pT=12,pB=28,cW=W-pL-pR,cH=H-pT-pB
@@ -424,7 +503,7 @@ async function renderOverview(el) {
     </div>`
   }
 
-  // Visit bar chart (last 6 months)
+  // ── Visit bar chart
   const totalStaff=visits.filter(v=>v.visit_type==='staff').length
   const totalAosomo=visits.filter(v=>v.visit_type==='aosomo').length
   let visitChartHtml=''
@@ -486,9 +565,42 @@ async function renderOverview(el) {
     </div>`
   }
 
-  el.innerHTML=`<div class="page">
-  <div class="page-title">ภาพรวมผู้ป่วย</div>
-  <div class="page-sub">สรุปข้อมูล ${esc(hospitalName)} · ${total} ราย</div>
+  el.innerHTML=`<div class="page" id="overview-page">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div class="page-title" style="margin-bottom:2px">ภาพรวมผู้ป่วย</div>
+      <div class="page-sub">${esc(hospitalName)} · ผู้ป่วยทั้งหมด ${total} ราย · ${thMonthName} ${yy+543}</div>
+    </div>
+    <button onclick="window.print()" style="padding:8px 14px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;gap:6px;flex-shrink:0">🖨️ พิมพ์/Export</button>
+  </div>
+
+  <div style="background:var(--card);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:12px">
+    <div style="font-weight:700;font-size:14px;margin-bottom:12px">📊 KPI ประจำเดือน${thMonthName}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${kpiCard('🏠','ความครอบคลุมการเยี่ยม',visitedCount,total,visitPct,80)}
+      ${kpiCard('🔴','กลุ่มแดงได้รับการเยี่ยม',redVisited,redPts.length,redPct,100)}
+      ${medPct!==null
+        ? kpiCard('💊','อัตราการกินยาครบ',medTaken,medVis.length,medPct,80)
+        : `<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px"><div style="font-size:11px;color:var(--text3);font-weight:600">💊 อัตราการกินยาครบ</div><div style="font-size:13px;color:var(--text3);margin-top:10px">ยังไม่มีข้อมูล</div><div style="font-size:11px;color:var(--text3);margin-top:2px">บันทึกผ่านแบบเยี่ยมบ้าน</div></div>`}
+      ${kpiCard('🚨','อัตราส่งต่อ/กำเริบ',referCount,Math.max(tmv.length,1),referPct,10,true)}
+    </div>
+  </div>
+
+  ${urgent.length>0?`
+  <div style="background:var(--card);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:12px;border-left:4px solid #dc2626">
+    <div style="font-weight:700;font-size:14px;color:#b91c1c;margin-bottom:10px">⚠️ ต้องติดตามด่วน — เกินนัด ยังไม่ได้เยี่ยมเดือนนี้ (${urgent.length} ราย)</div>
+    ${urgent.map(p=>{
+      const days=Math.abs(parseInt(p.days_until))
+      const col=p.group_color==='red'?'#dc2626':'#d97706'
+      const bg=p.group_color==='red'?'#fef2f2':'#fefce8'
+      return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:${bg};border-radius:8px;margin-bottom:6px">
+        <div><div style="font-size:13px;font-weight:700;color:var(--text1)">${esc(p.name)}</div>
+        <div style="font-size:11px;color:var(--text3)">${esc(p.village||'')} · ${esc(p.group_label||p.group_color)}</div></div>
+        <span style="font-size:12px;font-weight:700;color:${col};white-space:nowrap">เกิน ${days} วัน</span>
+      </div>`
+    }).join('')}
+  </div>`:''}
+
   <div style="background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px">
     <div style="font-weight:700;font-size:14px;margin-bottom:14px">จำแนกตามกลุ่มสี</div>
     <div style="display:flex;align-items:center;gap:16px">
@@ -503,11 +615,15 @@ async function renderOverview(el) {
         ${[['red','สีแดง','var(--red)',rc],['yellow','สีเหลือง','var(--yellow)',yc],['green','สีเขียว','var(--green)',gc]].map(([g,lbl,clr,cnt])=>`
         <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
           <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:50%;background:${clr}"></div><span style="font-size:13px;font-weight:500">${lbl}</span></div>
-          <span style="font-size:13px;font-weight:700;color:${clr}">${cnt}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="background:#e5e7eb;border-radius:99px;height:4px;width:56px;overflow:hidden"><div style="background:${clr};height:100%;width:${total>0?Math.round(cnt/total*100):0}%"></div></div>
+            <span style="font-size:13px;font-weight:700;color:${clr};min-width:24px;text-align:right">${cnt}</span>
+          </div>
         </div>`).join('')}
       </div>
     </div>
   </div>
+
   <div style="background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px">
     <div style="font-weight:700;font-size:14px;margin-bottom:12px">สถานะการนัดหมาย</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -519,6 +635,58 @@ async function renderOverview(el) {
       </div>`).join('')}
     </div>
   </div>
+
+  ${(gafAvg!==null||twoqData.length>0)?`
+  <div style="background:var(--card);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:12px">
+    <div style="font-weight:700;font-size:14px;margin-bottom:12px">🧠 ผลลัพธ์ด้านสุขภาพจิต (6 เดือนล่าสุด)</div>
+    <div style="display:grid;grid-template-columns:${gafAvg!==null&&twoqData.length>0?'1fr 1fr':'1fr'};gap:10px">
+      ${gafAvg!==null?`
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center">
+        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-bottom:4px">GAF เฉลี่ย</div>
+        <div style="font-size:32px;font-weight:800;color:${gafAvg>=71?'#16a34a':gafAvg>=51?'#d97706':'#dc2626'}">${gafAvg}</div>
+        <div style="font-size:11px;color:var(--text3)">${gafAvg>=71?'ระดับดี':gafAvg>=51?'ระดับปานกลาง':'ระดับต่ำ'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">จาก ${gafData.length} การประเมิน</div>
+      </div>`:''}
+      ${twoqData.length>0?`
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+        <div style="font-size:11px;color:var(--text3);font-weight:600;margin-bottom:8px">2Q+ คัดกรองซึมเศร้า</div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:12px;color:var(--text2)">คัดกรองแล้ว</span>
+          <span style="font-size:13px;font-weight:700">${twoqData.length} ครั้ง</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:12px;color:#d97706">⚠️ พบเสี่ยง</span>
+          <span style="font-size:13px;font-weight:700;color:#d97706">${twoqPos} ราย</span>
+        </div>
+        ${twoqSuicide>0?`<div style="display:flex;justify-content:space-between;padding:5px 8px;background:#fef2f2;border-radius:6px;margin-top:4px">
+          <span style="font-size:11px;color:#b91c1c;font-weight:600">🚨 เสี่ยงฆ่าตัวตาย</span>
+          <span style="font-size:12px;font-weight:800;color:#b91c1c">${twoqSuicide} ราย</span>
+        </div>`:''}
+      </div>`:''}
+    </div>
+  </div>`:''}
+
+  ${villages.length>0?`
+  <div style="background:var(--card);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:12px">
+    <div style="font-weight:700;font-size:14px;margin-bottom:10px">🏘️ ความครอบคลุมต่อหมู่บ้าน (เดือนนี้)</div>
+    ${villages.map(([vname,d])=>{
+      const pct=d.total>0?Math.round(d.visited/d.total*100):0
+      const col=pct>=80?'#16a34a':pct>=50?'#d97706':'#dc2626'
+      return`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:var(--text1)">${esc(vname)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:1px">${d.total} ราย · 🔴 ${d.red} · เกินนัด ${d.overdue}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;min-width:90px">
+          <div style="font-size:12px;font-weight:700;color:${col}">${d.visited}/${d.total} (${pct}%)</div>
+          <div style="background:#e5e7eb;border-radius:99px;height:4px;margin-top:3px;overflow:hidden">
+            <div style="background:${col};height:100%;width:${pct}%"></div>
+          </div>
+        </div>
+      </div>`
+    }).join('')}
+  </div>`:''}
+
   ${lineHtml}
   ${visitChartHtml}
   </div>`
