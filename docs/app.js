@@ -2720,7 +2720,7 @@ function openVisitForm(type){
             <button type="button" id="2q-yes-${q}" onclick="set2Q('${q}',1)" style="flex:1;padding:7px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">ใช่</button>
           </div>
         </div>`).join('')}
-        <div id="2q-q3-row" style="display:none;margin-bottom:8px;padding:8px;background:#fef9c3;border-radius:6px;border:1px solid #fde047">
+        <div id="2q-q3-row" style="margin-bottom:8px;padding:8px;background:#fef9c3;border-radius:6px;border:1px solid #fde047">
           <div style="font-size:11px;font-weight:700;color:#854d0e;margin-bottom:6px">⚠️ คำถามคัดกรองการฆ่าตัวตาย</div>
           <div style="font-size:12px;color:var(--text1);margin-bottom:4px">ใน 1 เดือนที่ผ่านมา มีความรู้สึกทุกข์ใจไม่อยากมีชีวิตอยู่ หรือไม่</div>
           <div style="display:flex;gap:6px">
@@ -2801,8 +2801,6 @@ function set2Q(q,val){
   if(yes)yes.style.borderColor=val===1?'#ef4444':'#d1d5db'
   if(no)no.style.cssText=no.style.cssText.replace(/background:[^;]+/,val===0?'background:#f0fdf4':'background:#f3f4f6')
   if(no)no.style.borderColor=val===0?'#22c55e':'#d1d5db'
-  const q3row=document.getElementById('2q-q3-row')
-  if(q3row)q3row.style.display=(_mhAssess.twoq.q1===1||_mhAssess.twoq.q2===1)?'block':'none'
   update2QScore()
 }
 function update2QScore(){
