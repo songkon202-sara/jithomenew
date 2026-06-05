@@ -589,16 +589,27 @@ async function renderOverview(el) {
   ${urgent.length>0?`
   <div style="background:var(--card);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:12px;border-left:4px solid #dc2626">
     <div style="font-weight:700;font-size:14px;color:#b91c1c;margin-bottom:10px">⚠️ ต้องติดตามด่วน — เกินนัด ยังไม่ได้เยี่ยมเดือนนี้ (${urgent.length} ราย)</div>
-    ${urgent.map(p=>{
-      const days=Math.abs(parseInt(p.days_until))
-      const col=p.group_color==='red'?'#dc2626':'#d97706'
-      const bg=p.group_color==='red'?'#fef2f2':'#fefce8'
-      return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:${bg};border-radius:8px;margin-bottom:6px">
-        <div><div style="font-size:13px;font-weight:700;color:var(--text1)">${esc(p.name)}</div>
-        <div style="font-size:11px;color:var(--text3)">${esc(p.village||'')} · ${esc(p.group_label||p.group_color)}</div></div>
-        <span style="font-size:12px;font-weight:700;color:${col};white-space:nowrap">เกิน ${days} วัน</span>
-      </div>`
-    }).join('')}
+    ${(()=>{
+      const vm={}
+      urgent.forEach(p=>{
+        const v=p.village||'ไม่ระบุ'
+        if(!vm[v])vm[v]={red:0,yellow:0,maxOver:0}
+        if(p.group_color==='red')vm[v].red++; else vm[v].yellow++
+        const d=Math.abs(parseInt(p.days_until))
+        if(d>vm[v].maxOver)vm[v].maxOver=d
+      })
+      return Object.entries(vm).sort((a,b)=>b[1].red-a[1].red).map(([vname,d])=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#fef2f2;border-radius:8px;margin-bottom:6px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text1)">🏘️ ${esc(vname)}</div>
+          <div style="display:flex;gap:8px;margin-top:3px">
+            ${d.red>0?`<span style="font-size:11px;color:#dc2626;font-weight:700">🔴 ${d.red} ราย</span>`:''}
+            ${d.yellow>0?`<span style="font-size:11px;color:#d97706;font-weight:700">🟡 ${d.yellow} ราย</span>`:''}
+          </div>
+        </div>
+        <span style="font-size:11px;color:#b91c1c;font-weight:600;white-space:nowrap">เกินสูงสุด ${d.maxOver} วัน</span>
+      </div>`).join('')
+    })()}
   </div>`:''}
 
   <div style="background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px">
