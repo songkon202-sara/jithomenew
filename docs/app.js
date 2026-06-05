@@ -49,6 +49,13 @@ let _redFlags    = []
 let _ytAssess    = {ya:null, yati:null, sara:null}
 let _assess10    = {}
 let _mhAssess    = { twoq:{q1:null,q2:null,q3:null}, rq:[5,5,5], st5:new Array(5).fill(null), burnout:new Array(9).fill(null) }
+const BPRS_ITEMS=['ความกังวลใจด้านร่างกาย','ความวิตกกังวล','การถอนตัวทางอารมณ์','ความไม่เป็นระเบียบของความคิด','ความรู้สึกผิด','ความตึงเครียด','ท่าทางและพฤติกรรมแปลก','ความยิ่งใหญ่','อารมณ์ซึมเศร้า','ความเป็นศัตรู','ความระแวง','อาการประสาทหลอน','การชะลอทางจิตพลศาสตร์','ความไม่ร่วมมือ','เนื้อหาความคิดผิดปกติ','อารมณ์ทื่อ/แบน','ความตื่นเต้นเกินปกติ','การสับสน/ไม่รู้วัน เวลา สถานที่']
+const AIMS_ITEMS=['กล้ามเนื้อใบหน้า','ริมฝีปาก / รอบปาก','ขากรรไกร','ลิ้น','แขนส่วนบน (ไหล่/ข้อศอก/ข้อมือ)','แขนส่วนล่าง (ข้อเข่า/ข้อเท้า)','มือและนิ้ว','การเคลื่อนไหวแขนและมือโดยรวม','คอ ไหล่ สะโพก','ลำตัว','การเคลื่อนไหวลำตัวโดยรวม','ความรุนแรงโดยรวม']
+const CGB_ITEMS=['ผู้ป่วยขอความช่วยเหลือมากเกินไป','ไม่มีเวลาส่วนตัวเพราะต้องดูแล','เครียดเมื่อดูแลควบคู่กับหน้าที่อื่น','รู้สึกอายเพราะพฤติกรรมของผู้ป่วย','รู้สึกโกรธเมื่ออยู่ใกล้ผู้ป่วย','ผู้ป่วยกระทบความสัมพันธ์กับครอบครัว','กลัวเรื่องอนาคตของผู้ป่วย','สุขภาพของท่านแย่ลงเพราะการดูแล','ตึงเครียดเมื่ออยู่ใกล้ผู้ป่วย','ชีวิตทางสังคมแย่ลงเพราะการดูแล','รู้สึกหมดแรงเพราะการดูแล','การดูแลมีผลต่อชีวิตโดยรวม']
+let _gaf=null
+let _bprs=new Array(18).fill(1)
+let _aims=new Array(12).fill(0)
+let _cgb=new Array(12).fill(0)
 
 const ASSESS10_DOMAINS = [
   {id:'d1',title:'1. ด้านอาการทางจิต',opts:[[1,'ไม่มีอาการ','รู้สึกดี ช่วยตนเองได้ ดำรงชีวิตได้'],[2,'มีบ้าง','พฤติกรรมผิดปกติ ≥10 วัน/เดือน'],[3,'มีมาก','พฤติกรรมผิดปกติ >10 วัน/เดือน']]},
@@ -617,6 +624,33 @@ function renderMHAssessResult(a){
     const s=a.burnout.total
     const[bg,color,lbl]=s<=9?['#f0fdf4','#15803d',`Burnout: ${s} ไม่มี`]:s<=18?['#fff7ed','#c2410c',`Burnout: ${s} ปานกลาง`]:['#fef2f2','#b91c1c',`Burnout: ${s} สูง`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
+  }
+  if(a.gaf!==null&&a.gaf!==undefined){
+    const s=a.gaf
+    const[bg,color]=s>=71?['#f0fdf4','#15803d']:s>=51?['#fefce8','#854d0e']:s>=31?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
+    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">GAF: ${s}</span>`)
+  }
+  if(a.bprs?.total){
+    const s=a.bprs.total
+    const[bg,color]=s<=30?['#f0fdf4','#15803d']:s<=45?['#fefce8','#854d0e']:s<=60?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
+    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">BPRS: ${s}</span>`)
+  }
+  if(a.aims?.total!==undefined){
+    const s=a.aims.total
+    const[bg,color]=s===0?['#f0fdf4','#15803d']:s<=4?['#fefce8','#854d0e']:s<=8?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
+    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">AIMS: ${s}</span>`)
+  }
+  if(a.symptoms?.length){
+    chips.push(`<span style="background:#fef2f2;color:#b91c1c;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">⚠️ พบอาการ ${a.symptoms.length} รายการ</span>`)
+  }
+  if(a.medAdhere!==null&&a.medAdhere!==undefined){
+    const[bg,color,lbl]=a.medAdhere.taken?['#f0fdf4','#15803d','💊 กินยาครบ']:['#fef2f2','#b91c1c',`💊 ขาดยา ${a.medAdhere.missedDays||0} วัน`]
+    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
+  }
+  if(a.cgb?.total!==undefined){
+    const s=a.cgb.total
+    const[bg,color]=s<=20?['#f0fdf4','#15803d']:s<=40?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
+    chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">ภาระดูแล: ${s}</span>`)
   }
   if(!chips.length)return''
   return`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px"><span style="font-size:11px;color:var(--text3);margin-right:2px">🧠</span>${chips.join('')}</div>`
@@ -2552,7 +2586,7 @@ function openVisitForm(type){
   if(type==='aosomo' && currentRole==='staff'){alert('เจ้าหน้าที่ ไม่มีสิทธิ์บันทึกแบบ อสม.');return}
   const ov=document.getElementById('visit-overlay'),ct=document.getElementById('visit-content')
   if(!ov||!ct)return
-  _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={};_mhAssess={twoq:{q1:null,q2:null,q3:null},rq:[5,5,5],st5:new Array(5).fill(null),burnout:new Array(9).fill(null)}
+  _visitType=type;_visitChecks=[];_visitProblems=[];_oasScores={s1:0,s2:0,s3:0};_redFlags=[];_ytAssess={ya:null,yati:null,sara:null};_assess10={};_mhAssess={twoq:{q1:null,q2:null,q3:null},rq:[5,5,5],st5:new Array(5).fill(null),burnout:new Array(9).fill(null)};_gaf=null;_bprs=new Array(18).fill(1);_aims=new Array(12).fill(0);_cgb=new Array(12).fill(0);_symptoms=[];_medAdhere=null;_medReasons=[]
   const cl=type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
   const nameOpts=allPatients.map(p=>`<option value="${esc(p.name)}" data-village="${esc(p.village||'')}">`).join('')
   ct.innerHTML=`
@@ -2640,6 +2674,48 @@ function openVisitForm(type){
       </div>
     </div>`).join('')}
     <div id="a10-result" style="display:none;margin-top:4px;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;text-align:center"></div>
+  </div>
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">🎯 GAF — ระดับการทำหน้าที่ในชีวิตประจำวัน</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="font-size:12px;color:var(--text3)">1</span>
+      <input type="range" min="1" max="100" value="50" id="gaf-range" oninput="updateGAF(this.value)" style="flex:1;accent-color:#0a7ea4">
+      <span style="font-size:12px;color:var(--text3)">100</span>
+      <span id="gaf-val" style="font-size:16px;font-weight:800;color:#0a7ea4;min-width:32px;text-align:right">50</span>
+    </div>
+    <div id="gaf-desc" style="font-size:12px;padding:6px 10px;background:#fff;border-radius:6px;border:1px solid var(--border);color:var(--text2)">ปานกลาง — มีอาการหรือความบกพร่องในการทำงานระดับปานกลาง</div>
+  </div>
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700">📊 BPRS — ประเมินอาการทางจิต 18 ด้าน</div>
+      <span id="bprs-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">18 คะแนน</span>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">1=ไม่มี · 2=น้อยมาก · 3=น้อย · 4=ปานกลาง · 5=ค่อนข้างมาก · 6=มาก · 7=มากที่สุด</div>
+    ${BPRS_ITEMS.map((item,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:12px;color:var(--text1)">${i+1}. ${item}</div>
+      <input type="range" min="1" max="7" value="1" id="bprs-${i}" oninput="updateBPRS(${i},this.value)" style="width:90px;accent-color:#0a7ea4">
+      <span id="bprs-val-${i}" style="font-size:13px;font-weight:700;color:#0a7ea4;min-width:16px;text-align:center">1</span>
+    </div>`).join('')}
+    <div id="bprs-result" style="margin-top:8px;padding:8px 12px;border-radius:8px;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700">รวม: 18 — อาการน้อย</div>
+  </div>
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div>
+        <div style="font-size:13px;font-weight:700">🔄 AIMS — ผลข้างเคียงยา</div>
+        <div style="font-size:11px;color:var(--text3)">Abnormal Involuntary Movement Scale</div>
+      </div>
+      <span id="aims-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">0 คะแนน</span>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">0=ไม่มี · 1=น้อยมาก · 2=น้อย · 3=ปานกลาง · 4=มาก</div>
+    ${AIMS_ITEMS.map((item,i)=>`
+    <div style="margin-bottom:8px">
+      <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${item}</div>
+      <div style="display:flex;gap:4px">
+        ${[0,1,2,3,4].map(j=>`<button type="button" id="aims-${i}-${j}" onclick="setAIMS(${i},${j})" style="flex:1;padding:6px 0;border-radius:6px;border:2px solid ${j===0?'#0a7ea4':'#d1d5db'};background:${j===0?'#0a7ea4':'#f3f4f6'};color:${j===0?'#fff':'#374151'};font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">${j}</button>`).join('')}
+      </div>
+    </div>`).join('')}
+    <div id="aims-result" style="margin-top:4px;padding:8px 12px;border-radius:8px;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700">รวม: 0 — ไม่พบผลข้างเคียง</div>
   </div>`:''}
 
   ${type==='aosomo'?`
@@ -2701,6 +2777,69 @@ function openVisitForm(type){
       </div>
     </div>`).join('')}
     <div id="yt-result" style="display:none;margin-top:4px;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;text-align:center"></div>
+  </div>
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">👁️ แบบสังเกตอาการเบื้องต้น (โรคจิต)</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">สังเกตพฤติกรรมที่ผิดปกติ — กดเลือก "พบ" หากสังเกตเห็น</div>
+    ${[
+      ['sym1','หลงผิด / ความเชื่อผิดปกติ','เชื่อว่ามีคนทำร้าย หรือมีฤทธิ์พิเศษ'],
+      ['sym2','ประสาทหลอน','ได้ยินเสียง เห็นภาพที่คนอื่นไม่เห็น/ได้ยิน'],
+      ['sym3','พูดคนเดียว / หัวเราะคนเดียว','พูด ยิ้ม หัวเราะโดยไม่มีเหตุ'],
+      ['sym4','ก้าวร้าว / หุนหันพลันแล่น','ตีคน ขว้างของ ทำลาย'],
+      ['sym5','แยกตัว / ไม่ยอมออกจากห้อง','ไม่พูดคุย หลีกเลี่ยงสังคม'],
+      ['sym6','ดูแลตนเองไม่ได้','ไม่อาบน้ำ ไม่กินข้าว ไม่แต่งกาย'],
+      ['sym7','นอนไม่หลับ / ผิดปกติ','นอนดึกมาก หรือนอนมากผิดปกติ'],
+      ['sym8','กินยาไม่สม่ำเสมอ / ขาดยา','ไม่กินยาตามที่แพทย์สั่ง'],
+    ].map(([id,title,desc])=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#fff;border-radius:8px;margin-bottom:6px;border:1px solid var(--border)" id="sym-row-${id}">
+      <div style="flex:1;min-width:0;margin-right:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--text1)">${title}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">${desc}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button type="button" id="sym-yes-${id}" onclick="toggleSymptom('${id}',true)" style="padding:6px 10px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">พบ</button>
+        <button type="button" id="sym-no-${id}" onclick="toggleSymptom('${id}',false)" style="padding:6px 10px;border-radius:6px;border:2px solid var(--primary);background:var(--primary-lt);color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">ไม่พบ</button>
+      </div>
+    </div>`).join('')}
+  </div>
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">💊 แบบติดตามการรับประทานยา</div>
+    <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid var(--border);margin-bottom:8px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px">กินยาครบทุกวันในสัปดาห์ที่ผ่านมาหรือไม่</div>
+      <div style="display:flex;gap:6px">
+        <button type="button" id="med-yes" onclick="setMedAdhere(true)" style="flex:1;padding:8px;border-radius:8px;border:2px solid #22c55e;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✅ กินครบ</button>
+        <button type="button" id="med-no" onclick="setMedAdhere(false)" style="flex:1;padding:8px;border-radius:8px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">❌ ขาดยา</button>
+      </div>
+    </div>
+    <div id="med-missed-wrap" style="display:none;background:#fff;border-radius:8px;padding:10px 12px;border:1px solid var(--border);margin-bottom:8px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px">จำนวนวันที่ขาดยา (ในสัปดาห์ที่ผ่านมา)</div>
+      <input type="number" id="med-missed-days" min="0" max="7" value="0" style="width:80px;padding:6px;border:1px solid var(--border);border-radius:6px;font-family:'Sarabun',sans-serif;font-size:14px;text-align:center">
+      <div style="font-size:12px;font-weight:700;margin:8px 0 4px">สาเหตุที่ขาดยา</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${['ลืมกิน','ไม่อยากกิน','ยาหมด','ผลข้างเคียง','อื่นๆ'].map(r=>`<button type="button" id="med-reason-${r}" onclick="toggleMedReason('${r}')" style="padding:4px 10px;border-radius:20px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:11px;font-weight:600;cursor:pointer;font-family:'Sarabun',sans-serif">${r}</button>`).join('')}
+      </div>
+    </div>
+    <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px">อาการข้างเคียงที่สังเกตได้ (ถ้ามี)</div>
+      <input type="text" id="med-side-effects" placeholder="เช่น ง่วงมาก มือสั่น แข็งเกร็ง..." style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-family:'Sarabun',sans-serif;font-size:12px">
+    </div>
+  </div>
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div>
+        <div style="font-size:13px;font-weight:700">👨‍👩‍👧 ภาระผู้ดูแล (Caregiver Burden)</div>
+        <div style="font-size:11px;color:var(--text3)">0=ไม่เลย · 1=นานๆครั้ง · 2=บางครั้ง · 3=บ่อยครั้ง · 4=เสมอ</div>
+      </div>
+      <span id="cgb-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ยังไม่ประเมิน</span>
+    </div>
+    ${CGB_ITEMS.map((item,i)=>`
+    <div style="margin-bottom:8px">
+      <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${item}</div>
+      <div style="display:flex;gap:3px">
+        ${[0,1,2,3,4].map(j=>`<button type="button" id="cgb-${i}-${j}" onclick="setCGB(${i},${j})" style="flex:1;padding:6px 0;border-radius:6px;border:2px solid ${j===0?'#0a7ea4':'#d1d5db'};background:${j===0?'#0a7ea4':'#f3f4f6'};color:${j===0?'#fff':'#374151'};font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">${j}</button>`).join('')}
+      </div>
+    </div>`).join('')}
+    <div id="cgb-result" style="margin-top:4px;padding:8px 12px;border-radius:8px;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700;display:none"></div>
   </div>`:''}
 
   <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;margin-bottom:14px">
@@ -2790,6 +2929,131 @@ async function resolveReferral(id){
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);if(btn){btn.textContent='✅ รับเรื่องแล้ว';btn.disabled=false}return}
   renderPage('admin')
 }
+// ── GAF / BPRS / AIMS ─────────────────────────────────────────
+function updateGAF(val){
+  _gaf=parseInt(val)
+  const el=document.getElementById('gaf-val')
+  const desc=document.getElementById('gaf-desc')
+  if(el)el.textContent=val
+  if(!desc)return
+  let txt
+  if(val>=91)txt='ดีเยี่ยม — ไม่มีอาการ ทำหน้าที่ได้ดีเยี่ยม'
+  else if(val>=81)txt='ดีมาก — อาการน้อยมาก หรือไม่มีอาการ'
+  else if(val>=71)txt='ดี — อาการเล็กน้อย บกพร่องเล็กน้อย'
+  else if(val>=61)txt='ค่อนข้างดี — มีปัญหาเล็กน้อย'
+  else if(val>=51)txt='ปานกลาง — มีอาการหรือความบกพร่องปานกลาง'
+  else if(val>=41)txt='ค่อนข้างน้อย — มีอาการรุนแรง บกพร่องในการทำงาน'
+  else if(val>=31)txt='น้อย — มีความบกพร่องมาก ต้องการการดูแล'
+  else if(val>=21)txt='น้อยมาก — ต้องการการดูแลอย่างใกล้ชิด'
+  else if(val>=11)txt='ต้องดูแลใกล้ชิดมาก'
+  else txt='อันตราย — ต้องการการดูแลแบบ 24 ชั่วโมง'
+  desc.textContent=txt
+}
+function updateBPRS(idx,val){
+  _bprs[idx]=parseInt(val)
+  const el=document.getElementById(`bprs-val-${idx}`)
+  if(el)el.textContent=val
+  const total=_bprs.reduce((a,b)=>a+b,0)
+  const badge=document.getElementById('bprs-badge')
+  const result=document.getElementById('bprs-result')
+  if(badge)badge.textContent=`${total} คะแนน`
+  if(!result)return
+  let txt,bg,color
+  if(total<=30){txt=`รวม: ${total} — อาการน้อย`;bg='#f0fdf4';color='#15803d'}
+  else if(total<=45){txt=`รวม: ${total} — อาการปานกลาง-น้อย`;bg='#fefce8';color='#854d0e'}
+  else if(total<=60){txt=`รวม: ${total} — อาการปานกลาง`;bg='#fff7ed';color='#c2410c'}
+  else{txt=`รวม: ${total} — อาการมาก`;bg='#fef2f2';color='#b91c1c'}
+  result.style.cssText=`margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
+  result.textContent=txt
+}
+function setAIMS(idx,val){
+  _aims[idx]=val
+  for(let j=0;j<5;j++){
+    const b=document.getElementById(`aims-${idx}-${j}`)
+    if(!b)continue
+    if(j===val){b.style.background='#0a7ea4';b.style.color='#fff';b.style.borderColor='#0a7ea4'}
+    else{b.style.background='#f3f4f6';b.style.color='#374151';b.style.borderColor='#d1d5db'}
+  }
+  const total=_aims.reduce((a,b)=>a+b,0)
+  const badge=document.getElementById('aims-badge')
+  const result=document.getElementById('aims-result')
+  if(badge)badge.textContent=`${total} คะแนน`
+  if(!result)return
+  let txt,bg,color
+  if(total===0){txt='รวม: 0 — ไม่พบผลข้างเคียง';bg='#f0fdf4';color='#15803d'}
+  else if(total<=4){txt=`รวม: ${total} — ผลข้างเคียงน้อย`;bg='#fefce8';color='#854d0e'}
+  else if(total<=8){txt=`รวม: ${total} — ผลข้างเคียงปานกลาง`;bg='#fff7ed';color='#c2410c'}
+  else{txt=`รวม: ${total} — ผลข้างเคียงมาก ควรปรึกษาแพทย์`;bg='#fef2f2';color='#b91c1c'}
+  result.style.cssText=`margin-top:4px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
+  result.textContent=txt
+}
+// ── อสม. Symptom / Medication / Caregiver ────────────────────
+let _symptoms=[]
+let _medAdhere=null
+let _medReasons=[]
+function toggleSymptom(id,found){
+  const yes=document.getElementById(`sym-yes-${id}`),no=document.getElementById(`sym-no-${id}`)
+  const row=document.getElementById(`sym-row-${id}`)
+  if(found){
+    const idx=_symptoms.indexOf(id)
+    if(idx===-1)_symptoms.push(id)
+    if(yes){yes.style.background='#fef2f2';yes.style.borderColor='#ef4444';yes.style.color='#b91c1c'}
+    if(no){no.style.background='#f3f4f6';no.style.borderColor='#d1d5db';no.style.color='var(--text2)'}
+    if(row)row.style.background='#fef2f2'
+  }else{
+    _symptoms=_symptoms.filter(s=>s!==id)
+    if(yes){yes.style.background='#f3f4f6';yes.style.borderColor='#d1d5db';yes.style.color='var(--text2)'}
+    if(no){no.style.background='var(--primary-lt)';no.style.borderColor='var(--primary)';no.style.color='var(--primary)'}
+    if(row)row.style.background='#fff'
+  }
+}
+function setMedAdhere(taken){
+  _medAdhere=taken
+  const yes=document.getElementById('med-yes'),no=document.getElementById('med-no')
+  const wrap=document.getElementById('med-missed-wrap')
+  if(taken){
+    if(yes){yes.style.background='#f0fdf4';yes.style.borderColor='#22c55e'}
+    if(no){no.style.background='#f3f4f6';no.style.borderColor='#d1d5db'}
+    if(wrap)wrap.style.display='none'
+  }else{
+    if(yes){yes.style.background='#f3f4f6';yes.style.borderColor='#d1d5db'}
+    if(no){no.style.background='#fef2f2';no.style.borderColor='#ef4444'}
+    if(wrap)wrap.style.display='block'
+  }
+}
+function toggleMedReason(r){
+  const idx=_medReasons.indexOf(r)
+  const btn=document.getElementById(`med-reason-${r}`)
+  if(idx===-1){
+    _medReasons.push(r)
+    if(btn){btn.style.background='#0a7ea4';btn.style.color='#fff';btn.style.borderColor='#0a7ea4'}
+  }else{
+    _medReasons.splice(idx,1)
+    if(btn){btn.style.background='#f3f4f6';btn.style.color='var(--text2)';btn.style.borderColor='#d1d5db'}
+  }
+}
+function setCGB(idx,val){
+  _cgb[idx]=val
+  for(let j=0;j<5;j++){
+    const b=document.getElementById(`cgb-${idx}-${j}`)
+    if(!b)continue
+    if(j===val){b.style.background='#0a7ea4';b.style.color='#fff';b.style.borderColor='#0a7ea4'}
+    else{b.style.background='#f3f4f6';b.style.color='#374151';b.style.borderColor='#d1d5db'}
+  }
+  const filled=_cgb.filter(v=>v>0)
+  if(!filled.length){const r=document.getElementById('cgb-result');if(r)r.style.display='none';return}
+  const total=_cgb.reduce((a,b)=>a+b,0)
+  const badge=document.getElementById('cgb-badge')
+  const result=document.getElementById('cgb-result')
+  if(badge)badge.textContent=`${total} คะแนน`
+  if(!result)return
+  let txt,bg,color
+  if(total<=20){txt=`ภาระ: ${total} — น้อย`;bg='#f0fdf4';color='#15803d'}
+  else if(total<=40){txt=`ภาระ: ${total} — ปานกลาง`;bg='#fff7ed';color='#c2410c'}
+  else{txt=`ภาระ: ${total} — มาก ควรให้การสนับสนุน`;bg='#fef2f2';color='#b91c1c'}
+  result.style.cssText=`display:block;margin-top:4px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
+  result.textContent=txt
+}
 // ── แบบประเมินสุขภาพใจ ──────────────────────────────────────
 function set2Q(q,val){
   _mhAssess.twoq[q]=val
@@ -2869,13 +3133,20 @@ function updateMHScores(type){
 }
 function getMHAssessJSON(){
   const {twoq,rq,st5,burnout}=_mhAssess
-  const anyFilled=[twoq.q1,twoq.q2,...st5,...burnout].some(v=>v!==null)
-  if(!anyFilled&&rq.every(v=>v===5))return null
+  const anyMHFilled=[twoq.q1,twoq.q2,...st5,...burnout].some(v=>v!==null)
+  const anyNewFilled=_gaf!==null||_bprs.some(v=>v>1)||_aims.some(v=>v>0)||_symptoms.length>0||_medAdhere!==null||_cgb.some(v=>v>0)
+  if(!anyMHFilled&&rq.every(v=>v===5)&&!anyNewFilled)return null
   return{
     twoq:{q1:twoq.q1,q2:twoq.q2,q3:twoq.q3,score:(twoq.q1||0)+(twoq.q2||0),suicide:twoq.q3===1},
     rq:{scores:rq,total:rq.reduce((a,b)=>a+b,0)},
     st5:{scores:st5,total:st5.filter(v=>v!==null).reduce((a,b)=>a+b,0)},
-    burnout:{scores:burnout,total:burnout.filter(v=>v!==null).reduce((a,b)=>a+b,0)}
+    burnout:{scores:burnout,total:burnout.filter(v=>v!==null).reduce((a,b)=>a+b,0)},
+    gaf:_gaf,
+    bprs:_gaf!==null||_bprs.some(v=>v>1)?{scores:[..._bprs],total:_bprs.reduce((a,b)=>a+b,0)}:null,
+    aims:_aims.some(v=>v>0)?{scores:[..._aims],total:_aims.reduce((a,b)=>a+b,0)}:null,
+    symptoms:_symptoms.length>0?[..._symptoms]:null,
+    medAdhere:_medAdhere!==null?{taken:_medAdhere,missedDays:parseInt(document.getElementById('med-missed-days')?.value||0),reasons:[..._medReasons],sideEffects:document.getElementById('med-side-effects')?.value||''}:null,
+    cgb:_cgb.some(v=>v>0)?{scores:[..._cgb],total:_cgb.reduce((a,b)=>a+b,0)}:null
   }
 }
 // ──────────────────────────────────────────────────────────────
