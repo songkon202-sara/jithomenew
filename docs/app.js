@@ -2205,6 +2205,7 @@ async function saveSettings(){
 }
 
 function exportCSV(){
+  auditLog('export_csv','patients',null,{count:allPatients.length})
   const rows=allPatients.map(p=>[p.name,p.village,p.group_label,p.interval_str,thDate(p.last_date),thDate(p.next_date),p.days_until,p.note||''])
   const hdr=['ชื่อ','หมู่บ้าน','กลุ่มสี','รอบนัด','วันฉีดล่าสุด','วันนัดต่อไป','วันคงเหลือ','หมายเหตุ']
   const csv=[hdr,...rows].map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n')
@@ -2228,6 +2229,7 @@ function toggleAdmType(type){
 }
 
 function exportJSON(){
+  auditLog('export_json','patients',null,{count:allPatients.length})
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(allPatients,null,2)],{type:'application/json'}));a.download='jithome.json';a.click()
 }
 
@@ -2304,6 +2306,7 @@ async function openModal(id){
   try{
     const{data:p}=await sb.from('patient_status').select('*').eq('id',id).single()
     if(!p)throw new Error('ไม่พบผู้ป่วย')
+    auditLog('view_patient','patient',id,{name:p.name,village:p.village})
     const{data:pExtra}=await sb.from('patients').select('photo_url,photo_urls,oral_medication').eq('id',id).single()
     p.photo_url=pExtra?.photo_url||null
     p.photo_urls=pExtra?.photo_urls||[]
@@ -2651,6 +2654,7 @@ async function refreshAosomoByVillage(village, currentVal){
 async function deletePatient(id,name){
   if(!confirm(`ลบผู้ป่วย "${name}" ออกจากระบบ?\n\nประวัติการฉีดยาทั้งหมดจะถูกลบด้วย\nไม่สามารถกู้คืนได้!\n\n(สิทธิ์ตาม PDPA มาตรา 33 — สิทธิ์ขอลบข้อมูล)`))return
   try{
+    await auditLog('delete_patient','patient',id,{name})
     const{error}=await sb.from('patients').delete().eq('id',id)
     if(error)throw error
     closeModal()
@@ -2708,6 +2712,7 @@ async function saveEditPatient(id){
     }
     const{error}=await sb.from('patients').update(updates).eq('id',id)
     if(error)throw error
+    auditLog('edit_patient','patient',id,{name:updates.name})
     allPatients=await getPatients()
     await openModal(id)
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
@@ -3410,6 +3415,7 @@ async function saveVisitRecord(){
     const assessment_json=getMHAssessJSON()
     const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer,photo_url:photoUrl,assessment_json})
     if(error)throw error
+    auditLog('save_visit','visit',found?.id||null,{patient_name:name,visit_type:_visitType,refer})
     sendLineVisitReport({patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,score:_visitChecks.length,refer})
     if(refer&&_visitType==='staff'){
       const RF_LABELS2={rf1:'ไม่หลับไม่นอน',rf2:'เดินไปเดินมา',rf3:'พูดจาคนเดียว',rf4:'หงุดหงิดฉุนเฉียว',rf5:'หวาดระแวง'}
@@ -3575,6 +3581,8 @@ async function loginUser(){
   currentUser=data.user
   const prof=await loadProfile(data.user)
   await updateLastLogin(data.user.id)
+  auditLog('login','auth',data.user.id,{email:data.user.email})
+  startSessionTimer()
   if(prof?.status==='pending'){hideAuthWall();showAuthWall('pending');return}
   hideAuthWall()
   updateUserUI()
@@ -3649,6 +3657,9 @@ async function registerAosomo(){
 }
 
 async function logoutUser(){
+  await auditLog('logout','auth',currentUser?.id)
+  if(_sessionTimer){clearInterval(_sessionTimer);_sessionTimer=null}
+  document.getElementById('session-warn-toast')?.remove()
   await sb.auth.signOut()
   currentUser=null;currentRole='viewer'
   showAuthWall('login')
@@ -3675,6 +3686,49 @@ async function loadProfile(user){
 
 async function updateLastLogin(userId){
   await sb.from('user_profiles').update({last_login:new Date().toISOString()}).eq('id',userId)
+}
+
+// ─── Audit Log ───────────────────────────────────────────────────
+async function auditLog(action,entityType,entityId,details){
+  try{
+    await sb.from('audit_logs').insert({
+      user_id:currentUser?.id||null,
+      user_email:currentUser?.email||null,
+      user_name:currentDisplayName||null,
+      action,
+      entity_type:entityType||null,
+      entity_id:entityId!=null?String(entityId):null,
+      details:details||null
+    })
+  }catch(e){}
+}
+
+// ─── Session Timeout (30 นาที) ────────────────────────────────────
+let _lastActivity=Date.now()
+let _sessionTimer=null
+let _warnShown=false
+const SESSION_TIMEOUT_MS=30*60*1000
+const SESSION_WARN_MS=28*60*1000
+function resetActivityTimer(){
+  _lastActivity=Date.now()
+  if(_warnShown){_warnShown=false;document.getElementById('session-warn-toast')?.remove()}
+}
+function startSessionTimer(){
+  if(_sessionTimer)clearInterval(_sessionTimer)
+  ;['click','keydown','mousedown','touchstart'].forEach(ev=>document.addEventListener(ev,resetActivityTimer,true))
+  _sessionTimer=setInterval(()=>{
+    const idle=Date.now()-_lastActivity
+    if(idle>=SESSION_TIMEOUT_MS){
+      clearInterval(_sessionTimer);document.getElementById('session-warn-toast')?.remove()
+      alert('หมดเวลาเซสชัน — กรุณาเข้าสู่ระบบใหม่')
+      logoutUser()
+    }else if(idle>=SESSION_WARN_MS&&!_warnShown){
+      _warnShown=true
+      const t=document.createElement('div');t.id='session-warn-toast'
+      t.innerHTML=`<div style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;font-family:'Sarabun',sans-serif;z-index:9999;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,.3)">⏰ เซสชันจะหมดใน 2 นาที — <button onclick="resetActivityTimer()" style="background:#0a7ea4;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif">ต่ออายุ</button></div>`
+      document.body.appendChild(t)
+    }
+  },30000)
 }
 
 async function sendResetEmail(){
@@ -3902,6 +3956,7 @@ async function init(){
   currentUser=user
   const profile=await loadProfile(user)
   await updateLastLogin(user.id)
+  startSessionTimer()
   if(profile?.status==='pending'){showAuthWall('pending');return}
   updateUserUI()
   await loadAndNav()
