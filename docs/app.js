@@ -832,6 +832,7 @@ function renderVisitList(visits){
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
           <span style="background:${bg};color:${clr};padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700">${lbl}</span>
           ${canEdit?`<button onclick="openEditVisit(${v.id})" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>`:''}
+          ${canDo('admin')?`<button onclick="deleteVisit(${v.id},'${esc(v.patient_name)}')" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>`:''}
         </div>
       </div>
       <div style="font-size:12px;color:var(--text2)">${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'} ${esc(v.visitor||'')}${v.refer?` <span style="color:#b91c1c;font-weight:700">⚠️ ส่งต่อ</span>`:''}</div>
@@ -841,7 +842,21 @@ function renderVisitList(visits){
     </div>`
   }).join('')
 }
-async function openEditVisit(id){
+async function deleteVisit(id,patientName){
+  if(!confirm(`ลบบันทึกการเยี่ยมบ้านของ "${patientName}"?\n\nไม่สามารถกู้คืนได้`))return
+  try{
+    await auditLog('delete_visit','visit',id,{patient_name:patientName})
+    const{error}=await sb.from('home_visits').delete().eq('id',id)
+    if(error)throw error
+    window._allVisits=(window._allVisits||[]).filter(v=>v.id!==id)
+    const activeBtn=document.querySelector('.tab-btn.active')
+    const match=activeBtn?.getAttribute('onclick')?.match(/setVTab\('(\w+)'/)
+    const tab=match?match[1]:'all'
+    const el=document.getElementById('visit-list')
+    if(el)el.innerHTML=renderVisitList(tab==='all'?window._allVisits:(window._allVisits||[]).filter(v=>v.visit_type===tab))
+  }catch(e){alert('❌ ลบไม่สำเร็จ: '+e.message)}
+}
+
   const{data:v}=await sb.from('home_visits').select('*').eq('id',id).single()
   if(!v)return
   // restore state
