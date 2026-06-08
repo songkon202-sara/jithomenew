@@ -857,6 +857,7 @@ async function deleteVisit(id,patientName){
   }catch(e){alert('❌ ลบไม่สำเร็จ: '+e.message)}
 }
 
+async function openEditVisit(id){
   const{data:v}=await sb.from('home_visits').select('*').eq('id',id).single()
   if(!v)return
   // restore state
