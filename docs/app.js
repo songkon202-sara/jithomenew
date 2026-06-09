@@ -915,7 +915,8 @@ async function saveEditVisit(id){
   const btn=document.getElementById('v-save-btn')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   const photoFile=document.getElementById('v-photo')?.files?.[0]||null
-  const updates={patient_name:name,village,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note,refer}
+  const assessment_json=getMHAssessJSON()
+  const updates={patient_name:name,village,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note,refer,assessment_json}
   if(photoFile){
     btn.textContent='กำลังอัพโหลดรูป...'
     const ext=photoFile.name.split('.').pop()
@@ -2323,8 +2324,7 @@ async function openModal(id){
     const{data:p}=await sb.from('patient_status').select('*').eq('id',id).single()
     if(!p)throw new Error('ไม่พบผู้ป่วย')
     auditLog('view_patient','patient',id,{name:p.name,village:p.village})
-    const{data:pExtra}=await sb.from('patients').select('photo_url,photo_urls,oral_medication').eq('id',id).single()
-    p.photo_url=pExtra?.photo_url||null
+    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication').eq('id',id).single()
     p.photo_urls=pExtra?.photo_urls||[]
     p.oral_medication=pExtra?.oral_medication||null
     p.group_label=groupLabel(p.group_color)
