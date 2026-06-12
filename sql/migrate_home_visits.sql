@@ -24,6 +24,7 @@ ALTER TABLE public.patients
   ADD COLUMN IF NOT EXISTS visit_interval     INT,
   ADD COLUMN IF NOT EXISTS inject_interval    INT,
   ADD COLUMN IF NOT EXISTS next_visit_date    DATE,
+  ADD COLUMN IF NOT EXISTS next_inject_date   DATE,
   ADD COLUMN IF NOT EXISTS photo_urls         TEXT[]  NOT NULL DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS file_url           TEXT;
 
@@ -62,6 +63,7 @@ SELECT
   p.visit_interval,
   p.inject_interval,
   p.next_visit_date,
+  p.next_inject_date,
   p.photo_urls,
   p.file_url,
   ir.injection_date                                              AS last_date,
