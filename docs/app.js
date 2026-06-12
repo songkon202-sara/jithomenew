@@ -2410,6 +2410,7 @@ async function openModal(id){
           ${[1,2,3,6].map(n=>`<option value="${n}">${n} เดือน</option>`).join('')}
         </select></div>
       </div>
+      <div class="form-group"><label>📅 วันนัดเยี่ยมบ้านครั้งต่อไป</label><input type="date" id="edit-pt-next-visit-date" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>💊 ยาทานปัจจุบัน</label><input type="text" id="edit-pt-oral-medication" placeholder="เช่น Risperidone 2mg, Haloperidol 5mg" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>💉 ยาฉีด</label><input type="text" id="edit-pt-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
       <div class="form-group">
@@ -2616,16 +2617,18 @@ async function openEditPatient(id,name,village,houseNo,note,staffResp,aosomoResp
       staffSel.innerHTML+=`<option value="${esc(staffResp)}" selected>${esc(staffResp)}</option>`
   }
   // โหลดข้อมูลเพิ่มเติม
-  const {data:extra}=await sb.from('patients').select('visit_interval,inject_interval,medication_name,oral_medication').eq('id',id).single()
+  const {data:extra}=await sb.from('patients').select('visit_interval,inject_interval,medication_name,oral_medication,next_visit_date').eq('id',id).single()
   if(extra){
     const vi=document.getElementById('edit-pt-visit-interval')
     const ii=document.getElementById('edit-pt-inject-interval')
     const med=document.getElementById('edit-pt-medication')
     const oral=document.getElementById('edit-pt-oral-medication')
+    const nvd=document.getElementById('edit-pt-next-visit-date')
     if(vi)vi.value=extra.visit_interval||''
     if(ii)ii.value=extra.inject_interval||''
     if(med)med.value=extra.medication_name||''
     if(oral)oral.value=extra.oral_medication||''
+    if(nvd)nvd.value=extra.next_visit_date||''
   }
   // โหลด dropdown อสม. — ส่ง village ตรงจากข้อมูลผู้ป่วย (ไม่ผ่าน select element)
   await refreshAosomoByVillage(village, aosomoResp)
@@ -2701,7 +2704,8 @@ async function saveEditPatient(id){
     const medication_name=(document.getElementById('edit-pt-medication')?.value||'').trim()||null
     const oral_medication=(document.getElementById('edit-pt-oral-medication')?.value||'').trim()||null
     const house_no=(document.getElementById('edit-pt-house-no')?.value||'').trim()
-    const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name,oral_medication}
+    const next_visit_date=document.getElementById('edit-pt-next-visit-date')?.value||null
+    const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name,oral_medication,next_visit_date}
     if(canDo('admin'))updates.national_id=nidRaw
     const photoInput=document.getElementById('edit-pt-photo')
     const photoFile=photoInput?.files?.[0]||null
