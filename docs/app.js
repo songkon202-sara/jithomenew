@@ -138,6 +138,44 @@ function parseInterval(s) {
   if (/2\s*สัปดาห์/.test(s)) return 14
   return 30
 }
+function daysToIntervalStr(days){
+  if(days<=14)return'2 สัปดาห์'
+  if(days<=21)return'3 สัปดาห์'
+  if(days<=28)return'4 สัปดาห์'
+  if(days<=45)return'1 เดือน'
+  return'3 เดือน'
+}
+function addDaysToDate(dateStr,days){
+  const d=new Date(dateStr+'T00:00:00');d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)
+}
+function syncNextDateFromInterval(fromId,intId,nextId){
+  const from=document.getElementById(fromId)?.value
+  const intEl=document.getElementById(intId)
+  const nextEl=document.getElementById(nextId)
+  if(!from||!intEl||!nextEl)return
+  const nd=addDaysToDate(from,parseInterval(intEl.value))
+  if(nextEl._flatpickr)nextEl._flatpickr.setDate(nd,true);else nextEl.value=nd
+}
+function syncIntervalFromNextDate(fromId,nextId,intId){
+  const from=document.getElementById(fromId)?.value
+  const next=document.getElementById(nextId)?.value
+  const intEl=document.getElementById(intId)
+  if(!from||!next||!intEl)return
+  const days=Math.round((new Date(next+'T00:00:00')-new Date(from+'T00:00:00'))/86400000)
+  if(days<=0)return
+  const str=daysToIntervalStr(days)
+  for(const o of intEl.options)if(o.textContent.trim()===str){o.selected=true;break}
+}
+function getIntervalAndDays(fromDateId,intId,nextDateId){
+  const from=document.getElementById(fromDateId)?.value||''
+  const next=document.getElementById(nextDateId)?.value||''
+  const intVal=document.getElementById(intId)?.value||'1 เดือน'
+  if(from&&next){
+    const days=Math.round((new Date(next+'T00:00:00')-new Date(from+'T00:00:00'))/86400000)
+    if(days>0)return{interval_str:daysToIntervalStr(days),interval_days:days}
+  }
+  return{interval_str:intVal,interval_days:parseInterval(intVal)}
+}
 function parseGroupColor(g) {
   if (!g) return 'yellow'
   if (g.includes('แดง') || g === 'red')     return 'red'
@@ -1337,9 +1375,10 @@ async function renderAdmin(el) {
       <div class="form-group"><label>กลุ่มสี</label><select id="adm-group"><option value="สีแดง">สีแดง</option><option value="สีเหลือง" selected>สีเหลือง</option><option value="สีเขียว">สีเขียว</option></select></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="form-group"><label id="adm-date-label">วันที่ฉีดยา</label><input type="date" id="adm-date" value="${todayISO()}"></div>
-      <div class="form-group"><label>รอบนัดต่อไป</label><select id="adm-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
+      <div class="form-group"><label id="adm-date-label">วันที่ฉีดยา</label><input type="date" id="adm-date" value="${todayISO()}" oninput="syncNextDateFromInterval('adm-date','adm-interval','adm-next-date')"></div>
+      <div class="form-group"><label>รอบนัดต่อไป</label><select id="adm-interval" onchange="syncNextDateFromInterval('adm-date','adm-interval','adm-next-date')"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
     </div>
+    <div class="form-group"><label>📅 วันนัดครั้งต่อไป <span style="font-size:11px;color:var(--text3);font-weight:400">(เลือกจากปฏิทิน หรือปล่อยให้คำนวณอัตโนมัติ)</span></label><input type="date" id="adm-next-date" oninput="syncIntervalFromNextDate('adm-date','adm-next-date','adm-interval')"></div>
     <div class="form-group">
       <label>หมายเหตุ</label>
       <textarea id="adm-note" rows="2" style="resize:vertical;min-height:60px;font-family:'Sarabun',sans-serif"></textarea>
@@ -2192,12 +2231,12 @@ async function saveAdminRecord(){
   const village=document.getElementById('adm-village')?.value
   const groupStr=document.getElementById('adm-group')?.value
   const date=document.getElementById('adm-date')?.value
-  const interval=document.getElementById('adm-interval')?.value
   const note=document.getElementById('adm-note')?.value?.trim()||''
   const btn=document.getElementById('adm-btn')
   if(!name||!date){alert('กรุณากรอกชื่อและวันที่');return}
   const gc2=parseGroupColor(groupStr)
   const gl2={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc2]
+  const {interval_str,interval_days}=getIntervalAndDays('adm-date','adm-interval','adm-next-date')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     await sb.from('patients').upsert({name,village},{onConflict:'name'})
@@ -2205,7 +2244,7 @@ async function saveAdminRecord(){
     if(!found)throw new Error('ไม่พบผู้ป่วย')
     await sb.from('patients').update({village}).eq('id',found.id)
     const record_type=document.querySelector('input[name="adm-type"]:checked')?.value||'injection'
-    const{error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str:interval,interval_days:parseInterval(interval),note,record_type})
+    const{error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str,interval_days,note,record_type})
     if(error)throw error
     btn.textContent='✅ บันทึกสำเร็จ'
     document.getElementById('adm-name').value=''
@@ -2385,10 +2424,11 @@ async function openModal(id){
           <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px">แก้ไขรายการ</div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">${isFuture?'วันนัดหมาย':'วันที่ฉีดยา'}</label><input type="date" id="er-date-${h.id}" value="${h.injection_date}"></div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">รอบนัดต่อไป</label>
-            <select id="er-interval-${h.id}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:'Sarabun',sans-serif;font-size:13px">
+            <select id="er-interval-${h.id}" onchange="syncNextDateFromInterval('er-date-${h.id}','er-interval-${h.id}','er-next-date-${h.id}')" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:'Sarabun',sans-serif;font-size:13px">
               ${['2 สัปดาห์','3 สัปดาห์','4 สัปดาห์','1 เดือน','3 เดือน'].map(v=>`<option${v===h.interval_str?' selected':''}>${v}</option>`).join('')}
             </select>
           </div>
+          <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">📅 วันนัดครั้งต่อไป <span style="color:var(--text3);font-weight:400">(เลือกเองได้)</span></label><input type="date" id="er-next-date-${h.id}" oninput="syncIntervalFromNextDate('er-date-${h.id}','er-next-date-${h.id}','er-interval-${h.id}')"></div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">หมายเหตุ</label><input type="text" id="er-note-${h.id}" value="${esc(h.note||'')}"></div>
           <div style="display:flex;gap:6px">
             <button class="btn btn-primary" style="flex:1;font-size:12px;padding:6px" id="er-save-${h.id}" onclick="saveEditRecord(${h.id},${p.id})">บันทึก</button>
@@ -2537,8 +2577,9 @@ async function openModal(id){
         <button type="button" id="rec-type-inj" onclick="toggleRecType('injection')" style="flex:1;padding:6px;border-radius:8px;border:2px solid var(--primary);background:var(--primary-lt);color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💉 ฉีดยา</button>
         <button type="button" id="rec-type-vis" onclick="toggleRecType('visit')" style="flex:1;padding:6px;border-radius:8px;border:2px solid var(--border);background:#fff;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🏡 เยี่ยมบ้าน</button>
       </div>
-      <div class="form-group"><label id="rec-date-label">วันที่ฉีดยา</label><input type="date" id="rec-date" value="${todayISO()}"></div>
-      <div class="form-group"><label>รอบนัดต่อไป</label><select id="rec-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
+      <div class="form-group"><label id="rec-date-label">วันที่ฉีดยา</label><input type="date" id="rec-date" value="${todayISO()}" oninput="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"></div>
+      <div class="form-group"><label>รอบนัดต่อไป</label><select id="rec-interval" onchange="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
+      <div class="form-group"><label>📅 วันนัดครั้งต่อไป <span style="font-size:11px;color:var(--text3);font-weight:400">(เลือกเองหรือปล่อยให้คำนวณ)</span></label><input type="date" id="rec-next-date" oninput="syncIntervalFromNextDate('rec-date','rec-next-date','rec-interval')"></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="rec-note" placeholder="ผลการฉีดยา, อาการ..."></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" style="flex:1" id="rec-save-btn" onclick="saveModalRecord(${p.id},'${p.group_color}')">บันทึก</button>
@@ -2569,19 +2610,18 @@ function toggleEditRecord(id,date,interval,note){
 
 async function saveEditRecord(id,patientId){
   const dateEl=document.getElementById('er-date-'+id)
-  const intervalEl=document.getElementById('er-interval-'+id)
   const noteEl=document.getElementById('er-note-'+id)
   const btn=document.getElementById('er-save-'+id)
   const date=dateEl?.value
-  const interval=intervalEl?.value
   const note=noteEl?.value||''
   if(!date){alert('กรุณาเลือกวันที่');return}
+  const {interval_str,interval_days}=getIntervalAndDays('er-date-'+id,'er-interval-'+id,'er-next-date-'+id)
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const{error}=await sb.from('injection_records').update({
       injection_date:date,
-      interval_str:interval,
-      interval_days:parseInterval(interval),
+      interval_str,
+      interval_days,
       note
     }).eq('id',id)
     if(error)throw error
@@ -2781,15 +2821,15 @@ function toggleRecType(type){
 
 async function saveModalRecord(pid,gc){
   const date=document.getElementById('rec-date')?.value
-  const interval=document.getElementById('rec-interval')?.value
   const note=document.getElementById('rec-note')?.value||''
   const btn=document.getElementById('rec-save-btn')
   if(!date){alert('กรุณาเลือกวันที่');return}
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
+  const {interval_str,interval_days}=getIntervalAndDays('rec-date','rec-interval','rec-next-date')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const record_type=document.getElementById('rec-type-vis')?.style.borderColor==='rgb(234, 88, 12)'?'visit':'injection'
-    const{error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note,record_type})
+    const{error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type})
     if(error)throw error
     closeModal();allPatients=await getPatients()
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
