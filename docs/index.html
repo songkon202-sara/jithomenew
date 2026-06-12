@@ -7,6 +7,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <style>
+    .flatpickr-calendar{font-family:'Sarabun',sans-serif;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15);border:1px solid #e5e7eb}
+    .flatpickr-months{background:var(--primary,#0a7ea4);border-radius:11px 11px 0 0}
+    .flatpickr-month,.flatpickr-current-month,.flatpickr-monthDropdown-months,.flatpickr-prev-month,.flatpickr-next-month{color:#fff!important;fill:#fff!important}
+    .flatpickr-current-month input.cur-year{color:#fff!important}
+    .flatpickr-weekdays{background:var(--primary,#0a7ea4)}
+    span.flatpickr-weekday{background:var(--primary,#0a7ea4);color:#fff;font-weight:700;font-size:12px}
+    .flatpickr-day.selected,.flatpickr-day.selected:hover{background:var(--primary,#0a7ea4);border-color:var(--primary,#0a7ea4);color:#fff;font-weight:700}
+    .flatpickr-day:hover{background:#e0f2fe;border-color:#e0f2fe}
+    .flatpickr-day.today{border-color:var(--primary,#0a7ea4);color:var(--primary,#0a7ea4);font-weight:700}
+    .flatpickr-day.today.selected{color:#fff}
+    .flatpickr-input{cursor:pointer}
+    .flatpickr-input[readonly]{background:#fff}
+  </style>
 </head>
 <body>
 <div id="root">
@@ -161,6 +176,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app.js?v=20260609c"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
+<script src="app.js?v=20260609d"></script>
 </body>
 </html>

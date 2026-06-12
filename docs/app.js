@@ -1,5 +1,25 @@
 'use strict'
 
+// ─── Date Picker (flatpickr) ──────────────────────────────────────
+function initDatePickers(){
+  if(typeof flatpickr==='undefined')return
+  document.querySelectorAll('input[type="date"]:not(.flatpickr-input)').forEach(el=>{
+    flatpickr(el,{
+      dateFormat:'Y-m-d',
+      locale:'th',
+      allowInput:true,
+      disableMobile:true,
+      prevArrow:'‹',
+      nextArrow:'›',
+    })
+  })
+}
+;(()=>{
+  let _dpTimer=null
+  const obs=new MutationObserver(()=>{clearTimeout(_dpTimer);_dpTimer=setTimeout(initDatePickers,60)})
+  document.addEventListener('DOMContentLoaded',()=>obs.observe(document.body,{childList:true,subtree:true}))
+})()
+
 // ─── Supabase ────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://drwnsumijarzqezljare.supabase.co'
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyd25zdW1pamFyenFlemxqYXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NDI1NzgsImV4cCI6MjA5NTIxODU3OH0.lv_Uf8rAzBNWuVbL7Q7oxRchWTcvnmmbHLtOiaqFIpQ'
