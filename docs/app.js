@@ -1617,10 +1617,13 @@ function memberCard(p,showVillage=false){
           ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace;margin-top:1px">🪪 ${maskNationalId(p.national_id)}</div>`:''}
         </div>
       </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
       ${isSelf?`<span style="font-size:10px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">(คุณ)</span>`:`
       <select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
         ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
-      </select>`}
+      </select>
+      ${canDo('admin')?`<button onclick="deleteMember('${p.id}','${esc(p.display_name||p.email)}')" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:''}`}
+      </div>
     </div>
     ${showVillage&&!isSelf?`
     <div style="margin-top:8px;display:flex;align-items:center;gap:6px;padding-top:8px;border-top:1px solid var(--border)">
@@ -1741,6 +1744,19 @@ async function rejectPendingMember(userId){
   if(!confirm('ปฏิเสธและลบคำขอนี้?'))return
   const{error}=await sb.from('user_profiles').update({status:'rejected'}).eq('id',userId)
   if(error){alert('❌ '+error.message);return}
+  loadMembersList()
+}
+
+async function deleteMember(userId, displayName){
+  if(!canDo('admin'))return
+  if(!confirm(`ลบสมาชิก "${displayName}" ออกจากระบบ?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`))return
+  const{error}=await sb.from('user_profiles').delete().eq('id',userId)
+  if(error){alert('❌ ลบไม่สำเร็จ: '+error.message);return}
+  await sb.from('audit_logs').insert({
+    user_id:currentUser?.id,user_email:currentUser?.email,user_name:currentDisplayName,
+    action:'delete_member',entity_type:'user_profiles',entity_id:userId,
+    details:{deleted_name:displayName}
+  }).catch(()=>{})
   loadMembersList()
 }
 
