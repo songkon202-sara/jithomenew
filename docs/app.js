@@ -1604,7 +1604,7 @@ function memberCard(p,showVillage=false){
   const isSelf=p.id===currentUser?.id
   const canEdit=canDo('admin')||isSelf
   return `
-  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--border)">
+  <div data-member-id="${p.id}" style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--border)">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
         <div style="width:34px;height:34px;border-radius:50%;background:${ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${(p.email||'?').slice(0,2).toUpperCase()}</div>
@@ -1748,16 +1748,17 @@ async function rejectPendingMember(userId){
 }
 
 async function deleteMember(userId, displayName){
-  if(!canDo('admin'))return
+  if(!canDo('admin')){alert('ไม่มีสิทธิ์');return}
   if(!confirm(`ลบสมาชิก "${displayName}" ออกจากระบบ?\n\nสมาชิกจะไม่สามารถเข้าระบบได้อีก`))return
   const{error}=await sb.from('user_profiles').update({status:'deleted'}).eq('id',userId)
   if(error){alert('❌ ลบไม่สำเร็จ: '+error.message);return}
-  await sb.from('audit_logs').insert({
+  // ลบออกจาก DOM ทันที
+  document.querySelectorAll(`[data-member-id="${userId}"]`).forEach(el=>el.remove())
+  sb.from('audit_logs').insert({
     user_id:currentUser?.id,user_email:currentUser?.email,user_name:currentDisplayName,
     action:'delete_member',entity_type:'user_profiles',entity_id:userId,
     details:{deleted_name:displayName}
   }).catch(()=>{})
-  alert('✅ ลบสมาชิกสำเร็จ')
   loadMembersList()
 }
 
