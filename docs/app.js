@@ -1692,7 +1692,7 @@ async function loadMembersList(){
   if(!staffEl)return
 
   const pending=all.filter(p=>p.status==='pending')
-  const active=p=>p.status!=='pending'&&p.status!=='rejected'
+  const active=p=>p.status!=='pending'&&p.status!=='rejected'&&p.status!=='deleted'
   const staff=all.filter(p=>(p.role==='staff'||p.role==='admin')&&active(p))
   const aosomo=all.filter(p=>p.role==='aosomo'&&active(p))
   const viewer=all.filter(p=>p.role==='viewer'&&active(p))
@@ -1749,14 +1749,15 @@ async function rejectPendingMember(userId){
 
 async function deleteMember(userId, displayName){
   if(!canDo('admin'))return
-  if(!confirm(`ลบสมาชิก "${displayName}" ออกจากระบบ?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`))return
-  const{error}=await sb.from('user_profiles').delete().eq('id',userId)
+  if(!confirm(`ลบสมาชิก "${displayName}" ออกจากระบบ?\n\nสมาชิกจะไม่สามารถเข้าระบบได้อีก`))return
+  const{error}=await sb.from('user_profiles').update({status:'deleted'}).eq('id',userId)
   if(error){alert('❌ ลบไม่สำเร็จ: '+error.message);return}
   await sb.from('audit_logs').insert({
     user_id:currentUser?.id,user_email:currentUser?.email,user_name:currentDisplayName,
     action:'delete_member',entity_type:'user_profiles',entity_id:userId,
     details:{deleted_name:displayName}
   }).catch(()=>{})
+  alert('✅ ลบสมาชิกสำเร็จ')
   loadMembersList()
 }
 
@@ -3686,6 +3687,7 @@ async function loginUser(){
   auditLog('login','auth',data.user.id,{email:data.user.email})
   startSessionTimer()
   if(prof?.status==='pending'){hideAuthWall();showAuthWall('pending');return}
+  if(prof?.status==='rejected'||prof?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
@@ -4060,6 +4062,7 @@ async function init(){
   await updateLastLogin(user.id)
   startSessionTimer()
   if(profile?.status==='pending'){showAuthWall('pending');return}
+  if(profile?.status==='rejected'||profile?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
   updateUserUI()
   await loadAndNav()
 }
