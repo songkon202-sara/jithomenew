@@ -266,6 +266,7 @@ async function getHistory(pid) {
 async function getVisits(type='all') {
   let q = sb.from('home_visits').select('*').order('visit_date', { ascending:false })
   if (type !== 'all') q = q.eq('visit_type', type)
+  if (currentRole==='aosomo' && currentVillage) q = q.eq('village', currentVillage)
   const { data } = await q
   return (data||[]).map(v => ({ ...v, visit_date_th: thDate(v.visit_date) }))
 }
@@ -820,6 +821,7 @@ async function renderVisit(el) {
   </div>
   ${referralHtml}
   ${clinicQueueHtml}
+  ${currentRole==='aosomo'&&currentVillage?`<div style="font-size:12px;color:var(--text3);margin-bottom:8px;padding:6px 10px;background:var(--bg);border-radius:8px">📍 แสดงเฉพาะ${currentVillage}</div>`:''}
   <div class="tab-bar">
     <button class="tab-btn active" onclick="setVTab('all',this)">ทั้งหมด (${visits.length})</button>
     <button class="tab-btn" onclick="setVTab('staff',this)">เจ้าหน้าที่ (${visits.filter(v=>v.visit_type==='staff').length})</button>
