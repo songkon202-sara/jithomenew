@@ -3063,21 +3063,24 @@ function openVisitForm(type){
     </div>
   </div>
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div>
-        <div style="font-size:13px;font-weight:700">👨‍👩‍👧 ภาระผู้ดูแล (Caregiver Burden)</div>
-        <div style="font-size:11px;color:var(--text3)">0=ไม่เลย · 1=นานๆครั้ง · 2=บางครั้ง · 3=บ่อยครั้ง · 4=เสมอ</div>
+    <div onclick="toggleAssess('cgb-body')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
+      <div style="font-size:13px;font-weight:700">👨‍👩‍👧 ภาระผู้ดูแล (Caregiver Burden)</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="cgb-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ยังไม่ประเมิน</span>
+        <span id="cgb-body-chevron" style="font-size:11px;color:var(--text3)">▶</span>
       </div>
-      <span id="cgb-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ยังไม่ประเมิน</span>
     </div>
-    ${CGB_ITEMS.map((item,i)=>`
-    <div style="margin-bottom:8px">
-      <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${item}</div>
-      <div style="display:flex;gap:3px">
-        ${[0,1,2,3,4].map(j=>`<button type="button" id="cgb-${i}-${j}" onclick="setCGB(${i},${j})" style="flex:1;padding:6px 0;border-radius:6px;border:2px solid ${j===0?'#0a7ea4':'#d1d5db'};background:${j===0?'#0a7ea4':'#f3f4f6'};color:${j===0?'#fff':'#374151'};font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">${j}</button>`).join('')}
-      </div>
-    </div>`).join('')}
-    <div id="cgb-result" style="margin-top:4px;padding:8px 12px;border-radius:8px;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700;display:none"></div>
+    <div id="cgb-body" style="display:none;margin-top:10px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">0=ไม่เลย · 1=นานๆครั้ง · 2=บางครั้ง · 3=บ่อยครั้ง · 4=เสมอ</div>
+      ${CGB_ITEMS.map((item,i)=>`
+      <div style="margin-bottom:8px">
+        <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${item}</div>
+        <div style="display:flex;gap:3px">
+          ${[0,1,2,3,4].map(j=>`<button type="button" id="cgb-${i}-${j}" onclick="setCGB(${i},${j})" style="flex:1;padding:6px 0;border-radius:6px;border:2px solid ${j===0?'#0a7ea4':'#d1d5db'};background:${j===0?'#0a7ea4':'#f3f4f6'};color:${j===0?'#fff':'#374151'};font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">${j}</button>`).join('')}
+        </div>
+      </div>`).join('')}
+      <div id="cgb-result" style="margin-top:4px;padding:8px 12px;border-radius:8px;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700;display:none"></div>
+    </div>
   </div>`:''}
 
   <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;margin-bottom:14px">
@@ -3106,32 +3109,42 @@ function openVisitForm(type){
       </div>
       <!-- ST-5 -->
       <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
-        <div style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:2px">😣 แบบประเมินความเครียด (ST-5)</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">ใน 2 สัปดาห์ที่ผ่านมา รวมวันนี้</div>
-        ${['มีปัญหาการนอน นอนไม่หลับ / นอนมากเกินไป','มีสมาธิน้อยลง','หุดหยิด / กระวนกระวาย / วิตกกังวล','รู้สึกเบื่อเซ็ง','ไม่อยากพบปะผู้คน'].map((q,i)=>`
-        <div style="margin-bottom:8px">
-          <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${q}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-            ${['แทบไม่มี','เป็นบางครั้ง','บ่อยครั้ง','เป็นประจำ'].map((opt,j)=>`<button type="button" id="st5-${i}-${j}" onclick="setMHOption('st5',${i},${j})" style="padding:6px 4px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:11px;font-weight:600;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">${opt}</button>`).join('')}
-          </div>
-        </div>`).join('')}
-        <div id="st5-score" style="display:none"></div>
+        <div onclick="toggleAssess('st5-body')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
+          <div style="font-size:12px;font-weight:700;color:#0c4a6e">😣 แบบประเมินความเครียด (ST-5)</div>
+          <span id="st5-body-chevron" style="font-size:11px;color:var(--text3)">▶</span>
+        </div>
+        <div id="st5-body" style="display:none;margin-top:8px">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px">ใน 2 สัปดาห์ที่ผ่านมา รวมวันนี้</div>
+          ${['มีปัญหาการนอน นอนไม่หลับ / นอนมากเกินไป','มีสมาธิน้อยลง','หุดหยิด / กระวนกระวาย / วิตกกังวล','รู้สึกเบื่อเซ็ง','ไม่อยากพบปะผู้คน'].map((q,i)=>`
+          <div style="margin-bottom:8px">
+            <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${q}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+              ${['แทบไม่มี','เป็นบางครั้ง','บ่อยครั้ง','เป็นประจำ'].map((opt,j)=>`<button type="button" id="st5-${i}-${j}" onclick="setMHOption('st5',${i},${j})" style="padding:6px 4px;border-radius:6px;border:2px solid #d1d5db;background:#f3f4f6;font-size:11px;font-weight:600;cursor:pointer;font-family:'Sarabun',sans-serif;color:#374151">${opt}</button>`).join('')}
+            </div>
+          </div>`).join('')}
+          <div id="st5-score" style="display:none"></div>
+        </div>
       </div>
       <!-- RQ -->
       <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
-        <div style="font-size:12px;font-weight:700;color:#0c4a6e;margin-bottom:2px">🧡 แบบประเมินพลังใจ (RQ)</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">ใน 2 สัปดาห์ที่ผ่านมา ระดับความเชื่อมั่น 1=น้อยที่สุด 10=มากที่สุด</div>
-        ${['ความยากลำบากทำให้ฉันแกร่งขึ้น','ฉันมีกำลังใจและได้รับการสนับสนุนจากคนรอบข้าง','การแก้ไขปัญหาทำให้ฉันมีประสบการณ์มากขึ้น'].map((q,i)=>`
-        <div style="margin-bottom:10px">
-          <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${q}</div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:16px">😔</span>
-            <input type="range" min="1" max="10" value="5" id="rq-${i}" oninput="updateRQSlider(${i},this.value)" style="flex:1;accent-color:#0a7ea4">
-            <span style="font-size:16px">😊</span>
-            <span id="rq-val-${i}" style="font-size:13px;font-weight:700;color:#0a7ea4;min-width:20px;text-align:right">5</span>
-          </div>
-        </div>`).join('')}
-        <div id="rq-score" style="display:none"></div>
+        <div onclick="toggleAssess('rq-body')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
+          <div style="font-size:12px;font-weight:700;color:#0c4a6e">🧡 แบบประเมินพลังใจ (RQ)</div>
+          <span id="rq-body-chevron" style="font-size:11px;color:var(--text3)">▶</span>
+        </div>
+        <div id="rq-body" style="display:none;margin-top:8px">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px">ใน 2 สัปดาห์ที่ผ่านมา ระดับความเชื่อมั่น 1=น้อยที่สุด 10=มากที่สุด</div>
+          ${['ความยากลำบากทำให้ฉันแกร่งขึ้น','ฉันมีกำลังใจและได้รับการสนับสนุนจากคนรอบข้าง','การแก้ไขปัญหาทำให้ฉันมีประสบการณ์มากขึ้น'].map((q,i)=>`
+          <div style="margin-bottom:10px">
+            <div style="font-size:12px;color:var(--text1);margin-bottom:4px">${i+1}. ${q}</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:16px">😔</span>
+              <input type="range" min="1" max="10" value="5" id="rq-${i}" oninput="updateRQSlider(${i},this.value)" style="flex:1;accent-color:#0a7ea4">
+              <span style="font-size:16px">😊</span>
+              <span id="rq-val-${i}" style="font-size:13px;font-weight:700;color:#0a7ea4;min-width:20px;text-align:right">5</span>
+            </div>
+          </div>`).join('')}
+          <div id="rq-score" style="display:none"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -3223,6 +3236,14 @@ function toggleMedReason(r){
     _medReasons.splice(idx,1)
     if(btn){btn.style.background='#f3f4f6';btn.style.color='var(--text2)';btn.style.borderColor='#d1d5db'}
   }
+}
+function toggleAssess(id){
+  const el=document.getElementById(id)
+  const ch=document.getElementById(id+'-chevron')
+  if(!el)return
+  const open=el.style.display==='none'||el.style.display===''&&el.hidden
+  el.style.display=open?'block':'none'
+  if(ch)ch.textContent=open?'▼':'▶'
 }
 function setCGB(idx,val){
   _cgb[idx]=val
