@@ -812,6 +812,32 @@ async function renderVisit(el) {
       </div>`
     }
   }
+  // รายการมอบหมายสำหรับ อสม
+  let assignedHtml=''
+  if(currentRole==='aosomo'){
+    const today=todayISO()
+    const assigned=allPatients.filter(p=>p.next_visit_date
+    ).sort((a,b)=>a.next_visit_date.localeCompare(b.next_visit_date))
+    if(assigned.length){
+      assignedHtml=`<div style="background:#f0f9ff;border:1.5px solid #7dd3fc;border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:#0369a1;margin-bottom:10px">📋 รายการเยี่ยมในหมู่บ้าน (${assigned.length} ราย)</div>
+        ${assigned.map(p=>{
+          const days=Math.round((new Date(p.next_visit_date+'T00:00:00')-new Date(today+'T00:00:00'))/86400000)
+          const[bg,clr,lbl]=days<0?['#fef2f2','#b91c1c',`⚠️ เกิน ${Math.abs(days)} วัน`]:days===0?['#fff7ed','#c2410c','🔔 วันนี้']:days<=7?['#fffbeb','#92400e',`📅 อีก ${days} วัน`]:['#f0fdf4','#15803d',`📅 ${thDate(p.next_visit_date)}`]
+          return`<div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #bae6fd;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:13px;font-weight:700;color:var(--text1)">${esc(p.name)}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">📍 ${esc(p.village||'')}${p.house_no?` · 🏠 ${esc(p.house_no)}`:''} · ${esc(p.group_label||'')}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+              <span style="background:${bg};color:${clr};padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700">${lbl}</span>
+              <button onclick="openVisitFormFor('${esc(p.name)}','${esc(p.village||'')}')" style="padding:5px 12px;background:var(--primary);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🏡 เยี่ยม</button>
+            </div>
+          </div>`
+        }).join('')}
+      </div>`
+    }
+  }
   el.innerHTML=`<div class="page">
   <div class="page-title">เยี่ยมบ้าน</div>
   <div class="page-sub">บันทึกการเยี่ยมผู้ป่วยจิตเวช</div>
@@ -821,6 +847,7 @@ async function renderVisit(el) {
   </div>
   ${referralHtml}
   ${clinicQueueHtml}
+  ${assignedHtml}
   ${currentRole==='aosomo'&&currentVillage?`<div style="font-size:12px;color:var(--text3);margin-bottom:8px;padding:6px 10px;background:var(--bg);border-radius:8px">📍 แสดงเฉพาะ${currentVillage}</div>`:''}
   <div class="tab-bar">
     <button class="tab-btn active" onclick="setVTab('all',this)">ทั้งหมด (${visits.length})</button>
