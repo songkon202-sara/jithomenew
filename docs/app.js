@@ -2683,8 +2683,21 @@ async function saveEditRecord(id,patientId){
 
 async function deleteRecord(id,patientId){
   if(!confirm('ลบรายการฉีดยานี้ออกจากประวัติ?\nการดำเนินการนี้ไม่สามารถย้อนกลับได้'))return
+  const{data:rec}=await sb.from('injection_records').select('record_type').eq('id',id).single()
   const{error}=await sb.from('injection_records').delete().eq('id',id)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
+  // หาวันนัดที่เหลืออยู่ แล้วอัปเดต patients
+  const today=todayISO()
+  const{data:remaining}=await sb.from('injection_records')
+    .select('injection_date,record_type').eq('patient_id',patientId)
+    .gt('injection_date',today).order('injection_date',{ascending:true})
+  const nextVisit=(remaining||[]).find(r=>r.record_type==='visit')?.injection_date||null
+  const nextInject=(remaining||[]).find(r=>r.record_type!=='visit')?.injection_date||null
+  if(rec?.record_type==='visit'){
+    await sb.from('patients').update({next_visit_date:nextVisit}).eq('id',patientId)
+  } else {
+    await sb.from('patients').update({next_inject_date:nextInject}).eq('id',patientId)
+  }
   await openModal(patientId)
 }
 
