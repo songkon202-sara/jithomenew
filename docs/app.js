@@ -2465,7 +2465,7 @@ async function openModal(id){
             <button onclick="deleteRecord(${h.id},${p.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="ลบรายการนี้">🗑️</button>
           </div>`:''}
         </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(h.group_label||'')} · ${esc(h.interval_str||'')}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(h.group_label||'')}${h.interval_str?` · ${h.record_type==='visit'?'🏡 นัดเยี่ยม':'💉 นัด'}${esc(h.interval_str)}`:''}</div>
         ${h.note?`<div class="history-note">${esc(h.note)}</div>`:''}
         <div id="edit-rec-${h.id}" style="display:none;background:#f0f9ff;border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:10px;margin-top:8px">
           <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px">แก้ไขรายการ</div>
@@ -2658,20 +2658,25 @@ function toggleEditRecord(id,date,interval,note){
 async function saveEditRecord(id,patientId){
   const dateEl=document.getElementById('er-date-'+id)
   const noteEl=document.getElementById('er-note-'+id)
+  const nextDateEl=document.getElementById('er-next-date-'+id)
   const btn=document.getElementById('er-save-'+id)
   const date=dateEl?.value
   const note=noteEl?.value||''
+  const nextDate=nextDateEl?.value||''
   if(!date){alert('กรุณาเลือกวันที่');return}
   const {interval_str,interval_days}=getIntervalAndDays('er-date-'+id,'er-interval-'+id,'er-next-date-'+id)
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const{error}=await sb.from('injection_records').update({
-      injection_date:date,
-      interval_str,
-      interval_days,
-      note
-    }).eq('id',id)
+    const{data:rec}=await sb.from('injection_records').select('group_color,group_label,record_type').eq('id',id).single()
+    const{error}=await sb.from('injection_records').update({injection_date:date,interval_str,interval_days,note}).eq('id',id)
     if(error)throw error
+    // ถ้ามีวันนัดถัดไป → สร้าง record นัดหมายล่วงหน้า (ถ้ายังไม่มี)
+    if(nextDate&&nextDate>date){
+      const{data:exist}=await sb.from('injection_records').select('id').eq('patient_id',patientId).eq('injection_date',nextDate).maybeSingle()
+      if(!exist){
+        await sb.from('injection_records').insert({patient_id:patientId,injection_date:nextDate,group_color:rec?.group_color,group_label:rec?.group_label,interval_str,interval_days,note:'',record_type:rec?.record_type||'injection'})
+      }
+    }
     await openModal(patientId)
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
 }
@@ -2864,10 +2869,13 @@ function toggleRecType(type){
     inj.style.cssText='flex:1;padding:6px;border-radius:8px;border:2px solid var(--border);background:#fff;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer;font-family:\'Sarabun\',sans-serif'
     if(lbl)lbl.textContent='วันที่เยี่ยมบ้าน'
   }
+  const intLbl=document.querySelector('label[for="rec-interval"]')||document.getElementById('rec-interval')?.previousElementSibling
+  if(intLbl)intLbl.textContent=type==='visit'?'รอบเยี่ยมถัดไป':'รอบนัดต่อไป'
 }
 
 async function saveModalRecord(pid,gc){
   const date=document.getElementById('rec-date')?.value
+  const nextDate=document.getElementById('rec-next-date')?.value||''
   const note=document.getElementById('rec-note')?.value||''
   const btn=document.getElementById('rec-save-btn')
   if(!date){alert('กรุณาเลือกวันที่');return}
@@ -2878,6 +2886,10 @@ async function saveModalRecord(pid,gc){
     const record_type=document.getElementById('rec-type-vis')?.style.borderColor==='rgb(234, 88, 12)'?'visit':'injection'
     const{error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type})
     if(error)throw error
+    // ถ้ามีวันนัดถัดไป → สร้าง record นัดหมายล่วงหน้า
+    if(nextDate&&nextDate>date){
+      await sb.from('injection_records').insert({patient_id:pid,injection_date:nextDate,group_color:gc,group_label:gl,interval_str,interval_days,note:'',record_type})
+    }
     closeModal();allPatients=await getPatients()
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
 }
