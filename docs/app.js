@@ -2680,11 +2680,15 @@ async function saveEditRecord(id,patientId){
     const{data:rec}=await sb.from('injection_records').select('group_color,group_label,record_type').eq('id',id).single()
     const{error}=await sb.from('injection_records').update({injection_date:date,interval_str,interval_days,note}).eq('id',id)
     if(error)throw error
-    // ถ้ามีวันนัดถัดไป → สร้าง record นัดหมายล่วงหน้า (ถ้ายังไม่มี)
     if(nextDate&&nextDate>date){
-      const{data:exist}=await sb.from('injection_records').select('id').eq('patient_id',patientId).eq('injection_date',nextDate).maybeSingle()
-      if(!exist){
-        await sb.from('injection_records').insert({patient_id:patientId,injection_date:nextDate,group_color:rec?.group_color,group_label:rec?.group_label,interval_str,interval_days,note:'',record_type:rec?.record_type||'injection'})
+      if(rec?.record_type==='visit'){
+        await sb.from('patients').update({next_visit_date:nextDate}).eq('id',patientId)
+      } else {
+        const{data:exist}=await sb.from('injection_records').select('id').eq('patient_id',patientId).eq('injection_date',nextDate).maybeSingle()
+        if(!exist){
+          await sb.from('injection_records').insert({patient_id:patientId,injection_date:nextDate,group_color:rec?.group_color,group_label:rec?.group_label,interval_str,interval_days,note:'',record_type:rec?.record_type||'injection'})
+        }
+        await sb.from('patients').update({next_inject_date:nextDate}).eq('id',patientId)
       }
     }
     await openModal(patientId)
@@ -2692,8 +2696,9 @@ async function saveEditRecord(id,patientId){
 }
 
 async function deleteRecord(id,patientId){
-  if(!confirm('ลบรายการฉีดยานี้ออกจากประวัติ?\nการดำเนินการนี้ไม่สามารถย้อนกลับได้'))return
   const{data:rec}=await sb.from('injection_records').select('record_type').eq('id',id).single()
+  const recLabel=rec?.record_type==='visit'?'เยี่ยมบ้าน':'ฉีดยา'
+  if(!confirm(`ลบรายการ${recLabel}นี้ออกจากประวัติ?\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`))return
   const{error}=await sb.from('injection_records').delete().eq('id',id)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
   // หาวันนัดที่เหลืออยู่ แล้วอัปเดต patients
