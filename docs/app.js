@@ -2886,9 +2886,14 @@ async function saveModalRecord(pid,gc){
     const record_type=document.getElementById('rec-type-vis')?.style.borderColor==='rgb(234, 88, 12)'?'visit':'injection'
     const{error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type})
     if(error)throw error
-    // ถ้ามีวันนัดถัดไป → สร้าง record นัดหมายล่วงหน้า
+    // ถ้ามีวันนัดถัดไป → สร้าง record นัดหมายล่วงหน้า + อัปเดต patients
     if(nextDate&&nextDate>date){
       await sb.from('injection_records').insert({patient_id:pid,injection_date:nextDate,group_color:gc,group_label:gl,interval_str,interval_days,note:'',record_type})
+      if(record_type==='visit'){
+        await sb.from('patients').update({next_visit_date:nextDate}).eq('id',pid)
+      } else {
+        await sb.from('patients').update({next_inject_date:nextDate}).eq('id',pid)
+      }
     }
     closeModal();allPatients=await getPatients()
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
