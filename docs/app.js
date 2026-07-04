@@ -2855,7 +2855,16 @@ async function saveEditPatient(id){
     await openModal(id)
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
 }
-function toggleRecordForm(){const w=document.getElementById('record-form-wrap');if(w)w.style.display=w.style.display==='none'?'':'none'}
+function toggleRecordForm(){
+  const w=document.getElementById('record-form-wrap')
+  if(!w)return
+  const opening=w.style.display==='none'
+  w.style.display=opening?'':'none'
+  if(opening){
+    window._modalRecType='injection'
+    toggleRecType('injection')
+  }
+}
 function toggleRecType(type){
   window._modalRecType=type
   const inj=document.getElementById('rec-type-inj')
@@ -2876,12 +2885,14 @@ function toggleRecType(type){
 
 async function saveModalRecord(pid,gc){
   const date=document.getElementById('rec-date')?.value
-  const nextDate=document.getElementById('rec-next-date')?.value||''
   const note=document.getElementById('rec-note')?.value||''
   const btn=document.getElementById('rec-save-btn')
   if(!date){alert('กรุณาเลือกวันที่');return}
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
   const {interval_str,interval_days}=getIntervalAndDays('rec-date','rec-interval','rec-next-date')
+  // คำนวณวันนัดถัดไปจาก interval ถ้าไม่ได้เลือกปฏิทิน
+  const _pickedNext=document.getElementById('rec-next-date')?.value||''
+  const nextDate=_pickedNext||( date&&interval_days>0?(()=>{const d=new Date(date+'T00:00:00');d.setDate(d.getDate()+interval_days);return d.toISOString().split('T')[0]})():'' )
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const record_type=window._modalRecType||'injection'
@@ -2896,7 +2907,10 @@ async function saveModalRecord(pid,gc){
         await sb.from('patients').update({next_inject_date:nextDate}).eq('id',pid)
       }
     }
-    closeModal();allPatients=await getPatients()
+    closeModal()
+    allPatients=await getPatients()
+    const el=document.getElementById('page-content')
+    if(el&&location.hash==='#patients')renderPatients(el)
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
 }
 
