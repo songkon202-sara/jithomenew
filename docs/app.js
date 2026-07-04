@@ -2857,6 +2857,7 @@ async function saveEditPatient(id){
 }
 function toggleRecordForm(){const w=document.getElementById('record-form-wrap');if(w)w.style.display=w.style.display==='none'?'':'none'}
 function toggleRecType(type){
+  window._modalRecType=type
   const inj=document.getElementById('rec-type-inj')
   const vis=document.getElementById('rec-type-vis')
   const lbl=document.getElementById('rec-date-label')
@@ -2883,7 +2884,7 @@ async function saveModalRecord(pid,gc){
   const {interval_str,interval_days}=getIntervalAndDays('rec-date','rec-interval','rec-next-date')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
-    const record_type=document.getElementById('rec-type-vis')?.style.borderColor==='rgb(234, 88, 12)'?'visit':'injection'
+    const record_type=window._modalRecType||'injection'
     const{error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type})
     if(error)throw error
     // ถ้ามีวันนัดถัดไป → สร้าง record นัดหมายล่วงหน้า + อัปเดต patients
