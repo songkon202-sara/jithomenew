@@ -244,14 +244,24 @@ async function getPatients() {
   const today = todayISO()
   return (data||[]).map(p => {
     const corrected = { ...p, group_label: groupLabel(p.group_color) }
-    // ถ้า last_date อยู่ในอนาคต = วันนัดล่วงหน้า ให้ใช้วันนั้นโดยตรง
-    if (corrected.last_date && corrected.last_date > today) {
+    // ยึดวันนัดฉีดยา (next_inject_date จากตาราง patients) เป็นหลักสำหรับ days_until
+    if (corrected.next_inject_date) {
+      corrected.next_date = corrected.next_inject_date
+      corrected.days_until = Math.round(
+        (new Date(corrected.next_inject_date+'T00:00:00') - new Date(today+'T00:00:00')) / 86400000
+      )
+    } else if (corrected.last_date && corrected.last_date > today) {
+      // fallback: ไม่มี next_inject_date แต่ view มีวันนัดในอนาคต
       corrected.next_date = corrected.last_date
       corrected.days_until = Math.round(
         (new Date(corrected.last_date+'T00:00:00') - new Date(today+'T00:00:00')) / 86400000
       )
     }
     return corrected
+  }).sort((a,b)=>{
+    const da=a.days_until!=null?parseInt(a.days_until):9999
+    const db=b.days_until!=null?parseInt(b.days_until):9999
+    return da-db
   })
 }
 async function getSettings() {
