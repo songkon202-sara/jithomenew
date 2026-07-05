@@ -239,19 +239,27 @@ function patientCard(p) {
 async function getPatients() {
   let q = sb.from('patient_status').select('*').order('days_until')
   if (currentRole === 'aosomo' && currentVillage) q = q.eq('village', currentVillage)
-  const { data, error } = await q
+  let pq = sb.from('patients').select('id,next_inject_date,next_visit_date')
+  if (currentRole === 'aosomo' && currentVillage) pq = pq.eq('village', currentVillage)
+  const [{ data, error }, { data: pDates }] = await Promise.all([q, pq])
   if (error) { console.error(error); return [] }
+  // ดึง next_inject_date / next_visit_date ตรงจากตาราง patients (ไม่ผ่าน view)
+  const dateMap = {}
+  for (const p of (pDates||[])) dateMap[p.id] = p
   const today = todayISO()
   return (data||[]).map(p => {
     const corrected = { ...p, group_label: groupLabel(p.group_color) }
-    // ยึดวันนัดฉีดยา (next_inject_date จากตาราง patients) เป็นหลักสำหรับ days_until
+    if (dateMap[p.id]) {
+      corrected.next_inject_date = dateMap[p.id].next_inject_date
+      corrected.next_visit_date  = dateMap[p.id].next_visit_date
+    }
+    // ยึดวันนัดฉีดยาจากตาราง patients เป็นหลักสำหรับ days_until
     if (corrected.next_inject_date) {
       corrected.next_date = corrected.next_inject_date
       corrected.days_until = Math.round(
         (new Date(corrected.next_inject_date+'T00:00:00') - new Date(today+'T00:00:00')) / 86400000
       )
     } else if (corrected.last_date && corrected.last_date > today) {
-      // fallback: ไม่มี next_inject_date แต่ view มีวันนัดในอนาคต
       corrected.next_date = corrected.last_date
       corrected.days_until = Math.round(
         (new Date(corrected.last_date+'T00:00:00') - new Date(today+'T00:00:00')) / 86400000
