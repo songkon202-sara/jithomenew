@@ -2448,18 +2448,20 @@ async function openModal(id){
     const{data:p}=await sb.from('patient_status').select('*').eq('id',id).single()
     if(!p)throw new Error('ไม่พบผู้ป่วย')
     auditLog('view_patient','patient',id,{name:p.name,village:p.village})
-    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication').eq('id',id).single()
+    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date').eq('id',id).single()
     p.photo_urls=pExtra?.photo_urls||[]
     p.oral_medication=pExtra?.oral_medication||null
+    if(pExtra?.next_inject_date) p.next_inject_date=pExtra.next_inject_date
+    if(pExtra?.next_visit_date) p.next_visit_date=pExtra.next_visit_date
     p.group_label=groupLabel(p.group_color)
     const hist=await getHistory(id)
     const todayStr=todayISO()
-    const futureRecs=hist.filter(h=>h.injection_date>todayStr)
+    const futureRecs=hist.filter(h=>h.injection_date>todayStr&&h.record_type!=='visit')
     const pastRecs=hist.filter(h=>h.injection_date<=todayStr)
     // วันนัดครั้งต่อไป: ถ้ามี record อนาคต ใช้วันที่เร็วที่สุดของ record นั้นโดยตรง
     const correctedNextDate=futureRecs.length>0
       ?[...futureRecs].sort((a,b)=>a.injection_date.localeCompare(b.injection_date))[0].injection_date
-      :p.next_date
+      :p.next_inject_date||p.next_date
     const correctedDays=Math.round((new Date(correctedNextDate+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000)
     const chip=daysChip(correctedDays)
     const histHtml=hist.slice(0,8).map((h)=>{
