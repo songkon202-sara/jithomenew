@@ -2673,6 +2673,7 @@ function toggleEditRecord(id,date,interval,note){
   if(!wrap)return
   if(date===undefined){wrap.style.display='none';return}
   wrap.style.display=wrap.style.display==='none'?'block':'none'
+  if(wrap.style.display==='block') syncNextDateFromInterval('er-date-'+id,'er-interval-'+id,'er-next-date-'+id)
 }
 
 async function saveEditRecord(id,patientId){
