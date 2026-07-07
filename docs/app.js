@@ -437,17 +437,71 @@ function setVF(vf){window._vf=vf;document.querySelectorAll('[data-vf]').forEach(
 
 // ─── Timeline ────────────────────────────────────────────────────
 function renderTimeline(el) {
-  const pts=[...allPatients].sort((a,b)=>new Date(a.next_date||'9999')-new Date(b.next_date||'9999'))
-  const today=todayISO(), groups={}
-  for(const p of pts){const k=p.next_date||'unknown';if(!groups[k])groups[k]=[];groups[k].push(p)}
-  let html=`<div class="page"><div class="page-title">ตารางนัดหมาย</div><div class="page-sub">เรียงตามวันนัดใกล้ที่สุด</div>`
+  if(!window._tlType) window._tlType='inject'
+  if(!window._tlf) window._tlf='all'
+  const today=todayISO()
+  const t=window._tlType, f=window._tlf
+  const df=t==='inject'?'next_inject_date':'next_visit_date'
+  const injectPts=allPatients.filter(p=>p.next_inject_date)
+  const visitPts=allPatients.filter(p=>p.next_visit_date)
+  const basePts=t==='inject'?injectPts:visitPts
+  const daysDiff=d=>Math.round((new Date(d+'T00:00:00')-new Date(today+'T00:00:00'))/86400000)
+  const cnt={
+    all:basePts.length,
+    overdue:basePts.filter(p=>p[df]<today).length,
+    today:basePts.filter(p=>p[df]===today).length,
+    week:basePts.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=7}).length,
+    month:basePts.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=30}).length,
+  }
+  el.innerHTML=`<div class="page">
+    <div class="page-title">ตารางนัดหมาย</div>
+    <div class="page-sub">เฉพาะผู้ป่วยที่มีนัดหมาย</div>
+    <div class="filter-row">
+      <button class="filter-chip${t==='inject'?' active':''}" onclick="setTLType('inject')">💉 นัดฉีดยา (${injectPts.length})</button>
+      <button class="filter-chip${t==='visit'?' active':''}" onclick="setTLType('visit')">🏡 นัดเยี่ยมบ้าน (${visitPts.length})</button>
+    </div>
+    <div class="filter-row">
+      <button class="filter-chip${f==='all'?' active':''}" data-tlf="all" onclick="setTLF('all')">ทั้งหมด (${cnt.all})</button>
+      <button class="filter-chip${f==='overdue'?' active':''}" data-tlf="overdue" onclick="setTLF('overdue')" style="${f!=='overdue'?'color:#ef4444':''}">⚠️ เกินนัด (${cnt.overdue})</button>
+      <button class="filter-chip${f==='today'?' active':''}" data-tlf="today" onclick="setTLF('today')">📅 วันนี้ (${cnt.today})</button>
+      <button class="filter-chip${f==='week'?' active':''}" data-tlf="week" onclick="setTLF('week')">7 วัน (${cnt.week})</button>
+      <button class="filter-chip${f==='month'?' active':''}" data-tlf="month" onclick="setTLF('month')">30 วัน (${cnt.month})</button>
+    </div>
+    <div id="tl-list"></div>
+  </div>`
+  renderTLList()
+}
+function setTLType(t){
+  window._tlType=t; window._tlf='all'
+  renderTimeline(document.getElementById('page-content'))
+}
+function setTLF(f){
+  window._tlf=f
+  document.querySelectorAll('[data-tlf]').forEach(e=>e.classList.toggle('active',e.dataset.tlf===f))
+  renderTLList()
+}
+function renderTLList(){
+  const el=document.getElementById('tl-list')
+  if(!el)return
+  const today=todayISO()
+  const t=window._tlType||'inject', f=window._tlf||'all'
+  const df=t==='inject'?'next_inject_date':'next_visit_date'
+  const daysDiff=d=>Math.round((new Date(d+'T00:00:00')-new Date(today+'T00:00:00'))/86400000)
+  let pts=[...allPatients].filter(p=>p[df])
+  if(f==='overdue') pts=pts.filter(p=>p[df]<today)
+  else if(f==='today') pts=pts.filter(p=>p[df]===today)
+  else if(f==='week') pts=pts.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=7})
+  else if(f==='month') pts=pts.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=30})
+  pts.sort((a,b)=>a[df].localeCompare(b[df]))
+  if(!pts.length){el.innerHTML='<div class="empty"><p>ไม่มีข้อมูลในช่วงนี้</p></div>';return}
+  const groups={}
+  for(const p of pts){const k=p[df];if(!groups[k])groups[k]=[];groups[k].push(p)}
+  let html=''
   for(const[date,group]of Object.entries(groups)){
     const past=date<today,isToday=date===today
     const hd=past?`⚠️ ${thDate(date)}`:isToday?`📅 วันนี้ — ${thDate(date)}`:thDate(date)
     html+=`<div class="tl-date-hd${isToday?' today-hd':''}">${hd} · ${group.length} ราย</div>${group.map(patientCard).join('')}`
   }
-  if(!pts.length)html+=`<div class="empty"><p>ไม่มีข้อมูลนัดหมาย</p></div>`
-  html+=`</div>`
   el.innerHTML=html
 }
 
