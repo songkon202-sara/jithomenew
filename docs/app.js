@@ -522,6 +522,12 @@ async function renderOverview(el) {
   const monthEnd=new Date(yy,now.getMonth()+1,1).toISOString().slice(0,10)
   const sixAgo=new Date(yy,now.getMonth()-5,1).toISOString().slice(0,10)
   const thMonthName=TH_MONTHS_F[now.getMonth()+1]
+  const dayOfMonth=now.getDate()
+  const todayStr=todayISO()
+  const visitOverdueCnt=pts.filter(p=>p.next_visit_date&&p.next_visit_date<todayStr).length
+  const visitTodayCnt=pts.filter(p=>p.next_visit_date&&p.next_visit_date===todayStr).length
+  const visitSoonCnt=pts.filter(p=>{if(!p.next_visit_date)return false;const d=Math.round((new Date(p.next_visit_date+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000);return d>0&&d<=7}).length
+  const visitOkCnt=pts.filter(p=>{if(!p.next_visit_date)return false;return Math.round((new Date(p.next_visit_date+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000)>7}).length
 
   const [trendsData,allVisitsData,{data:tmvRaw},{data:arvRaw}]=await Promise.all([
     getTrend(),getVisits(),
@@ -585,6 +591,7 @@ async function renderOverview(el) {
     const bd=pass?'#bbf7d0':warn?'#fde68a':'#fecaca'
     const bw=Math.min(pct,100)
     const badge=pass?`<span style="font-size:10px;color:${col};font-weight:700">✅ ผ่านเกณฑ์</span>`:`<span style="font-size:10px;color:${col};font-weight:700">${lowerBetter?'⚠️ เกินเกณฑ์':'⚠️ ต่ำกว่าเกณฑ์'}</span>`
+    const smallNote=tot<5?`<div style="font-size:9px;color:#9ca3af;margin-top:3px">⚠️ ข้อมูลน้อย (${tot} รายการ)</div>`:''
     return`<div style="background:${bg};border:1px solid ${bd};border-radius:12px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div style="font-size:11px;color:var(--text2);font-weight:600">${icon} ${label}</div>
@@ -594,7 +601,7 @@ async function renderOverview(el) {
       <div style="font-size:11px;color:var(--text3);margin-bottom:6px">${val} / ${tot} ราย</div>
       <div style="background:#e5e7eb;border-radius:99px;height:5px;overflow:hidden;margin-bottom:4px">
         <div style="background:${col};height:100%;width:${bw}%"></div>
-      </div>${badge}</div>`
+      </div>${badge}${smallNote}</div>`
   }
 
   function donut(r,y,g){
@@ -622,7 +629,10 @@ async function renderOverview(el) {
     const bY=pT+cH
     const yT=[0,Math.round(maxV/2),maxV]
     lineHtml=`<div style="background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px">
-      <div style="font-weight:700;font-size:14px;margin-bottom:4px">แนวโน้มการนัดหมายรายเดือน</div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:6px">แนวโน้มการนัดหมายรายเดือน</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+        ${[['#0a7ea4','ทั้งหมด'],['#dc2626','สีแดง'],['#d97706','สีเหลือง'],['#059669','สีเขียว']].map(([c,l])=>`<div style="display:flex;align-items:center;gap:4px"><div style="width:12px;height:3px;border-radius:2px;background:${c}"></div><span style="font-size:10px;color:var(--text3)">${l}</span></div>`).join('')}
+      </div>
       <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;overflow:visible">
         ${yT.map(v=>{const ty=pT+cH-(v/maxV)*cH;return`<line x1="${pL}" y1="${ty}" x2="${W-pR}" y2="${ty}" stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"/><text x="${pL-4}" y="${ty+4}" text-anchor="end" font-size="8" fill="var(--text3)">${v}</text>`}).join('')}
         ${trends.map((t,i)=>{const[,m]=t.month_key.split('-');const x=pL+(n>1?i*(cW/(n-1)):0);return`<text x="${x}" y="${H-4}" text-anchor="middle" font-size="9" fill="var(--text3)">${TH_MONTHS_S[+m]}</text>`}).join('')}
@@ -705,21 +715,12 @@ async function renderOverview(el) {
     <button onclick="window.print()" style="padding:8px 14px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;gap:6px;flex-shrink:0">🖨️ พิมพ์/Export</button>
   </div>
 
-  <div style="background:var(--card);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:12px">
-    <div style="font-weight:700;font-size:14px;margin-bottom:12px">📊 KPI ประจำเดือน${thMonthName}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      ${kpiCard('🏠','ความครอบคลุมการเยี่ยม',visitedCount,total,visitPct,80)}
-      ${kpiCard('🔴','กลุ่มแดงได้รับการเยี่ยม',redVisited,redPts.length,redPct,100)}
-      ${medPct!==null
-        ? kpiCard('💊','อัตราการกินยาครบ',medTaken,medVis.length,medPct,80)
-        : `<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px"><div style="font-size:11px;color:var(--text3);font-weight:600">💊 อัตราการกินยาครบ</div><div style="font-size:13px;color:var(--text3);margin-top:10px">ยังไม่มีข้อมูล</div><div style="font-size:11px;color:var(--text3);margin-top:2px">บันทึกผ่านแบบเยี่ยมบ้าน</div></div>`}
-      ${kpiCard('🚨','อัตราส่งต่อ/กำเริบ',referCount,Math.max(tmv.length,1),referPct,10,true)}
-    </div>
-  </div>
-
   ${urgent.length>0?`
   <div style="background:var(--card);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:12px;border-left:4px solid #dc2626">
-    <div style="font-weight:700;font-size:14px;color:#b91c1c;margin-bottom:10px">⚠️ ต้องติดตามด่วน — เกินนัด ยังไม่ได้เยี่ยมเดือนนี้ (${urgent.length} ราย)</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <div style="font-weight:700;font-size:14px;color:#b91c1c">⚠️ ต้องติดตามด่วน — เกินนัด ยังไม่ได้เยี่ยมเดือนนี้ (${urgent.length} ราย)</div>
+      <button onclick="window._tlType='inject';window._tlf='overdue';navigate('timeline')" style="padding:5px 12px;background:#b91c1c;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">ดูตารางนัด →</button>
+    </div>
     ${(()=>{
       const vm={}
       urgent.forEach(p=>{
@@ -742,6 +743,19 @@ async function renderOverview(el) {
       </div>`).join('')
     })()}
   </div>`:''}
+
+  <div style="background:var(--card);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:12px">
+    <div style="font-weight:700;font-size:14px;margin-bottom:2px">📊 KPI ประจำเดือน${thMonthName}</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">วันที่ ${dayOfMonth} ของเดือน · ข้อมูลสะสมตั้งแต่ต้นเดือน</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${kpiCard('🏠','ความครอบคลุมการเยี่ยม',visitedCount,total,visitPct,80)}
+      ${kpiCard('🔴','กลุ่มแดงได้รับการเยี่ยม',redVisited,redPts.length,redPct,100)}
+      ${medPct!==null
+        ? kpiCard('💊','อัตราการกินยาครบ',medTaken,medVis.length,medPct,80)
+        : `<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px"><div style="font-size:11px;color:var(--text3);font-weight:600">💊 อัตราการกินยาครบ</div><div style="font-size:13px;color:var(--text3);margin-top:10px">ยังไม่มีข้อมูล</div><div style="font-size:11px;color:var(--text3);margin-top:2px">บันทึกผ่านแบบเยี่ยมบ้าน</div></div>`}
+      ${kpiCard('🚨','อัตราส่งต่อ/กำเริบ',referCount,Math.max(tmv.length,1),referPct,10,true)}
+    </div>
+  </div>
 
   <div style="background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px">
     <div style="font-weight:700;font-size:14px;margin-bottom:14px">จำแนกตามกลุ่มสี</div>
@@ -767,9 +781,19 @@ async function renderOverview(el) {
   </div>
 
   <div style="background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px">
-    <div style="font-weight:700;font-size:14px;margin-bottom:12px">สถานะการนัดหมาย</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="font-weight:700;font-size:14px;margin-bottom:10px">สถานะการนัดหมาย</div>
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">💉 นัดฉีดยา</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       ${[['เกินวันนัด',overdue,'var(--red)','var(--red-lt)','⚠️'],['วันนี้',todayC,'var(--primary)','var(--primary-lt)','📅'],['ภายใน 7 วัน',soon,'var(--yellow)','var(--yellow-lt)','🔔'],['ปกติ',ok,'var(--green)','var(--green-lt)','✅']].map(([lbl,cnt,clr,bg,ico])=>`
+      <div style="background:${bg};border-radius:10px;padding:12px 14px">
+        <div style="font-size:20px">${ico}</div>
+        <div style="font-size:22px;font-weight:800;color:${clr};margin-top:4px">${cnt}</div>
+        <div style="font-size:11px;color:${clr};font-weight:600;opacity:.8">${lbl}</div>
+      </div>`).join('')}
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px">🏡 นัดเยี่ยมบ้าน</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${[['เกินวันนัด',visitOverdueCnt,'var(--red)','var(--red-lt)','⚠️'],['วันนี้',visitTodayCnt,'var(--primary)','var(--primary-lt)','📅'],['ภายใน 7 วัน',visitSoonCnt,'var(--yellow)','var(--yellow-lt)','🔔'],['ปกติ',visitOkCnt,'var(--green)','var(--green-lt)','✅']].map(([lbl,cnt,clr,bg,ico])=>`
       <div style="background:${bg};border-radius:10px;padding:12px 14px">
         <div style="font-size:20px">${ico}</div>
         <div style="font-size:22px;font-weight:800;color:${clr};margin-top:4px">${cnt}</div>
