@@ -441,17 +441,21 @@ function renderTimeline(el) {
   if(!window._tlf) window._tlf='all'
   const today=todayISO()
   const t=window._tlType, f=window._tlf
-  const df=t==='inject'?'next_inject_date':'next_visit_date'
   const injectPts=allPatients.filter(p=>p.next_inject_date)
   const visitPts=allPatients.filter(p=>p.next_visit_date)
-  const basePts=t==='inject'?injectPts:visitPts
+  const doctorAppts=window._doctorAppts||[]
   const daysDiff=d=>Math.round((new Date(d+'T00:00:00')-new Date(today+'T00:00:00'))/86400000)
-  const cnt={
-    all:basePts.length,
-    overdue:basePts.filter(p=>p[df]<today).length,
-    today:basePts.filter(p=>p[df]===today).length,
-    week:basePts.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=7}).length,
-    month:basePts.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=30}).length,
+  let cnt={all:0,overdue:0,today:0,week:0,month:0}
+  if(t==='doctor'){
+    cnt.all=doctorAppts.filter(a=>a.status!=='done').length
+    cnt.overdue=doctorAppts.filter(a=>a.appoint_date<today&&a.status!=='done').length
+    cnt.today=doctorAppts.filter(a=>a.appoint_date===today).length
+    cnt.week=doctorAppts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=7}).length
+    cnt.month=doctorAppts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=30}).length
+  } else {
+    const df=t==='inject'?'next_inject_date':'next_visit_date'
+    const bp=t==='inject'?injectPts:visitPts
+    cnt={all:bp.length,overdue:bp.filter(p=>p[df]<today).length,today:bp.filter(p=>p[df]===today).length,week:bp.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=7}).length,month:bp.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=30}).length}
   }
   el.innerHTML=`<div class="page">
     <div class="page-title">ตารางนัดหมาย</div>
@@ -459,6 +463,7 @@ function renderTimeline(el) {
     <div class="filter-row">
       <button class="filter-chip${t==='inject'?' active':''}" onclick="setTLType('inject')">💉 นัดฉีดยา (${injectPts.length})</button>
       <button class="filter-chip${t==='visit'?' active':''}" onclick="setTLType('visit')">🏡 นัดเยี่ยมบ้าน (${visitPts.length})</button>
+      <button class="filter-chip${t==='doctor'?' active':''}" onclick="setTLType('doctor')">🏥 นัดพบแพทย์ (${doctorAppts.length})</button>
     </div>
     <div class="filter-row">
       <button class="filter-chip${f==='all'?' active':''}" data-tlf="all" onclick="setTLF('all')">ทั้งหมด (${cnt.all})</button>
@@ -467,12 +472,19 @@ function renderTimeline(el) {
       <button class="filter-chip${f==='week'?' active':''}" data-tlf="week" onclick="setTLF('week')">7 วัน (${cnt.week})</button>
       <button class="filter-chip${f==='month'?' active':''}" data-tlf="month" onclick="setTLF('month')">30 วัน (${cnt.month})</button>
     </div>
+    ${t==='doctor'&&canDo('record')?`<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button onclick="openDoctorApptForm()" style="padding:6px 16px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">+ เพิ่มนัดพบแพทย์</button></div>`:''}
     <div id="tl-list"></div>
   </div>`
-  renderTLList()
+  if(t==='doctor'&&!window._doctorAppts){
+    document.getElementById('tl-list').innerHTML='<div class="empty"><p>⏳ กำลังโหลด...</p></div>'
+    loadDoctorAppts().then(()=>renderTimeline(el))
+  } else {
+    renderTLList()
+  }
 }
-function setTLType(t){
+async function setTLType(t){
   window._tlType=t; window._tlf='all'
+  if(t==='doctor'&&!window._doctorAppts) await loadDoctorAppts()
   renderTimeline(document.getElementById('page-content'))
 }
 function setTLF(f){
@@ -480,13 +492,62 @@ function setTLF(f){
   document.querySelectorAll('[data-tlf]').forEach(e=>e.classList.toggle('active',e.dataset.tlf===f))
   renderTLList()
 }
+async function loadDoctorAppts(){
+  const{data}=await sb.from('doctor_appointments').select('*,patients(name,village,group_color)').order('appoint_date')
+  window._doctorAppts=data||[]
+}
+function doctorApptCard(a){
+  const p=a.patients||{}
+  const typeLabel={'medicine':'💊 รับยา','check':'🩺 ตรวจ','other':'📋 อื่นๆ'}[a.appoint_type]||a.appoint_type||'รับยา'
+  const gc=p.group_color||'green'
+  const dot=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc==='red'?'#ef4444':gc==='yellow'?'#f59e0b':'#22c55e'};margin-right:4px;vertical-align:middle"></span>`
+  const statusLabel=a.status==='done'?'✅ ไปแล้ว':a.status==='missed'?'❌ ขาดนัด':'⏳ นัดไว้'
+  const statusColor=a.status==='done'?'#16a34a':a.status==='missed'?'#b91c1c':'var(--text3)'
+  return`<div class="patient-card" style="margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:700">${esc(p.name||'?')}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${dot}${esc(p.village||'')} · 🏥 ${esc(a.hospital||'รพ.โพธิ์ไทร')}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px">${typeLabel}${a.doctor_name?` · 👨‍⚕️ ${esc(a.doctor_name)}`:''}</div>
+        ${a.note?`<div style="font-size:11px;color:var(--text3);margin-top:3px;white-space:pre-line">${esc(a.note)}</div>`:''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+        <span style="font-size:11px;font-weight:700;color:${statusColor}">${statusLabel}</span>
+        ${canDo('record')?`<div style="display:flex;gap:4px">
+          <button onclick="editDoctorAppt(${a.id})" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>
+          <button onclick="deleteDoctorAppt(${a.id})" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>
+        </div>`:''}
+      </div>
+    </div>
+  </div>`
+}
 function renderTLList(){
   const el=document.getElementById('tl-list')
   if(!el)return
   const today=todayISO()
   const t=window._tlType||'inject', f=window._tlf||'all'
-  const df=t==='inject'?'next_inject_date':'next_visit_date'
   const daysDiff=d=>Math.round((new Date(d+'T00:00:00')-new Date(today+'T00:00:00'))/86400000)
+  if(t==='doctor'){
+    let appts=[...(window._doctorAppts||[])]
+    if(f==='overdue') appts=appts.filter(a=>a.appoint_date<today&&a.status!=='done')
+    else if(f==='today') appts=appts.filter(a=>a.appoint_date===today)
+    else if(f==='week') appts=appts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=7})
+    else if(f==='month') appts=appts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=30})
+    else appts=appts.filter(a=>a.status!=='done')
+    appts.sort((a,b)=>a.appoint_date.localeCompare(b.appoint_date))
+    if(!appts.length){el.innerHTML='<div class="empty"><p>ไม่มีข้อมูลในช่วงนี้</p></div>';return}
+    const groups={}
+    for(const a of appts){const k=a.appoint_date;if(!groups[k])groups[k]=[];groups[k].push(a)}
+    let html=''
+    for(const[date,group]of Object.entries(groups)){
+      const past=date<today,isToday=date===today
+      const hd=past?`⚠️ ${thDate(date)}`:isToday?`📅 วันนี้ — ${thDate(date)}`:thDate(date)
+      html+=`<div class="tl-date-hd${isToday?' today-hd':''}">${hd} · ${group.length} ราย</div>${group.map(doctorApptCard).join('')}`
+    }
+    el.innerHTML=html
+    return
+  }
+  const df=t==='inject'?'next_inject_date':'next_visit_date'
   let pts=[...allPatients].filter(p=>p[df])
   if(f==='overdue') pts=pts.filter(p=>p[df]<today)
   else if(f==='today') pts=pts.filter(p=>p[df]===today)
@@ -503,6 +564,59 @@ function renderTLList(){
     html+=`<div class="tl-date-hd${isToday?' today-hd':''}">${hd} · ${group.length} ราย</div>${group.map(patientCard).join('')}`
   }
   el.innerHTML=html
+}
+function openDoctorApptForm(id=null){
+  const appt=id?(window._doctorAppts||[]).find(a=>a.id===id):null
+  const patOpts=allPatients.map(p=>`<option value="${p.id}"${appt?.patient_id===p.id?' selected':''}>${esc(p.name)} — ${esc(p.village||'')}</option>`).join('')
+  document.body.insertAdjacentHTML('beforeend',`<div id="da-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)closeDoctorApptModal()">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:700">🏥 ${id?'แก้ไข':'เพิ่ม'}นัดพบแพทย์</div>
+        <button onclick="closeDoctorApptModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text2);line-height:1">✕</button>
+      </div>
+      <div class="form-group"><label>ผู้ป่วย *</label><select id="da-patient" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text)"><option value="">-- เลือกผู้ป่วย --</option>${patOpts}</select></div>
+      <div class="form-group"><label>วันนัด *</label><input type="date" id="da-date" value="${appt?.appoint_date||''}" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group"><label>ประเภท</label><select id="da-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text)">
+        <option value="medicine"${!appt||appt.appoint_type==='medicine'?' selected':''}>💊 รับยา</option>
+        <option value="check"${appt?.appoint_type==='check'?' selected':''}>🩺 ตรวจ</option>
+        <option value="other"${appt?.appoint_type==='other'?' selected':''}>📋 อื่นๆ</option>
+      </select></div>
+      <div class="form-group"><label>สถานพยาบาล</label><input type="text" id="da-hospital" value="${esc(appt?.hospital||'รพ.โพธิ์ไทร')}" placeholder="รพ.โพธิ์ไทร" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group"><label>ชื่อแพทย์ (ถ้ามี)</label><input type="text" id="da-doctor" value="${esc(appt?.doctor_name||'')}" placeholder="ชื่อแพทย์" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group"><label>หมายเหตุ</label><textarea id="da-note" rows="2" placeholder="หมายเหตุ..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);resize:vertical">${esc(appt?.note||'')}</textarea></div>
+      ${id?`<div class="form-group"><label>สถานะ</label><select id="da-status" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text)">
+        <option value="scheduled"${appt?.status==='scheduled'||!appt?.status?' selected':''}>⏳ นัดไว้</option>
+        <option value="done"${appt?.status==='done'?' selected':''}>✅ ไปแล้ว</option>
+        <option value="missed"${appt?.status==='missed'?' selected':''}>❌ ขาดนัด</option>
+      </select></div>`:''}
+      <button onclick="saveDoctorAppt(${id||'null'})" style="width:100%;padding:12px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;margin-top:4px">💾 บันทึก</button>
+    </div>
+  </div>`)
+}
+function closeDoctorApptModal(){document.getElementById('da-modal')?.remove()}
+async function saveDoctorAppt(id){
+  const pid=parseInt(document.getElementById('da-patient')?.value)
+  const date=document.getElementById('da-date')?.value
+  if(!pid){alert('กรุณาเลือกผู้ป่วย');return}
+  if(!date){alert('กรุณาเลือกวันนัด');return}
+  const payload={patient_id:pid,appoint_date:date,appoint_type:document.getElementById('da-type')?.value||'medicine',hospital:document.getElementById('da-hospital')?.value||'รพ.โพธิ์ไทร',doctor_name:document.getElementById('da-doctor')?.value||null,note:document.getElementById('da-note')?.value||null,status:document.getElementById('da-status')?.value||'scheduled',created_by:currentDisplayName||currentRole}
+  const{error}=id?await sb.from('doctor_appointments').update(payload).eq('id',id):await sb.from('doctor_appointments').insert(payload)
+  if(error){alert('❌ '+error.message);return}
+  closeDoctorApptModal()
+  await loadDoctorAppts()
+  renderTimeline(document.getElementById('page-content'))
+}
+async function editDoctorAppt(id){
+  if(!window._doctorAppts)await loadDoctorAppts()
+  openDoctorApptForm(id)
+}
+async function deleteDoctorAppt(id){
+  const a=(window._doctorAppts||[]).find(x=>x.id===id)
+  if(!confirm(`ลบนัดพบแพทย์?\nวันที่: ${thDate(a?.appoint_date||'')}\nผู้ป่วย: ${a?.patients?.name||''}`))return
+  const{error}=await sb.from('doctor_appointments').delete().eq('id',id)
+  if(error){alert('❌ '+error.message);return}
+  window._doctorAppts=(window._doctorAppts||[]).filter(x=>x.id!==id)
+  renderTimeline(document.getElementById('page-content'))
 }
 
 // ─── Overview ────────────────────────────────────────────────────
