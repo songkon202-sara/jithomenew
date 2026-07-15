@@ -512,9 +512,12 @@ function doctorApptCard(a){
   const typeLabel={'medicine':'💊 รับยา','check':'🩺 ตรวจ','other':'📋 อื่นๆ'}[a.appoint_type]||a.appoint_type||'รับยา'
   const gc=p.group_color||'green'
   const dot=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc==='red'?'#ef4444':gc==='yellow'?'#f59e0b':'#22c55e'};margin-right:4px;vertical-align:middle"></span>`
-  const statusLabel=a.status==='done'?'✅ ไปแล้ว':a.status==='missed'?'❌ ขาดนัด':'⏳ นัดไว้'
-  const statusColor=a.status==='done'?'#16a34a':a.status==='missed'?'#b91c1c':'var(--text3)'
-  return`<div class="patient-card" style="margin-bottom:8px">
+  const daysUntil=Math.round((new Date(a.appoint_date+'T00:00:00')-new Date(todayISO()+'T00:00:00'))/86400000)
+  const isOverdue=daysUntil<0&&a.status!=='done'&&a.status!=='missed'
+  const chip=daysChip(a.status==='done'||a.status==='missed'?NaN:daysUntil)
+  const statusLabel=a.status==='done'?'✅ ไปแล้ว':a.status==='missed'?'❌ ขาดนัด':null
+  const statusColor=a.status==='done'?'#16a34a':'#b91c1c'
+  return`<div class="patient-card${isOverdue?' overdue':''}" style="margin-bottom:8px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
       <div style="flex:1;min-width:0">
         <div style="font-size:15px;font-weight:700">${esc(p.name||'?')}</div>
@@ -523,7 +526,8 @@ function doctorApptCard(a){
         ${a.note?`<div style="font-size:11px;color:var(--text3);margin-top:3px;white-space:pre-line">${esc(a.note)}</div>`:''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
-        <span style="font-size:11px;font-weight:700;color:${statusColor}">${statusLabel}</span>
+        <span class="days-chip ${chip.cls}">${chip.label}</span>
+        ${statusLabel?`<span style="font-size:11px;font-weight:700;color:${statusColor}">${statusLabel}</span>`:''}
         ${canDo('record')?`<div style="display:flex;gap:4px">
           <button onclick="editDoctorAppt(${a.id})" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>
           <button onclick="deleteDoctorAppt(${a.id})" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>
