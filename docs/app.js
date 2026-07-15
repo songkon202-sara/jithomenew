@@ -961,24 +961,27 @@ function openVisitFormFor(name,village){
     if(sel)for(const o of sel.options)if(o.value===village){o.selected=true;break}
   },50)
 }
-function renderMHAssessResult(a){
+function renderMHAssessResult(a,detail=false){
   if(!a)return''
-  const chips=[]
+  const chips=[],details=[]
   if(a.twoq?.q1!==null||a.twoq?.q2!==null){
     const s=(a.twoq.q1||0)+(a.twoq.q2||0)
     const suicide=a.twoq.suicide
     const[bg,color,lbl]=suicide?['#fef2f2','#b91c1c','2Q+: ⚠️ ความเสี่ยงสูง']:s===0?['#f0fdf4','#15803d','2Q+: ไม่พบ']:['#fefce8','#854d0e',`2Q+: ${s}/2 ควรประเมินเพิ่ม`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
+    if(detail)details.push(`2Q+ ข้อ1:${a.twoq.q1===1?'ใช่':'ไม่ใช่'} · ข้อ2:${a.twoq.q2===1?'ใช่':'ไม่ใช่'}${a.twoq.suicide!==undefined?` · เสี่ยงฆ่าตัวตาย:${a.twoq.suicide?'⚠️ ใช่':'ไม่ใช่'}`:''}`)
   }
   if(a.st5?.total!==undefined&&a.st5.scores?.some(v=>v!==null)){
     const s=a.st5.total
     const[bg,color,lbl]=s<=4?['#f0fdf4','#15803d',`ST-5: ${s} ไม่เครียด`]:s<=7?['#fefce8','#854d0e',`ST-5: ${s} เครียดน้อย`]:s<=9?['#fff7ed','#c2410c',`ST-5: ${s} เครียดปานกลาง`]:['#fef2f2','#b91c1c',`ST-5: ${s} เครียดมาก`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
+    if(detail&&a.st5.scores)details.push(`ST-5 รายข้อ: ${a.st5.scores.map((sc,i)=>`ข้อ${i+1}=${sc??'-'}`).join(' · ')}`)
   }
   if(a.rq?.total){
     const s=a.rq.total
     const[bg,color,lbl]=s<=17?['#fef2f2','#b91c1c',`RQ: ${s} พลังใจต่ำ`]:s<=23?['#fefce8','#854d0e',`RQ: ${s} ปานกลาง`]:['#f0fdf4','#15803d',`RQ: ${s} พลังใจดี`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
+    if(detail&&a.rq.scores)details.push(`RQ รายข้อ: ${a.rq.scores.map((sc,i)=>`ข้อ${i+1}=${sc}`).join(' · ')}`)
   }
   if(a.gaf!==null&&a.gaf!==undefined){
     const s=a.gaf
@@ -989,6 +992,7 @@ function renderMHAssessResult(a){
     const s=a.aims.total
     const[bg,color]=s===0?['#f0fdf4','#15803d']:s<=4?['#fefce8','#854d0e']:s<=8?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">AIMS: ${s}</span>`)
+    if(detail&&a.aims.scores)details.push(`AIMS รายข้อ: ${a.aims.scores.map((sc,i)=>`ข้อ${i+1}=${sc}`).join(' · ')}`)
   }
   if(a.medAdhere!==null&&a.medAdhere!==undefined){
     const[bg,color,lbl]=a.medAdhere.taken?['#f0fdf4','#15803d','💊 กินยาครบ']:['#fef2f2','#b91c1c',`💊 ขาดยา ${a.medAdhere.missedDays||0} วัน`]
@@ -998,9 +1002,11 @@ function renderMHAssessResult(a){
     const s=a.cgb.total
     const[bg,color]=s<=20?['#f0fdf4','#15803d']:s<=40?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">ภาระดูแล: ${s}</span>`)
+    if(detail&&a.cgb.scores)details.push(`ภาระดูแล รายข้อ: ${a.cgb.scores.map((sc,i)=>`ข้อ${i+1}=${sc}`).join(' · ')}`)
   }
   if(!chips.length)return''
-  return`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:2px"><span style="font-size:11px;color:var(--text3);margin-right:2px">🧠</span>${chips.join('')}</div>`
+  const detailHtml=detail&&details.length?`<div style="margin-top:5px;padding:5px 8px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">${details.map(d=>`<div style="font-size:10px;color:var(--text2);font-family:monospace;line-height:1.8">${d}</div>`).join('')}</div>`:''
+  return`<div style="display:flex;flex-direction:column;gap:4px;margin-top:2px"><div style="display:flex;flex-wrap:wrap;gap:4px"><span style="font-size:11px;color:var(--text3);margin-right:2px">🧠</span>${chips.join('')}</div>${detailHtml}</div>`
 }
 function renderVisitList(visits){
   if(!visits.length)return'<div class="empty"><p>ไม่มีบันทึกการเยี่ยมบ้าน</p></div>'
@@ -1020,8 +1026,9 @@ function renderVisitList(visits){
       </div>
       <div style="font-size:12px;color:var(--text2)">${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'} ${esc(v.visitor||'')}${v.refer?` <span style="color:#b91c1c;font-weight:700">⚠️ ส่งต่อ</span>`:''}</div>
       ${v.note?`<div style="font-size:12px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:pre-line">${esc(v.note)}</div>`:''}
-      ${v.assessment_json&&canDo('record')?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">${renderMHAssessResult(v.assessment_json)}</div>`:''}
-      ${v.photo_url?`<div style="margin-top:8px"><a href="${esc(v.photo_url)}" target="_blank"><img src="${esc(v.photo_url)}" alt="รูปถ่ายการเยี่ยมบ้าน" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer"></a></div>`:''}
+      ${v.assessment_json&&canDo('record')?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">${renderMHAssessResult(v.assessment_json,true)}</div>`:''}
+      ${v.photo_url&&canDo('record')?`<div style="margin-top:8px"><a href="${esc(v.photo_url)}" target="_blank"><img src="${esc(v.photo_url)}" alt="รูปถ่ายการเยี่ยมบ้าน" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer"></a></div>`:''}
+      ${canDo('record')&&v.visit_type==='aosomo'?`<div style="margin-top:8px;padding:8px 10px;border-top:1px solid var(--border)">${v.verified_by?`<div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:${v.verify_result==='improve'?'#b45309':'#16a34a'}">${v.verify_result==='improve'?'⚠️ ต้องปรับปรุง':'✅ ถูกต้อง'} · ${esc(v.verified_by)} · ${v.verified_at||''}</span>${v.verify_note?`<span style="font-size:11px;color:var(--text2)">💬 ${esc(v.verify_note)}</span>`:''}</div>`:`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11px;color:var(--text3)">⏳ รอเจ้าหน้าที่ตรวจสอบ</span><button onclick="verifyVisit(${v.id})" style="padding:4px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ตรวจสอบแล้ว</button></div><div id="vf-${v.id}" style="display:none;margin-top:8px;padding:8px;background:var(--bg2,#f8fafc);border-radius:8px;border:1px solid var(--border)"><div style="display:flex;gap:12px;margin-bottom:6px"><label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif"><input type="radio" name="vr-${v.id}" value="pass" checked> ✅ ถูกต้อง</label><label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif"><input type="radio" name="vr-${v.id}" value="improve"> ⚠️ ต้องปรับปรุง</label></div><input id="vn-${v.id}" type="text" placeholder="หมายเหตุ (ถ้ามี)" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);margin-bottom:6px"><div style="display:flex;gap:6px;justify-content:flex-end"><button onclick="verifyVisit(${v.id})" style="padding:4px 10px;background:none;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif;color:var(--text2)">ยกเลิก</button><button onclick="submitVerify(${v.id})" style="padding:4px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:6px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;font-family:'Sarabun',sans-serif">บันทึก</button></div></div>`}</div>`:''}
     </div>`
   }).join('')
 }
@@ -1040,6 +1047,26 @@ async function deleteVisit(id,patientName){
   }catch(e){alert('❌ ลบไม่สำเร็จ: '+e.message)}
 }
 
+function verifyVisit(id){
+  const form=document.getElementById('vf-'+id)
+  if(form)form.style.display=form.style.display==='none'?'block':'none'
+}
+async function submitVerify(id){
+  const result=document.querySelector(`input[name="vr-${id}"]:checked`)?.value||'pass'
+  const note=(document.getElementById('vn-'+id)?.value||'').trim()
+  const verifier=currentDisplayName||currentRole
+  const today=todayISO()
+  const{error}=await sb.from('home_visits').update({verified_by:verifier,verified_at:today,verify_result:result,verify_note:note||null}).eq('id',id)
+  if(error){alert('❌ '+error.message);return}
+  const v=(window._allVisits||[]).find(x=>x.id===id)
+  if(v){v.verified_by=verifier;v.verified_at=today;v.verify_result=result;v.verify_note=note}
+  const el=document.getElementById('visit-list')
+  if(!el)return
+  const activeBtn=document.querySelector('.tab-btn.active')
+  const match=activeBtn?.getAttribute('onclick')?.match(/setVTab\('(\w+)'/)
+  const tab=match?match[1]:'all'
+  el.innerHTML=renderVisitList(tab==='all'?window._allVisits:(window._allVisits||[]).filter(v=>v.visit_type===tab))
+}
 async function openEditVisit(id){
   const{data:v}=await sb.from('home_visits').select('*').eq('id',id).single()
   if(!v)return
