@@ -519,7 +519,7 @@ function doctorApptCard(a){
       <div style="flex:1;min-width:0">
         <div style="font-size:15px;font-weight:700">${esc(p.name||'?')}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${dot}${esc(p.village||'')} · 🏥 ${esc(a.hospital||'รพ.โพธิ์ไทร')}</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:4px">${typeLabel}${a.doctor_name?` · 👨‍⚕️ ${esc(a.doctor_name)}`:''}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px">${typeLabel} · 📅 ${thDate(a.appoint_date)}${a.doctor_name?` · 👨‍⚕️ ${esc(a.doctor_name)}`:''}</div>
         ${a.note?`<div style="font-size:11px;color:var(--text3);margin-top:3px;white-space:pre-line">${esc(a.note)}</div>`:''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
