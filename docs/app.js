@@ -963,25 +963,40 @@ function openVisitFormFor(name,village){
 }
 function renderMHAssessResult(a,detail=false){
   if(!a)return''
-  const chips=[],details=[]
+  const chips=[],detailSecs=[]
+  const ST5_Q=['มีปัญหาการนอน นอนไม่หลับ/นอนมากเกินไป','มีสมาธิน้อยลง','หุดหงิด/กระวนกระวาย/วิตกกังวล','รู้สึกเบื่อเซ็ง','ไม่อยากพบปะผู้คน']
+  const ST5_OPT=['แทบไม่มี','เป็นบางครั้ง','บ่อยครั้ง','เป็นประจำ']
+  const RQ_Q=['ความยากลำบากทำให้ฉันแกร่งขึ้น','มีกำลังใจและได้รับการสนับสนุนจากคนรอบข้าง','การแก้ไขปัญหาทำให้มีประสบการณ์มากขึ้น']
   if(a.twoq?.q1!==null||a.twoq?.q2!==null){
-    const s=(a.twoq.q1||0)+(a.twoq.q2||0)
-    const suicide=a.twoq.suicide
+    const s=(a.twoq.q1||0)+(a.twoq.q2||0),suicide=a.twoq.suicide
     const[bg,color,lbl]=suicide?['#fef2f2','#b91c1c','2Q+: ⚠️ ความเสี่ยงสูง']:s===0?['#f0fdf4','#15803d','2Q+: ไม่พบ']:['#fefce8','#854d0e',`2Q+: ${s}/2 ควรประเมินเพิ่ม`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
-    if(detail)details.push(`2Q+ ข้อ1:${a.twoq.q1===1?'ใช่':'ไม่ใช่'} · ข้อ2:${a.twoq.q2===1?'ใช่':'ไม่ใช่'}${a.twoq.suicide!==undefined?` · เสี่ยงฆ่าตัวตาย:${a.twoq.suicide?'⚠️ ใช่':'ไม่ใช่'}`:''}`)
+    if(detail){
+      const rows=[
+        `รู้สึกหดหู่ เศร้า หรือท้อแท้สิ้นหวัง → <b>${a.twoq.q1===1?'<span style="color:#b91c1c">ใช่</span>':'ไม่ใช่'}</b>`,
+        `รู้สึกเบื่อ ทำอะไรก็ไม่เพลิดเพลิน → <b>${a.twoq.q2===1?'<span style="color:#b91c1c">ใช่</span>':'ไม่ใช่'}</b>`,
+        ...(a.twoq.suicide!==undefined?[`มีความคิดอยากทำร้ายตัวเอง → <b>${a.twoq.suicide?'<span style="color:#b91c1c">⚠️ ใช่</span>':'ไม่ใช่'}</b>`]:[])
+      ]
+      detailSecs.push({title:'📋 2Q+ คัดกรองภาวะซึมเศร้า',rows})
+    }
   }
   if(a.st5?.total!==undefined&&a.st5.scores?.some(v=>v!==null)){
     const s=a.st5.total
     const[bg,color,lbl]=s<=4?['#f0fdf4','#15803d',`ST-5: ${s} ไม่เครียด`]:s<=7?['#fefce8','#854d0e',`ST-5: ${s} เครียดน้อย`]:s<=9?['#fff7ed','#c2410c',`ST-5: ${s} เครียดปานกลาง`]:['#fef2f2','#b91c1c',`ST-5: ${s} เครียดมาก`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
-    if(detail&&a.st5.scores)details.push(`ST-5 รายข้อ: ${a.st5.scores.map((sc,i)=>`ข้อ${i+1}=${sc??'-'}`).join(' · ')}`)
+    if(detail&&a.st5.scores){
+      const rows=a.st5.scores.map((sc,i)=>sc!=null?`${ST5_Q[i]} → <b>${ST5_OPT[sc]??sc} <span style="color:var(--text3)">(${sc})</span></b>`:null).filter(Boolean)
+      detailSecs.push({title:`😣 ST-5 ความเครียด (รวม ${s} คะแนน)`,rows})
+    }
   }
   if(a.rq?.total){
     const s=a.rq.total
     const[bg,color,lbl]=s<=17?['#fef2f2','#b91c1c',`RQ: ${s} พลังใจต่ำ`]:s<=23?['#fefce8','#854d0e',`RQ: ${s} ปานกลาง`]:['#f0fdf4','#15803d',`RQ: ${s} พลังใจดี`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
-    if(detail&&a.rq.scores)details.push(`RQ รายข้อ: ${a.rq.scores.map((sc,i)=>`ข้อ${i+1}=${sc}`).join(' · ')}`)
+    if(detail&&a.rq.scores){
+      const rows=a.rq.scores.map((sc,i)=>`${RQ_Q[i]} → <b>${sc}/10</b>`)
+      detailSecs.push({title:`🧡 RQ พลังใจ (รวม ${s} คะแนน)`,rows})
+    }
   }
   if(a.gaf!==null&&a.gaf!==undefined){
     const s=a.gaf
@@ -992,7 +1007,10 @@ function renderMHAssessResult(a,detail=false){
     const s=a.aims.total
     const[bg,color]=s===0?['#f0fdf4','#15803d']:s<=4?['#fefce8','#854d0e']:s<=8?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">AIMS: ${s}</span>`)
-    if(detail&&a.aims.scores)details.push(`AIMS รายข้อ: ${a.aims.scores.map((sc,i)=>`ข้อ${i+1}=${sc}`).join(' · ')}`)
+    if(detail&&a.aims.scores){
+      const rows=a.aims.scores.map((sc,i)=>`ข้อ${i+1} → <b>${sc}</b>`)
+      detailSecs.push({title:`AIMS การเคลื่อนไหวผิดปกติ (รวม ${s} คะแนน)`,rows})
+    }
   }
   if(a.medAdhere!==null&&a.medAdhere!==undefined){
     const[bg,color,lbl]=a.medAdhere.taken?['#f0fdf4','#15803d','💊 กินยาครบ']:['#fef2f2','#b91c1c',`💊 ขาดยา ${a.medAdhere.missedDays||0} วัน`]
@@ -1002,10 +1020,13 @@ function renderMHAssessResult(a,detail=false){
     const s=a.cgb.total
     const[bg,color]=s<=20?['#f0fdf4','#15803d']:s<=40?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">ภาระดูแล: ${s}</span>`)
-    if(detail&&a.cgb.scores)details.push(`ภาระดูแล รายข้อ: ${a.cgb.scores.map((sc,i)=>`ข้อ${i+1}=${sc}`).join(' · ')}`)
+    if(detail&&a.cgb.scores){
+      const rows=a.cgb.scores.map((sc,i)=>`ข้อ${i+1} → <b>${sc}</b>`)
+      detailSecs.push({title:`ภาระดูแลผู้ป่วย CGB (รวม ${s} คะแนน)`,rows})
+    }
   }
   if(!chips.length)return''
-  const detailHtml=detail&&details.length?`<div style="margin-top:5px;padding:5px 8px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">${details.map(d=>`<div style="font-size:10px;color:var(--text2);font-family:monospace;line-height:1.8">${d}</div>`).join('')}</div>`:''
+  const detailHtml=detail&&detailSecs.length?`<div style="margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden">${detailSecs.map((sec,si)=>`<div style="padding:6px 10px;${si<detailSecs.length-1?'border-bottom:1px solid var(--border)':''}"><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">${sec.title}</div>${sec.rows.map(r=>`<div style="font-size:11px;color:var(--text1);line-height:1.8;padding-left:6px">• ${r}</div>`).join('')}</div>`).join('')}</div>`:''
   return`<div style="display:flex;flex-direction:column;gap:4px;margin-top:2px"><div style="display:flex;flex-wrap:wrap;gap:4px"><span style="font-size:11px;color:var(--text3);margin-right:2px">🧠</span>${chips.join('')}</div>${detailHtml}</div>`
 }
 function renderVisitList(visits){
