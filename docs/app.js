@@ -565,16 +565,33 @@ function renderTLList(){
   }
   el.innerHTML=html
 }
+function filterDaPatients(){
+  const village=document.getElementById('da-vf')?.value||''
+  const search=(document.getElementById('da-search')?.value||'').toLowerCase()
+  const sel=document.getElementById('da-patient')
+  if(!sel)return
+  const cur=sel.value
+  const filtered=allPatients.filter(p=>(!village||p.village===village)&&(!search||p.name.toLowerCase().includes(search)))
+  sel.innerHTML=`<option value="">-- เลือกผู้ป่วย --</option>`+filtered.map(p=>`<option value="${p.id}"${String(p.id)===String(cur)?' selected':''}>${esc(p.name)} — ${esc(p.village||'')}</option>`).join('')
+}
 function openDoctorApptForm(id=null){
   const appt=id?(window._doctorAppts||[]).find(a=>a.id===id):null
-  const patOpts=allPatients.map(p=>`<option value="${p.id}"${appt?.patient_id===p.id?' selected':''}>${esc(p.name)} — ${esc(p.village||'')}</option>`).join('')
+  const villages=[...new Set(allPatients.map(p=>p.village).filter(Boolean))].sort()
+  const villageOpts=villages.map(v=>`<option value="${v}">${v}</option>`).join('')
+  const selPid=appt?.patient_id
+  const patOpts=allPatients.map(p=>`<option value="${p.id}"${p.id===selPid?' selected':''}>${esc(p.name)} — ${esc(p.village||'')}</option>`).join('')
+  const selStyle='width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:\'Sarabun\',sans-serif;background:var(--bg);color:var(--text)'
   document.body.insertAdjacentHTML('beforeend',`<div id="da-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)closeDoctorApptModal()">
     <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <div style="font-size:16px;font-weight:700">🏥 ${id?'แก้ไข':'เพิ่ม'}นัดพบแพทย์</div>
         <button onclick="closeDoctorApptModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text2);line-height:1">✕</button>
       </div>
-      <div class="form-group"><label>ผู้ป่วย *</label><select id="da-patient" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text)"><option value="">-- เลือกผู้ป่วย --</option>${patOpts}</select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><label style="font-size:11px;color:var(--text3);font-weight:600">กรองหมู่บ้าน</label><select id="da-vf" onchange="filterDaPatients()" style="${selStyle}"><option value="">-- ทุกหมู่บ้าน --</option>${villageOpts}</select></div>
+        <div><label style="font-size:11px;color:var(--text3);font-weight:600">ค้นหาชื่อ</label><input type="text" id="da-search" placeholder="พิมพ์ชื่อ..." oninput="filterDaPatients()" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text)"></div>
+      </div>
+      <div class="form-group"><label>ผู้ป่วย *</label><select id="da-patient" style="${selStyle}"><option value="">-- เลือกผู้ป่วย --</option>${patOpts}</select></div>
       <div class="form-group"><label>วันนัด *</label><input type="date" id="da-date" value="${appt?.appoint_date||''}" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>ประเภท</label><select id="da-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text)">
         <option value="medicine"${!appt||appt.appoint_type==='medicine'?' selected':''}>💊 รับยา</option>
