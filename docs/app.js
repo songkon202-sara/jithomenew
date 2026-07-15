@@ -185,6 +185,13 @@ function parseGroupColor(g) {
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
+function showToast(msg,duration=2500){
+  document.getElementById('_toast')?.remove()
+  const t=document.createElement('div');t.id='_toast'
+  t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:99999;font-family:Sarabun,sans-serif;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,0.3)'
+  t.textContent=msg;document.body.appendChild(t)
+  setTimeout(()=>t.remove(),duration)
+}
 function setSubtitle(el,text){if(!el)return;el.innerHTML=esc(text||'').replace(/\n/g,'<br>')}
 function todayISO() { return new Date().toISOString().slice(0,10) }
 function maskNationalId(id){
@@ -493,8 +500,12 @@ function setTLF(f){
   renderTLList()
 }
 async function loadDoctorAppts(){
-  const{data}=await sb.from('doctor_appointments').select('*,patients(name,village,group_color)').order('appoint_date')
-  window._doctorAppts=data||[]
+  const{data,error}=await sb.from('doctor_appointments').select('*').order('appoint_date')
+  if(error){console.error('loadDoctorAppts error:',error);window._doctorAppts=[];return}
+  window._doctorAppts=(data||[]).map(a=>{
+    const p=allPatients.find(x=>x.id===a.patient_id)||{}
+    return{...a,patients:{name:p.name,village:p.village,group_color:p.group_color}}
+  })
 }
 function doctorApptCard(a){
   const p=a.patients||{}
@@ -618,8 +629,9 @@ async function saveDoctorAppt(id){
   if(!date){alert('กรุณาเลือกวันนัด');return}
   const payload={patient_id:pid,appoint_date:date,appoint_type:document.getElementById('da-type')?.value||'medicine',hospital:document.getElementById('da-hospital')?.value||'รพ.โพธิ์ไทร',doctor_name:document.getElementById('da-doctor')?.value||null,note:document.getElementById('da-note')?.value||null,status:document.getElementById('da-status')?.value||'scheduled',created_by:currentDisplayName||currentRole}
   const{error}=id?await sb.from('doctor_appointments').update(payload).eq('id',id):await sb.from('doctor_appointments').insert(payload)
-  if(error){alert('❌ '+error.message);return}
+  if(error){alert('❌ บันทึกไม่สำเร็จ: '+error.message);return}
   closeDoctorApptModal()
+  showToast('✅ บันทึกนัดพบแพทย์สำเร็จ')
   await loadDoctorAppts()
   renderTimeline(document.getElementById('page-content'))
 }
