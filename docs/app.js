@@ -1923,11 +1923,18 @@ async function createAosomoAccount(){
 function memberCard(p,showVillage=false){
   const isSelf=p.id===currentUser?.id
   const canEdit=canDo('admin')||isSelf
+  const lockInfo=window._activeLockouts&&window._activeLockouts[p.email]
+  const isLocked=!!lockInfo
+  const lockMins=isLocked?Math.ceil((new Date(lockInfo.locked_until)-new Date())/60000):0
   return `
-  <div data-member-id="${p.id}" style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--border)">
+  <div data-member-id="${p.id}" style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid ${isLocked?'#fca5a5':'var(--border)'}">
+    ${isLocked?`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div style="font-size:12px;color:#dc2626;font-weight:700">🔒 บัญชีถูกล็อก — เหลือ ${lockMins} นาที (ผิด ${lockInfo.attempt_count} ครั้ง)</div>
+      ${canDo('admin')?`<button onclick="adminUnlockAccount('${esc(p.email)}')" style="padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🔓 ปลดล็อก</button>`:''}
+    </div>`:''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
-        <div style="width:34px;height:34px;border-radius:50%;background:${ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${(p.email||'?').slice(0,2).toUpperCase()}</div>
+        <div style="width:34px;height:34px;border-radius:50%;background:${isLocked?'#ef4444':ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${isLocked?'🔒':(p.email||'?').slice(0,2).toUpperCase()}</div>
         <div style="min-width:0;flex:1">
           <div style="display:flex;align-items:center;gap:6px">
             <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
@@ -1998,11 +2005,15 @@ function aosomoDirectoryCard(a){
 }
 
 async function loadMembersList(){
-  const[{data:profiles},{data:aosomoDir},{data:staffDir}]=await Promise.all([
+  const[{data:profiles},{data:aosomoDir},{data:staffDir},{data:lockouts}]=await Promise.all([
     sb.from('user_profiles').select('*').order('created_at'),
     sb.from('aosomo_directory').select('*').order('village'),
-    sb.from('staff_directory').select('*').order('name')
+    sb.from('staff_directory').select('*').order('name'),
+    sb.from('login_lockouts').select('*').not('locked_until','is',null)
   ])
+  // Build map of currently-locked emails
+  window._activeLockouts={}
+  ;(lockouts||[]).forEach(l=>{if(l.locked_until&&new Date(l.locked_until)>new Date())window._activeLockouts[l.email]=l})
   const all=profiles||[]
   const staffEl=document.getElementById('group-staff')
   const aosomoEl=document.getElementById('group-aosomo')
@@ -4075,49 +4086,71 @@ function hideAuthWall(){
   if(wall)wall.style.display='none'
 }
 
-function _loginLockKey(email){return'jh_lock_'+btoa(email.toLowerCase()).slice(0,16)}
-function _checkLoginLock(email){
-  const key=_loginLockKey(email)
+// Server-side login lockout (ISO 27001:2022 A.8.5) — stored in Supabase login_lockouts table
+async function _checkLoginLock(email){
   try{
-    const d=JSON.parse(localStorage.getItem(key)||'{}')
-    if(d.until&&Date.now()<d.until){
-      const mins=Math.ceil((d.until-Date.now())/60000)
-      return`ล็อกบัญชีชั่วคราว กรุณารอ ${mins} นาที (พยายามเข้าระบบผิดพลาด ${d.count} ครั้ง)`
+    const{data}=await sb.from('login_lockouts').select('*').eq('email',email.toLowerCase()).maybeSingle()
+    if(!data)return null
+    if(data.locked_until&&new Date(data.locked_until)>new Date()){
+      const mins=Math.ceil((new Date(data.locked_until)-new Date())/60000)
+      return`ล็อกบัญชีชั่วคราว กรุณารอ ${mins} นาที (พยายามผิด ${data.attempt_count} ครั้ง) — ติดต่อผู้ดูแลระบบเพื่อปลดล็อก`
     }
-    if(d.until&&Date.now()>=d.until)localStorage.removeItem(key)
   }catch(e){}
   return null
 }
-function _recordFailedLogin(email){
-  const key=_loginLockKey(email)
+async function _recordFailedLogin(email){
   try{
-    const d=JSON.parse(localStorage.getItem(key)||'{}')
-    const count=(d.count||0)+1
-    const until=count>=5?Date.now()+15*60*1000:(d.until||0)
-    localStorage.setItem(key,JSON.stringify({count,until}))
+    const{data}=await sb.from('login_lockouts').select('attempt_count').eq('email',email.toLowerCase()).maybeSingle()
+    const count=(data?.attempt_count||0)+1
+    const lockedUntil=count>=5?new Date(Date.now()+15*60*1000).toISOString():null
+    await sb.from('login_lockouts').upsert({
+      email:email.toLowerCase(),
+      attempt_count:count,
+      locked_until:lockedUntil,
+      last_attempt:new Date().toISOString(),
+      unlocked_by:null,
+      unlocked_at:null
+    },{onConflict:'email'})
     return count
   }catch(e){return 1}
 }
-function _clearLoginLock(email){try{localStorage.removeItem(_loginLockKey(email))}catch(e){}}
+async function _clearLoginLock(email){
+  try{await sb.from('login_lockouts').delete().eq('email',email.toLowerCase())}catch(e){}
+}
+async function adminUnlockAccount(email){
+  if(!canDo('admin')){alert('ไม่มีสิทธิ์');return}
+  if(!confirm(`ปลดล็อกบัญชี ${email}?`))return
+  const{error}=await sb.from('login_lockouts').update({
+    locked_until:null,
+    attempt_count:0,
+    unlocked_by:currentDisplayName||currentRole,
+    unlocked_at:new Date().toISOString()
+  }).eq('email',email.toLowerCase())
+  if(error){alert('❌ '+error.message);return}
+  auditLog('account_unlocked','login_lockouts',null,{email,by:currentDisplayName||currentRole})
+  showToast('✅ ปลดล็อกบัญชีสำเร็จ')
+  loadMembersList()
+}
 async function loginUser(){
   const email=(document.getElementById('auth-email')?.value||'').trim()
   const password=document.getElementById('auth-password')?.value||''
   const btn=document.getElementById('auth-btn')
   const err=document.getElementById('auth-error')
   if(!email||!password){err.textContent='กรุณากรอก Email และรหัสผ่าน';return}
-  const lockMsg=_checkLoginLock(email)
-  if(lockMsg){err.textContent='🔒 '+lockMsg;return}
-  btn.disabled=true;btn.textContent='กำลังเข้าสู่ระบบ...'
+  btn.disabled=true;btn.textContent='กำลังตรวจสอบ...'
+  const lockMsg=await _checkLoginLock(email)
+  if(lockMsg){err.textContent='🔒 '+lockMsg;btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return}
+  btn.textContent='กำลังเข้าสู่ระบบ...'
   const{data,error}=await sb.auth.signInWithPassword({email,password})
   if(error){
-    const count=_recordFailedLogin(email)
+    const count=await _recordFailedLogin(email)
     const remaining=Math.max(0,5-count)
-    const lockWarn=count>=5?' — บัญชีถูกล็อก 15 นาที':remaining>0?` (เหลืออีก ${remaining} ครั้ง)`:''
+    const lockWarn=count>=5?' — บัญชีถูกล็อกชั่วคราว กรุณาติดต่อผู้ดูแลระบบ':remaining>0?` (เหลืออีก ${remaining} ครั้ง)`:''
     err.textContent='❌ '+(error.message==='Invalid login credentials'?'Email หรือรหัสผ่านไม่ถูกต้อง'+lockWarn:error.message)
     auditLog('login_failed','auth',null,{email,attempt:count})
     btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return
   }
-  _clearLoginLock(email)
+  await _clearLoginLock(email)
   currentUser=data.user
   const prof=await loadProfile(data.user)
   await updateLastLogin(data.user.id)
