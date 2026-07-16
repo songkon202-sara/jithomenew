@@ -2057,6 +2057,7 @@ async function approvePendingMember(userId){
   if(!confirm('อนุมัติสมาชิกคนนี้?'))return
   const{error}=await sb.from('user_profiles').update({status:'active'}).eq('id',userId)
   if(error){alert('❌ '+error.message);return}
+  auditLog('member_approved','user_profile',userId,{by:currentDisplayName||currentRole})
   loadMembersList()
 }
 
@@ -2064,6 +2065,7 @@ async function rejectPendingMember(userId){
   if(!confirm('ปฏิเสธและลบคำขอนี้?'))return
   const{error}=await sb.from('user_profiles').update({status:'rejected'}).eq('id',userId)
   if(error){alert('❌ '+error.message);return}
+  auditLog('member_rejected','user_profile',userId,{by:currentDisplayName||currentRole})
   loadMembersList()
 }
 
@@ -2250,6 +2252,7 @@ async function deleteStaffDirectory(id){
 async function changeMemberRole(userId,role){
   const{error}=await sb.from('user_profiles').update({role}).eq('id',userId)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
+  auditLog('member_role_changed','user_profile',userId,{new_role:role,by:currentDisplayName||currentRole})
   await loadMembersList()
 }
 
@@ -2619,6 +2622,7 @@ async function saveSettings(){
 }
 
 function exportCSV(){
+  if(!canDo('record')){alert('🔒 ไม่มีสิทธิ์ Export ข้อมูล');return}
   auditLog('export_csv','patients',null,{count:allPatients.length})
   const rows=allPatients.map(p=>[p.name,p.village,p.group_label,p.interval_str,thDate(p.last_date),thDate(p.next_date),p.days_until,p.note||''])
   const hdr=['ชื่อ','หมู่บ้าน','กลุ่มสี','รอบนัด','วันฉีดล่าสุด','วันนัดต่อไป','วันคงเหลือ','หมายเหตุ']
@@ -2643,11 +2647,13 @@ function toggleAdmType(type){
 }
 
 function exportJSON(){
+  if(!canDo('record')){alert('🔒 ไม่มีสิทธิ์ Export ข้อมูล');return}
   auditLog('export_json','patients',null,{count:allPatients.length})
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(allPatients,null,2)],{type:'application/json'}));a.download='jithome.json';a.click()
 }
 
 async function exportVisitExcel(){
+  if(!canDo('record')){alert('🔒 ไม่มีสิทธิ์ Export ข้อมูล');return}
   try{
     const{data:visits}=await sb.from('home_visits')
       .select('*')
@@ -4069,15 +4075,49 @@ function hideAuthWall(){
   if(wall)wall.style.display='none'
 }
 
+function _loginLockKey(email){return'jh_lock_'+btoa(email.toLowerCase()).slice(0,16)}
+function _checkLoginLock(email){
+  const key=_loginLockKey(email)
+  try{
+    const d=JSON.parse(localStorage.getItem(key)||'{}')
+    if(d.until&&Date.now()<d.until){
+      const mins=Math.ceil((d.until-Date.now())/60000)
+      return`ล็อกบัญชีชั่วคราว กรุณารอ ${mins} นาที (พยายามเข้าระบบผิดพลาด ${d.count} ครั้ง)`
+    }
+    if(d.until&&Date.now()>=d.until)localStorage.removeItem(key)
+  }catch(e){}
+  return null
+}
+function _recordFailedLogin(email){
+  const key=_loginLockKey(email)
+  try{
+    const d=JSON.parse(localStorage.getItem(key)||'{}')
+    const count=(d.count||0)+1
+    const until=count>=5?Date.now()+15*60*1000:(d.until||0)
+    localStorage.setItem(key,JSON.stringify({count,until}))
+    return count
+  }catch(e){return 1}
+}
+function _clearLoginLock(email){try{localStorage.removeItem(_loginLockKey(email))}catch(e){}}
 async function loginUser(){
   const email=(document.getElementById('auth-email')?.value||'').trim()
   const password=document.getElementById('auth-password')?.value||''
   const btn=document.getElementById('auth-btn')
   const err=document.getElementById('auth-error')
   if(!email||!password){err.textContent='กรุณากรอก Email และรหัสผ่าน';return}
+  const lockMsg=_checkLoginLock(email)
+  if(lockMsg){err.textContent='🔒 '+lockMsg;return}
   btn.disabled=true;btn.textContent='กำลังเข้าสู่ระบบ...'
   const{data,error}=await sb.auth.signInWithPassword({email,password})
-  if(error){err.textContent='❌ '+(error.message==='Invalid login credentials'?'Email หรือรหัสผ่านไม่ถูกต้อง':error.message);btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return}
+  if(error){
+    const count=_recordFailedLogin(email)
+    const remaining=Math.max(0,5-count)
+    const lockWarn=count>=5?' — บัญชีถูกล็อก 15 นาที':remaining>0?` (เหลืออีก ${remaining} ครั้ง)`:''
+    err.textContent='❌ '+(error.message==='Invalid login credentials'?'Email หรือรหัสผ่านไม่ถูกต้อง'+lockWarn:error.message)
+    auditLog('login_failed','auth',null,{email,attempt:count})
+    btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return
+  }
+  _clearLoginLock(email)
   currentUser=data.user
   const prof=await loadProfile(data.user)
   await updateLastLogin(data.user.id)
@@ -4088,6 +4128,11 @@ async function loginUser(){
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
+  if(email.endsWith('@jithome.local')){
+    setTimeout(()=>{
+      showToast('⚠️ กรุณาเปลี่ยนรหัสผ่านในเมนูบัญชีของคุณ เพื่อความปลอดภัย',5000)
+    },1500)
+  }
 }
 
 async function registerUser(){
@@ -4098,7 +4143,8 @@ async function registerUser(){
   const err=document.getElementById('auth-error')
   const pdpaConsent=document.getElementById('auth-pdpa-consent')?.checked
   if(!email||!password){err.textContent='กรุณากรอก Email และรหัสผ่าน';return}
-  if(password.length<6){err.textContent='รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';return}
+  if(password.length<8){err.textContent='รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';return}
+  if(!/\d/.test(password)){err.textContent='รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว';return}
   if(password!==password2){err.textContent='รหัสผ่านไม่ตรงกัน';return}
   if(!pdpaConsent){err.textContent='กรุณายืนยันความยินยอม PDPA ก่อนสมัครสมาชิก';return}
   btn.disabled=true;btn.textContent='กำลังสมัคร...'
@@ -4251,7 +4297,8 @@ async function resetPassword(){
   const password2=document.getElementById('auth-password2')?.value||''
   const btn=document.getElementById('auth-btn')
   const err=document.getElementById('auth-error')
-  if(password.length<6){err.textContent='รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';return}
+  if(password.length<8){err.textContent='รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';return}
+  if(!/\d/.test(password)){err.textContent='รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว';return}
   if(password!==password2){err.textContent='รหัสผ่านไม่ตรงกัน';return}
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   const{error}=await sb.auth.updateUser({password})
