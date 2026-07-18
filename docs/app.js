@@ -504,7 +504,13 @@ function setTLF(f){
   renderTLList()
 }
 async function loadDoctorAppts(){
-  const{data,error}=await sb.from('doctor_appointments').select('*').order('appoint_date')
+  let q=sb.from('doctor_appointments').select('*').order('appoint_date')
+  // อสม. เห็นเฉพาะนัดหมายของผู้ป่วยในหมู่บ้านที่รับผิดชอบ
+  if(currentRole==='aosomo'&&currentVillage){
+    const ids=allPatients.filter(p=>p.village===currentVillage).map(p=>p.id)
+    if(ids.length>0)q=q.in('patient_id',ids);else{window._doctorAppts=[];return}
+  }
+  const{data,error}=await q
   if(error){console.error('loadDoctorAppts error:',error);window._doctorAppts=[];return}
   window._doctorAppts=(data||[]).map(a=>{
     const p=allPatients.find(x=>x.id===a.patient_id)||{}
@@ -553,7 +559,7 @@ function renderTLList(){
     else if(f==='week') appts=appts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=7})
     else if(f==='month') appts=appts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=30})
     else appts=appts.filter(a=>a.status!=='done')
-    appts.sort((a,b)=>a.appoint_date.localeCompare(b.appoint_date))
+    appts.sort((a,b)=>(a.appoint_date||'').localeCompare(b.appoint_date||''))
     if(!appts.length){el.innerHTML='<div class="empty"><p>ไม่มีข้อมูลในช่วงนี้</p></div>';return}
     const groups={}
     for(const a of appts){const k=a.appoint_date;if(!groups[k])groups[k]=[];groups[k].push(a)}
@@ -680,10 +686,12 @@ async function renderOverview(el) {
   const visitSoonCnt=pts.filter(p=>{if(!p.next_visit_date)return false;const d=Math.round((new Date(p.next_visit_date+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000);return d>0&&d<=7}).length
   const visitOkCnt=pts.filter(p=>{if(!p.next_visit_date)return false;return Math.round((new Date(p.next_visit_date+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000)>7}).length
 
+  // จำกัดข้อมูล overview ให้ตรงหมู่บ้านของ อสม.
+  const _ovVf=(q)=>currentRole==='aosomo'&&currentVillage?q.eq('village',currentVillage):q
   const [trendsData,allVisitsData,{data:tmvRaw},{data:arvRaw}]=await Promise.all([
     getTrend(),getVisits(),
-    sb.from('home_visits').select('patient_name,visit_type,refer,assessment_json,visitor,village').gte('visit_date',monthStart).lt('visit_date',monthEnd),
-    sb.from('home_visits').select('visit_date,visit_type,refer,assessment_json').gte('visit_date',sixAgo).order('visit_date',{ascending:true})
+    _ovVf(sb.from('home_visits').select('patient_name,visit_type,refer,assessment_json,visitor,village').gte('visit_date',monthStart).lt('visit_date',monthEnd)),
+    _ovVf(sb.from('home_visits').select('visit_date,visit_type,refer,assessment_json').gte('visit_date',sixAgo).order('visit_date',{ascending:true}))
   ])
   const tmv=tmvRaw||[],arv=arvRaw||[],trends=trendsData,visits=allVisitsData
 
@@ -2745,6 +2753,8 @@ async function openModal(id){
   try{
     const{data:p}=await sb.from('patient_status').select('*').eq('id',id).single()
     if(!p)throw new Error('ไม่พบผู้ป่วย')
+    // ตรวจสิทธิ์: อสม. เข้าถึงได้เฉพาะหมู่บ้านที่รับผิดชอบ
+    if(currentRole==='aosomo'&&currentVillage&&p.village!==currentVillage)throw new Error('ไม่มีสิทธิ์เข้าถึงข้อมูลผู้ป่วยหมู่อื่น')
     auditLog('view_patient','patient',id,{name:p.name,village:p.village})
     const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date').eq('id',id).single()
     p.photo_urls=pExtra?.photo_urls||[]
@@ -4096,31 +4106,21 @@ function hideAuthWall(){
 
 // Server-side login lockout (ISO 27001:2022 A.8.5) — stored in Supabase login_lockouts table
 async function _checkLoginLock(email){
-  try{
-    const{data}=await sb.from('login_lockouts').select('*').eq('email',email.toLowerCase()).maybeSingle()
-    if(!data)return null
-    if(data.locked_until&&new Date(data.locked_until)>new Date()){
-      const mins=Math.ceil((new Date(data.locked_until)-new Date())/60000)
-      return`ล็อกบัญชีชั่วคราว กรุณารอ ${mins} นาที (พยายามผิด ${data.attempt_count} ครั้ง) — ติดต่อผู้ดูแลระบบเพื่อปลดล็อก`
-    }
-  }catch(e){}
+  const{data,error}=await sb.from('login_lockouts').select('*').eq('email',email.toLowerCase()).maybeSingle()
+  // fail-closed: ถ้า DB error ให้บล็อกการล็อกอินไว้ก่อน เพื่อป้องกัน bypass
+  if(error)return'ระบบตรวจสอบชั่วคราวไม่พร้อมใช้งาน กรุณาลองใหม่อีกครั้ง'
+  if(!data)return null
+  if(data.locked_until&&new Date(data.locked_until)>new Date()){
+    const mins=Math.ceil((new Date(data.locked_until)-new Date())/60000)
+    return`ล็อกบัญชีชั่วคราว กรุณารอ ${mins} นาที (พยายามผิด ${data.attempt_count} ครั้ง) — ติดต่อผู้ดูแลระบบเพื่อปลดล็อก`
+  }
   return null
 }
 async function _recordFailedLogin(email){
-  try{
-    const{data}=await sb.from('login_lockouts').select('attempt_count').eq('email',email.toLowerCase()).maybeSingle()
-    const count=(data?.attempt_count||0)+1
-    const lockedUntil=count>=5?new Date(Date.now()+15*60*1000).toISOString():null
-    await sb.from('login_lockouts').upsert({
-      email:email.toLowerCase(),
-      attempt_count:count,
-      locked_until:lockedUntil,
-      last_attempt:new Date().toISOString(),
-      unlocked_by:null,
-      unlocked_at:null
-    },{onConflict:'email'})
-    return count
-  }catch(e){return 1}
+  // ใช้ atomic SQL function เพื่อป้องกัน TOCTOU race condition
+  const{data,error}=await sb.rpc('record_failed_login',{p_email:email.toLowerCase()})
+  if(error){console.error('_recordFailedLogin error:',error);return 1}
+  return data||1
 }
 async function _clearLoginLock(email){
   try{await sb.from('login_lockouts').delete().eq('email',email.toLowerCase())}catch(e){}
