@@ -4368,7 +4368,7 @@ async function loginUser(){
   startSessionTimer()
   if(prof?.status==='pending'){hideAuthWall();showAuthWall('pending');return}
   if(prof?.status==='rejected'||prof?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
-  if(currentRole==='admin'){
+  if(currentRole==='admin'||currentRole==='staff'){
     _mfaEmail=email
     const blocked=await _handleAdminMFA()
     if(blocked)return
