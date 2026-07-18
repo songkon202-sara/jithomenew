@@ -93,6 +93,8 @@ let currentDisplayName = ''
 let currentVillage     = ''        // หมู่บ้านที่ อสม. รับผิดชอบ
 let _previewOrigRole   = null      // เก็บ role จริงของ admin ขณะ preview
 let _previewOrigVillage= null
+let _realtimeChannel   = null      // Supabase Realtime channel
+let _realtimeDebounce  = null      // debounce timer สำหรับ reload
 let _mfaFactorId       = null      // factorId สำหรับ verify
 let _mfaEnrollId       = null      // factorId สำหรับ enroll ครั้งแรก
 let _mfaEnrollData     = null      // { totp: { qr_code, secret } }
@@ -4380,6 +4382,7 @@ async function _postLoginSuccess(email=''){
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
+  setupRealtime()
   if(email.endsWith('@jithome.local')){
     setTimeout(()=>{showToast('⚠️ กรุณาเปลี่ยนรหัสผ่านในเมนูบัญชีของคุณ เพื่อความปลอดภัย',5000)},1500)
   }
@@ -4507,6 +4510,7 @@ async function registerAosomo(){
 async function logoutUser(){
   await auditLog('logout','auth',currentUser?.id)
   if(_sessionTimer){clearInterval(_sessionTimer);_sessionTimer=null}
+  teardownRealtime()
   document.getElementById('session-warn-toast')?.remove()
   await sb.auth.signOut()
   currentUser=null;currentRole='viewer'
@@ -4761,6 +4765,42 @@ async function saveNewPatient(){
     const msg=e.message?.includes('duplicate')||e.message?.includes('unique')?'มีชื่อนี้ในระบบแล้ว':e.message
     btn.textContent='❌ '+msg;btn.disabled=false
   }
+}
+
+// ─── Realtime ────────────────────────────────────────────────────
+function setupRealtime(){
+  if(_realtimeChannel)return
+  _realtimeChannel=sb.channel('jithome-realtime')
+    .on('postgres_changes',{event:'*',schema:'public',table:'patients'},_onRealtimeChange)
+    .on('postgres_changes',{event:'*',schema:'public',table:'home_visits'},_onRealtimeChange)
+    .on('postgres_changes',{event:'*',schema:'public',table:'injection_records'},_onRealtimeChange)
+    .on('postgres_changes',{event:'*',schema:'public',table:'doctor_appointments'},_onRealtimeChange)
+    .subscribe()
+}
+
+function teardownRealtime(){
+  if(_realtimeChannel){sb.removeChannel(_realtimeChannel);_realtimeChannel=null}
+  if(_realtimeDebounce){clearTimeout(_realtimeDebounce);_realtimeDebounce=null}
+}
+
+function _onRealtimeChange(payload){
+  if(payload.commit_timestamp){
+    const sec=Math.abs(Date.now()-new Date(payload.commit_timestamp).getTime())/1000
+    if(sec<3)return  // เป็น event ของตัวเองที่เพิ่งบันทึก
+  }
+  clearTimeout(_realtimeDebounce)
+  _realtimeDebounce=setTimeout(async()=>{
+    const page=(location.hash||'').slice(1)||'dashboard'
+    allPatients=await getPatients()
+    const el=document.getElementById('page-content')
+    if(!el)return
+    if(page==='dashboard')renderDashboard(el)
+    else if(page==='patients')renderPatients(el)
+    else if(page==='timeline')renderTimeline(el)
+    else if(page==='overview')renderOverview(el)
+    else if(page==='visit')renderVisit(el)
+    showToast('🔄 ข้อมูลอัปเดตแล้ว',2000)
+  },800)
 }
 
 // ─── Init ────────────────────────────────────────────────────────
