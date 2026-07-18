@@ -1830,6 +1830,11 @@ async function renderAdmin(el) {
         <button onclick="testTelegram()" id="tg-test-btn" style="flex:1;padding:7px;background:#fff;color:#0088cc;border:1.5px solid #0088cc;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📨 ทดสอบส่ง</button>
       </div>
       <div id="tg-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:6px">📣 ส่งรายงานผู้เกินนัดและนัดพรุ่งนี้ไปยัง Telegram ทันที (ไม่ต้องรอ 07:00 น.)</div>
+        <button onclick="sendTelegramReport()" id="tg-report-btn" style="width:100%;padding:9px;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;letter-spacing:.3px">📣 ส่งรายงาน Telegram ตอนนี้</button>
+        <div id="tg-report-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
+      </div>
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -2469,6 +2474,27 @@ async function testTelegram(){
   }catch(e){
     status.style.color='var(--red)';status.textContent='❌ '+e.message
     btn.textContent='📨 ทดสอบส่ง'
+  }
+  btn.disabled=false
+}
+
+async function sendTelegramReport(){
+  const btn=document.getElementById('tg-report-btn')
+  const status=document.getElementById('tg-report-status')
+  if(!btn||!status)return
+  btn.disabled=true;btn.textContent='กำลังส่ง...'
+  status.style.color='var(--text3)';status.textContent='กำลังส่งรายงาน...'
+  try{
+    const{data,error}=await sb.rpc('send_overdue_notification')
+    if(error)throw new Error(error.message)
+    status.style.color='var(--green)'
+    status.textContent='✅ ส่งรายงานสำเร็จ! ตรวจสอบกลุ่ม Telegram ได้เลย'
+    btn.textContent='✅ ส่งสำเร็จ'
+    setTimeout(()=>{btn.textContent='📣 ส่งรายงาน Telegram ตอนนี้';btn.disabled=false},3000)
+    return
+  }catch(e){
+    status.style.color='var(--red)';status.textContent='❌ '+e.message
+    btn.textContent='📣 ส่งรายงาน Telegram ตอนนี้'
   }
   btn.disabled=false
 }
