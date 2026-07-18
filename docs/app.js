@@ -596,7 +596,7 @@ function filterDaPatients(){
   const sel=document.getElementById('da-patient')
   if(!sel)return
   const cur=sel.value
-  const filtered=allPatients.filter(p=>(!village||p.village===village)&&(!search||p.name.toLowerCase().includes(search)))
+  const filtered=allPatients.filter(p=>(!village||p.village===village)&&(!search||(p.name||'').toLowerCase().includes(search)))
   sel.innerHTML=`<option value="">-- เลือกผู้ป่วย --</option>`+filtered.map(p=>`<option value="${p.id}"${String(p.id)===String(cur)?' selected':''}>${esc(p.name)} — ${esc(p.village||'')}</option>`).join('')
 }
 function openDoctorApptForm(id=null){
