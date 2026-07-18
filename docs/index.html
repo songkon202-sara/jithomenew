@@ -4,6 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>JitHome — ระบบติดตามผู้ป่วยจิตเวช</title>
+  <script src="https://js.sentry-cdn.com/a7d7d545abbbb28db5404f1d1cd191c4.min.js" crossorigin="anonymous"></script>
+  <script>
+    Sentry.onLoad(function(){
+      Sentry.init({
+        environment:'production',
+        release:'jithome@20260718',
+        beforeSend:function(event){
+          if(event.user){delete event.user.email;delete event.user.username;delete event.user.ip_address}
+          return event
+        }
+      })
+    })
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
