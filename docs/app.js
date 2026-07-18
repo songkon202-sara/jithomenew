@@ -185,6 +185,10 @@ function parseGroupColor(g) {
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
+// สำหรับค่าที่ใส่ใน single-quoted JS string ภายใน HTML attribute เช่น onclick="func('${jsStr(val)}')"
+function jsStr(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\/g,'\\\\').replace(/'/g,"\\'")
+}
 function showToast(msg,duration=2500){
   document.getElementById('_toast')?.remove()
   const t=document.createElement('div');t.id='_toast'
@@ -411,7 +415,7 @@ function renderPatients(el) {
   </div>
   <div class="filter-row">
     <button class="filter-chip active" data-vf="all" onclick="setVF('all')">ทุกหมู่บ้าน</button>
-    ${villages.map(v=>`<button class="filter-chip" data-vf="${esc(v)}" onclick="setVF('${esc(v)}')">${esc(v)}</button>`).join('')}
+    ${villages.map(v=>`<button class="filter-chip" data-vf="${esc(v)}" onclick="setVF('${jsStr(v)}')">${esc(v)}</button>`).join('')}
   </div>
   <div id="pt-list"></div>
   </div>`
@@ -1029,7 +1033,7 @@ async function renderVisit(el) {
             <div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(r.village||'')} · อสม.${esc(r.visitor||'')} · ${r.visit_date||''}</div>
             ${r.note?`<div style="font-size:11px;color:#b91c1c;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.note.split('\n')[0])}</div>`:''}
           </div>
-          <button onclick="openVisitFormFor('${esc(r.patient_name)}','${esc(r.village||'')}')"
+          <button onclick="openVisitFormFor('${jsStr(r.patient_name)}','${jsStr(r.village||'')}')"
             style="flex-shrink:0;padding:7px 12px;background:#b91c1c;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
             🏥 ลงเยี่ยม
           </button>
@@ -1074,7 +1078,7 @@ async function renderVisit(el) {
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
               <span style="background:${bg};color:${clr};padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700">${lbl}</span>
-              <button onclick="openVisitFormFor('${esc(p.name)}','${esc(p.village||'')}')" style="padding:5px 12px;background:var(--primary);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🏡 เยี่ยม</button>
+              <button onclick="openVisitFormFor('${jsStr(p.name)}','${jsStr(p.village||'')}')" style="padding:5px 12px;background:var(--primary);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🏡 เยี่ยม</button>
             </div>
           </div>`
         }).join('')}
@@ -1189,7 +1193,7 @@ function renderVisitList(visits){
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
           <span style="background:${bg};color:${clr};padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700">${lbl}</span>
           ${canEdit?`<button onclick="openEditVisit(${v.id})" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>`:''}
-          ${canDo('admin')?`<button onclick="deleteVisit(${v.id},'${esc(v.patient_name)}')" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>`:''}
+          ${canDo('admin')?`<button onclick="deleteVisit(${v.id},'${jsStr(v.patient_name)}')" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>`:''}
         </div>
       </div>
       <div style="font-size:12px;color:var(--text2)">${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'} ${esc(v.visitor||'')}${v.refer?` <span style="color:#b91c1c;font-weight:700">⚠️ ส่งต่อ</span>`:''}</div>
@@ -1220,6 +1224,7 @@ function verifyVisit(id){
   if(form)form.style.display=form.style.display==='none'?'block':'none'
 }
 async function submitVerify(id){
+  if(!canDo('record')){alert('🔒 เฉพาะเจ้าหน้าที่เท่านั้น');return}
   const result=document.querySelector(`input[name="vr-${id}"]:checked`)?.value||'pass'
   const note=(document.getElementById('vn-'+id)?.value||'').trim()
   const verifier=currentDisplayName||currentRole
@@ -1873,6 +1878,7 @@ async function renderAdmin(el) {
 }
 
 async function createAosomoAccount(){
+  if(!canDo('admin')){alert('🔒 ไม่มีสิทธิ์สร้างบัญชี');return}
   const name=(document.getElementById('ca-name')?.value||'').trim()
   const phone=(document.getElementById('ca-phone')?.value||'').replace(/\D/g,'')
   const nid=(document.getElementById('ca-nid')?.value||'').replace(/\D/g,'')
@@ -1930,7 +1936,7 @@ function memberCard(p,showVillage=false){
   <div data-member-id="${p.id}" style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid ${isLocked?'#fca5a5':'var(--border)'}">
     ${isLocked?`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
       <div style="font-size:12px;color:#dc2626;font-weight:700">🔒 บัญชีถูกล็อก — เหลือ ${lockMins} นาที (ผิด ${lockInfo.attempt_count} ครั้ง)</div>
-      ${canDo('admin')?`<button onclick="adminUnlockAccount('${esc(p.email)}')" style="padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🔓 ปลดล็อก</button>`:''}
+      ${canDo('admin')?`<button onclick="adminUnlockAccount('${jsStr(p.email)}')" style="padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🔓 ปลดล็อก</button>`:''}
     </div>`:''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
@@ -1938,18 +1944,19 @@ function memberCard(p,showVillage=false){
         <div style="min-width:0;flex:1">
           <div style="display:flex;align-items:center;gap:6px">
             <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
-            ${canEdit?`<button onclick="editMemberName('${p.id}','${esc(p.display_name||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
+            ${canEdit?`<button onclick="editMemberName('${p.id}','${jsStr(p.display_name||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
           </div>
           <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
           ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace;margin-top:1px">🪪 ${maskNationalId(p.national_id)}</div>`:''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-      ${isSelf?`<span style="font-size:10px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">(คุณ)</span>`:`
+      ${isSelf?`<span style="font-size:10px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">(คุณ)</span>`:canDo('admin')?`
       <select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
         ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
       </select>
-      ${canDo('admin')?`<button onclick="deleteMember('${p.id}','${esc(p.display_name||p.email)}')" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:''}`}
+      <button onclick="deleteMember('${p.id}','${jsStr(p.display_name||p.email)}')" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:`
+      <span style="font-size:11px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">${ROLE_LABEL[p.role]||p.role}</span>`}
       </div>
     </div>
     ${showVillage&&!isSelf?`
@@ -2261,6 +2268,7 @@ async function deleteStaffDirectory(id){
 }
 
 async function changeMemberRole(userId,role){
+  if(!canDo('admin')){alert('🔒 ไม่มีสิทธิ์เปลี่ยน role');return}
   const{error}=await sb.from('user_profiles').update({role}).eq('id',userId)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
   auditLog('member_role_changed','user_profile',userId,{new_role:role,by:currentDisplayName||currentRole})
@@ -2771,7 +2779,7 @@ async function openModal(id){
         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
           <div class="history-date">${esc(h.date_th)} ${badge}</div>
           ${canDo('record')?`<div style="display:flex;gap:2px">
-            <button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${esc(h.interval_str||'')}','${esc(h.note||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="แก้ไข">✏️</button>
+            <button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${jsStr(h.interval_str||'')}','${jsStr(h.note||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="แก้ไข">✏️</button>
             <button onclick="deleteRecord(${h.id},${p.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="ลบรายการนี้">🗑️</button>
           </div>`:''}
         </div>
@@ -2798,7 +2806,7 @@ async function openModal(id){
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')}${p.house_no?` · 🏠 ${esc(p.house_no)}`:''} · ${esc(hospitalName)}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
-        ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${esc(p.name)}','${esc(p.village||'')}','${esc(p.house_no||'')}','${esc(p.note||'')}','${esc(p.staff_responsible||'')}','${esc(p.aosomo_responsible||'')}','${esc(p.national_id||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
+        ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${jsStr(p.name)}','${jsStr(p.village||'')}','${jsStr(p.house_no||'')}','${jsStr(p.note||'')}','${jsStr(p.staff_responsible||'')}','${jsStr(p.aosomo_responsible||'')}','${jsStr(p.national_id||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
         <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>
@@ -2852,7 +2860,7 @@ async function openModal(id){
         <button class="btn btn-primary" style="flex:1" id="edit-pt-save-btn" onclick="saveEditPatient(${p.id})">บันทึกการแก้ไข</button>
         <button class="btn btn-outline" onclick="closeEditPatient()">ยกเลิก</button>
       </div>
-      ${canDo('admin')?`<button onclick="deletePatient(${p.id},'${esc(p.name)}')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🗑️ ลบผู้ป่วยรายนี้ออกจากระบบ</button>`:''}
+      ${canDo('admin')?`<button onclick="deletePatient(${p.id},'${jsStr(p.name)}')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🗑️ ลบผู้ป่วยรายนี้ออกจากระบบ</button>`:''}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
       <span class="badge ${p.group_color}"><span class="badge-dot"></span>${esc(p.group_label)}</span>
