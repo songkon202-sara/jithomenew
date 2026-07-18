@@ -95,6 +95,7 @@ let _previewOrigRole   = null      // เก็บ role จริงของ ad
 let _previewOrigVillage= null
 let _realtimeChannel   = null      // Supabase Realtime channel
 let _realtimeDebounce  = null      // debounce timer สำหรับ reload
+const _ownWriteIds     = new Set() // IDs ที่ client นี้เพิ่งเขียน (กรองไม่ให้ reload ซ้ำ)
 let _mfaFactorId       = null      // factorId สำหรับ verify
 let _mfaEnrollId       = null      // factorId สำหรับ enroll ครั้งแรก
 let _mfaEnrollData     = null      // { totp: { qr_code, secret } }
@@ -648,8 +649,9 @@ async function saveDoctorAppt(id){
   if(!pid){alert('กรุณาเลือกผู้ป่วย');return}
   if(!date){alert('กรุณาเลือกวันนัด');return}
   const payload={patient_id:pid,appoint_date:date,appoint_type:document.getElementById('da-type')?.value||'medicine',hospital:document.getElementById('da-hospital')?.value||'รพ.โพธิ์ไทร',doctor_name:document.getElementById('da-doctor')?.value||null,note:document.getElementById('da-note')?.value||null,status:document.getElementById('da-status')?.value||'scheduled',created_by:currentDisplayName||currentRole}
-  const{error}=id?await sb.from('doctor_appointments').update(payload).eq('id',id):await sb.from('doctor_appointments').insert(payload)
+  const{data:savedAppt,error}=id?await sb.from('doctor_appointments').update(payload).eq('id',id).select('id').single():await sb.from('doctor_appointments').insert(payload).select('id').single()
   if(error){alert('❌ บันทึกไม่สำเร็จ: '+error.message);return}
+  _markOwnWrite(id||savedAppt?.id)
   closeDoctorApptModal()
   showToast('✅ บันทึกนัดพบแพทย์สำเร็จ')
   await loadDoctorAppts()
@@ -1324,6 +1326,7 @@ async function saveEditVisit(id){
   }
   const{error}=await sb.from('home_visits').update(updates).eq('id',id)
   if(error){btn.textContent='❌ '+error.message;btn.disabled=false;return}
+  _markOwnWrite(id)
   closeVisitModal()
   if(location.hash==='#visit')navigate('visit')
 }
@@ -1619,6 +1622,7 @@ function updatePreviewHeader(){
 }
 
 async function renderAdmin(el) {
+  if(!canDo('admin')){el.innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--text3)">🔒 เฉพาะผู้ดูแลระบบเท่านั้น</div>';return}
   const settings=await getSettings()
   hospitalName=settings.hospital_name||hospitalName
   const pts=allPatients
@@ -2506,7 +2510,7 @@ async function generateMonthlyReport(){
   const aosomoVisits=(visits||[]).filter(v=>v.visit_type==='aosomo')
   const refers=(visits||[]).filter(v=>v.refer)
   const villageRows=Object.entries(byVillage).sort((a,b)=>a[0].localeCompare(b[0],undefined,{numeric:true}))
-    .map(([v,n])=>`<tr><td>${v}</td><td style="text-align:center">${n}</td></tr>`).join('')
+    .map(([v,n])=>`<tr><td>${esc(v)}</td><td style="text-align:center">${n}</td></tr>`).join('')
   const overdueRows=overdue.slice(0,20).map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.village||'')}</td><td style="text-align:center;color:#b91c1c">${Math.abs(parseInt(p.days_until||0))} วัน</td></tr>`).join('')
   const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
   <title>รายงานสรุป ${monthLabel}</title>
@@ -2548,6 +2552,7 @@ async function generateMonthlyReport(){
   <div style="margin-top:20px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px">พิมพ์โดย: ${esc(currentDisplayName)} · ${new Date().toLocaleString('th-TH')} · JitHome</div>
   </body></html>`
   const w=window.open('','_blank','width=800,height=700')
+  if(!w){showToast('❌ กรุณาอนุญาต Popup สำหรับไซต์นี้ แล้วลองใหม่',4000);return}
   w.document.write(html)
   w.document.close()
 }
@@ -2585,7 +2590,8 @@ async function showPatientTimeline(id,name){
       </div>
     </div>`}).join('')
   const w=window.open('','_blank','width=480,height=700')
-  w.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>Timeline — ${name}</title>
+  if(!w){showToast('❌ กรุณาอนุญาต Popup สำหรับไซต์นี้ แล้วลองใหม่',4000);return}
+  w.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>Timeline — ${esc(name)}</title>
   <style>body{font-family:'Sarabun',sans-serif;margin:0;padding:20px;background:#f9fafb;color:#111}
   h2{font-size:16px;font-weight:800;margin:0 0 4px;color:#0a7ea4}
   @media print{.no-print{display:none}}</style>
@@ -2760,8 +2766,10 @@ async function saveAdminRecord(){
     if(!found)throw new Error('ไม่พบผู้ป่วย')
     await sb.from('patients').update({village}).eq('id',found.id)
     const record_type=document.querySelector('input[name="adm-type"]:checked')?.value||'injection'
-    const{error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str,interval_days,note,record_type})
+    const{data:newRec,error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str,interval_days,note,record_type}).select('id').single()
     if(error)throw error
+    _markOwnWrite(found.id)
+    if(newRec)_markOwnWrite(newRec.id)
     btn.textContent='✅ บันทึกสำเร็จ'
     document.getElementById('adm-name').value=''
     document.getElementById('adm-note').value=''
@@ -3148,6 +3156,7 @@ async function saveEditRecord(id,patientId){
     const{data:rec}=await sb.from('injection_records').select('group_color,group_label,record_type').eq('id',id).single()
     const{error}=await sb.from('injection_records').update({injection_date:date,interval_str,interval_days,note}).eq('id',id)
     if(error)throw error
+    _markOwnWrite(id)
     if(nextDate&&nextDate>date){
       if(rec?.record_type==='visit'){
         await sb.from('patients').update({next_visit_date:nextDate}).eq('id',patientId)
@@ -3346,6 +3355,7 @@ async function saveEditPatient(id){
     }
     const{error}=await sb.from('patients').update(updates).eq('id',id)
     if(error)throw error
+    _markOwnWrite(id)
     auditLog('edit_patient','patient',id,{name:updates.name})
     allPatients=await getPatients()
     await openModal(id)
@@ -3392,8 +3402,10 @@ async function saveModalRecord(pid,gc){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const record_type=window._modalRecType||'injection'
-    const{error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type})
+    const{data:newRec2,error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type}).select('id').single()
     if(error)throw error
+    _markOwnWrite(pid)
+    if(newRec2)_markOwnWrite(newRec2.id)
     // ถ้ามีวันนัดถัดไป
     if(nextDate&&nextDate>date){
       if(record_type==='visit'){
@@ -4097,8 +4109,9 @@ async function saveVisitRecord(){
   }
   try{
     const assessment_json=getMHAssessJSON()
-    const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer,photo_url:photoUrl,assessment_json})
+    const{data:savedVisit,error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer,photo_url:photoUrl,assessment_json}).select('id').single()
     if(error)throw error
+    if(savedVisit)_markOwnWrite(savedVisit.id)
     auditLog('save_visit','visit',found?.id||null,{patient_name:name,visit_type:_visitType,refer})
     sendLineVisitReport({patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,score:_visitChecks.length,refer})
     if(refer&&_visitType==='staff'){
@@ -4367,7 +4380,6 @@ async function loginUser(){
   const prof=await loadProfile(data.user)
   await updateLastLogin(data.user.id)
   auditLog('login','auth',data.user.id,{email:data.user.email})
-  startSessionTimer()
   if(prof?.status==='pending'){hideAuthWall();showAuthWall('pending');return}
   if(prof?.status==='rejected'||prof?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
   if(currentRole==='admin'||currentRole==='staff'){
@@ -4379,6 +4391,8 @@ async function loginUser(){
 }
 
 async function _postLoginSuccess(email=''){
+  _mfaEmail=''
+  startSessionTimer()
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
@@ -4390,15 +4404,27 @@ async function _postLoginSuccess(email=''){
 
 async function _handleAdminMFA(){
   const{data,error}=await sb.auth.mfa.listFactors()
-  if(error){console.error('MFA listFactors:',error);return false}
+  if(error){
+    console.error('MFA listFactors:',error)
+    await sb.auth.signOut()
+    showAuthWall('login')
+    setTimeout(()=>{const e=document.getElementById('auth-error');if(e){e.textContent='❌ ระบบตรวจสอบ 2FA ไม่พร้อม กรุณาลองใหม่'}},100)
+    return true
+  }
   const verified=(data?.totp||[]).filter(f=>f.status==='verified')
   if(verified.length>0){
     _mfaFactorId=verified[0].id
     showAuthWall('mfa_verify')
     return true
   }
-  const{data:enroll,error:eErr}=await sb.auth.mfa.enroll({factorType:'totp',issuer:'JitHome',friendlyName:'JitHome Admin'})
-  if(eErr){console.error('MFA enroll:',eErr);return false}
+  const{data:enroll,error:eErr}=await sb.auth.mfa.enroll({factorType:'totp',issuer:'JitHome',friendlyName:'JitHome'})
+  if(eErr){
+    console.error('MFA enroll:',eErr)
+    await sb.auth.signOut()
+    showAuthWall('login')
+    setTimeout(()=>{const e=document.getElementById('auth-error');if(e){e.textContent='❌ ไม่สามารถตั้งค่า 2FA กรุณาติดต่อผู้ดูแลระบบ'}},100)
+    return true
+  }
   _mfaEnrollId=enroll.id
   _mfaEnrollData=enroll
   showAuthWall('mfa_enroll')
@@ -4747,16 +4773,15 @@ async function saveNewPatient(){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const house_no=(document.getElementById('np-house-no')?.value||'').trim()
-    const{error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date})
+    const{data:newPt,error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date}).select('id').single()
     if(pe){
       if(pe.message?.includes('unique'))throw new Error(`ชื่อ "${name}" มีในระบบแล้ว กรุณาใช้ชื่ออื่น`)
       throw pe
     }
-    if(date){
-      const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
-      if(found){
-        await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note})
-      }
+    if(newPt)_markOwnWrite(newPt.id)
+    if(date&&newPt){
+      const{data:newRec3}=await sb.from('injection_records').insert({patient_id:newPt.id,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note}).select('id').single()
+      if(newRec3)_markOwnWrite(newRec3.id)
     }
     btn.textContent='✅ บันทึกสำเร็จ'
     allPatients=await getPatients()
@@ -4783,11 +4808,14 @@ function teardownRealtime(){
   if(_realtimeDebounce){clearTimeout(_realtimeDebounce);_realtimeDebounce=null}
 }
 
+function _markOwnWrite(id){
+  _ownWriteIds.add(String(id))
+  setTimeout(()=>_ownWriteIds.delete(String(id)),5000)
+}
+
 function _onRealtimeChange(payload){
-  if(payload.commit_timestamp){
-    const sec=Math.abs(Date.now()-new Date(payload.commit_timestamp).getTime())/1000
-    if(sec<3)return  // เป็น event ของตัวเองที่เพิ่งบันทึก
-  }
+  const changedId=String(payload.new?.id||payload.old?.id||'')
+  if(changedId&&_ownWriteIds.has(changedId))return
   clearTimeout(_realtimeDebounce)
   _realtimeDebounce=setTimeout(async()=>{
     const page=(location.hash||'').slice(1)||'dashboard'
@@ -4845,11 +4873,19 @@ async function init(){
   currentUser=user
   const profile=await loadProfile(user)
   await updateLastLogin(user.id)
-  startSessionTimer()
   if(profile?.status==='pending'){showAuthWall('pending');return}
   if(profile?.status==='rejected'||profile?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
+  if(currentRole==='admin'||currentRole==='staff'){
+    const{data:aalData}=await sb.auth.mfa.getAuthenticatorAssuranceLevel()
+    if(aalData?.currentLevel!=='aal2'){
+      const blocked=await _handleAdminMFA()
+      if(blocked)return
+    }
+  }
+  startSessionTimer()
   updateUserUI()
   await loadAndNav()
+  setupRealtime()
 }
 
 window.addEventListener('hashchange',()=>{const p=(location.hash||'').slice(1);if(PAGES.includes(p))navigate(p)})

@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>JitHome — ระบบติดตามผู้ป่วยจิตเวช</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#0a7ea4">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="JitHome">
   <script src="https://js.sentry-cdn.com/a7d7d545abbbb28db5404f1d1cd191c4.min.js" crossorigin="anonymous"></script>
   <script>
     Sentry.onLoad(function(){
@@ -191,6 +197,14 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js"></script>
-<script src="app.js?v=20260718i"></script>
+<script src="app.js?v=20260718k"></script>
+<script>
+  if('serviceWorker' in navigator){
+    window.addEventListener('load',()=>{
+      navigator.serviceWorker.register('/jithomenew/sw.js',{scope:'/jithomenew/'})
+        .catch(()=>{})
+    })
+  }
+</script>
 </body>
 </html>
