@@ -4120,7 +4120,7 @@ function showAuthWall(mode='login'){
       3️⃣ กรอกรหัส 6 หลักที่แสดงในแอปเพื่อยืนยัน
     </div>
     <div style="text-align:center;margin-bottom:12px">
-      ${qr?`<img src="${qr}" style="width:180px;height:180px;border:3px solid var(--border);border-radius:10px">`:'<div style="font-size:12px;color:var(--red)">ไม่สามารถโหลด QR code — กรุณา refresh</div>'}
+      <img id="mfa-qr-img" style="width:180px;height:180px;border:3px solid var(--border);border-radius:10px" alt="QR Code">
     </div>
     ${secret?`<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:12px">
       <div style="font-size:10px;color:var(--text3);margin-bottom:4px">รหัส Manual Entry (กรณีสแกนไม่ได้)</div>
@@ -4136,6 +4136,8 @@ function showAuthWall(mode='login'){
     <div id="mfa-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
     <button class="btn btn-primary btn-block" id="mfa-enroll-btn" onclick="mfaEnrollConfirm()">ยืนยันและเปิดใช้ 2FA</button>
     <div style="text-align:center;margin-top:12px;font-size:12px"><a href="#" onclick="logoutUser();return false" style="color:var(--text3)">← ยกเลิกและออกจากระบบ</a></div>`
+    const _qrImg=document.getElementById('mfa-qr-img')
+    if(_qrImg&&_mfaEnrollData?.totp?.qr_code)_qrImg.src=_mfaEnrollData.totp.qr_code
     setTimeout(()=>document.getElementById('mfa-otp')?.focus(),100)
   } else if(mode==='submitted'){
     ct.innerHTML=`
