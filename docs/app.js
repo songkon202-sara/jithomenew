@@ -1695,6 +1695,9 @@ async function renderAdmin(el) {
     <div style="display:flex;gap:8px;margin-top:10px">
       ${[['สีแดง',rc,'var(--red)'],['สีเหลือง',yc,'var(--yellow)'],['สีเขียว',gc,'var(--green)']].map(([l,n,c])=>`<div style="flex:1;background:var(--bg);border-radius:8px;padding:8px;text-align:center"><div style="width:10px;height:10px;border-radius:50%;background:${c};margin:0 auto 4px"></div><div style="font-size:16px;font-weight:700;color:${c}">${n}</div><div style="font-size:10px;color:var(--text3)">${l}</div></div>`).join('')}
     </div>
+    <button onclick="generateMonthlyReport()" style="width:100%;margin-top:12px;padding:10px;background:linear-gradient(135deg,#0a7ea4,#0369a1);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span>📄</span><span>พิมพ์รายงานสรุปรายเดือน</span>
+    </button>
   </div>
   <div class="form-section">
     <h3>📋 บันทึกนัดหมาย</h3>
@@ -2482,6 +2485,119 @@ async function testTelegram(){
   btn.disabled=false
 }
 
+async function generateMonthlyReport(){
+  const now=new Date()
+  const y=now.getFullYear(),m=now.getMonth()
+  const monthStart=new Date(y,m,1).toISOString().split('T')[0]
+  const monthEnd=new Date(y,m+1,1).toISOString().split('T')[0]
+  const thMonth=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
+  const monthLabel=`${thMonth[m]} ${y+543}`
+  const[{data:visits},{data:docAppts}]=await Promise.all([
+    sb.from('home_visits').select('visit_type,village,refer,refer_resolved,visitor').gte('visit_date',monthStart).lt('visit_date',monthEnd),
+    sb.from('doctor_appointments').select('patient_id,appoint_date,status').gte('appoint_date',monthStart).lt('appoint_date',monthEnd)
+  ])
+  const pts=allPatients
+  const overdue=pts.filter(p=>parseInt(p.days_until)<0)
+  const byVillage={}
+  pts.forEach(p=>{byVillage[p.village]=(byVillage[p.village]||0)+1})
+  const staffVisits=(visits||[]).filter(v=>v.visit_type==='staff')
+  const aosomoVisits=(visits||[]).filter(v=>v.visit_type==='aosomo')
+  const refers=(visits||[]).filter(v=>v.refer)
+  const villageRows=Object.entries(byVillage).sort((a,b)=>a[0].localeCompare(b[0],undefined,{numeric:true}))
+    .map(([v,n])=>`<tr><td>${v}</td><td style="text-align:center">${n}</td></tr>`).join('')
+  const overdueRows=overdue.slice(0,20).map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.village||'')}</td><td style="text-align:center;color:#b91c1c">${Math.abs(parseInt(p.days_until||0))} วัน</td></tr>`).join('')
+  const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
+  <title>รายงานสรุป ${monthLabel}</title>
+  <style>
+    body{font-family:'Sarabun',sans-serif;margin:0;padding:24px;color:#111;font-size:13px}
+    h1{font-size:20px;font-weight:800;color:#0a7ea4;margin:0 0 4px}
+    h2{font-size:14px;font-weight:700;color:#374151;margin:20px 0 8px;border-bottom:1.5px solid #e5e7eb;padding-bottom:4px}
+    table{width:100%;border-collapse:collapse;margin-bottom:8px}
+    th{background:#f3f4f6;font-weight:700;padding:6px 10px;text-align:left;font-size:12px}
+    td{padding:5px 10px;border-bottom:1px solid #f3f4f6;font-size:12px}
+    .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:8px}
+    .stat{background:#f9fafb;border-radius:8px;padding:10px;text-align:center;border:1px solid #e5e7eb}
+    .stat-n{font-size:24px;font-weight:800;color:#0a7ea4}
+    .stat-l{font-size:11px;color:#6b7280;margin-top:2px}
+    .red{color:#b91c1c}.green{color:#15803d}
+    @media print{body{padding:12px}button{display:none}}
+  </style></head><body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+    <div><h1>รายงานสรุปรายเดือน</h1><div style="color:#6b7280;font-size:12px">${esc(hospitalName)} · ประจำเดือน ${monthLabel}</div></div>
+    <button onclick="window.print()" style="padding:8px 18px;background:#0a7ea4;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🖨️ พิมพ์ / บันทึก PDF</button>
+  </div>
+  <h2>📊 ภาพรวมผู้ป่วย</h2>
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-n">${pts.length}</div><div class="stat-l">ผู้ป่วยทั้งหมด</div></div>
+    <div class="stat"><div class="stat-n red">${overdue.length}</div><div class="stat-l">เกินนัด</div></div>
+    <div class="stat"><div class="stat-n">${staffVisits.length}</div><div class="stat-l">เยี่ยมบ้าน (เจ้าหน้าที่)</div></div>
+    <div class="stat"><div class="stat-n">${aosomoVisits.length}</div><div class="stat-l">เยี่ยมบ้าน (อสม.)</div></div>
+  </div>
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-n">${(docAppts||[]).length}</div><div class="stat-l">นัดพบแพทย์</div></div>
+    <div class="stat"><div class="stat-n red">${refers.length}</div><div class="stat-l">ส่งต่อ รพ.</div></div>
+    <div class="stat"><div class="stat-n green">${pts.filter(p=>parseInt(p.days_until||0)>=0&&parseInt(p.days_until||0)<=7).length}</div><div class="stat-l">นัดใน 7 วัน</div></div>
+    <div class="stat"><div class="stat-n">${Object.keys(byVillage).length}</div><div class="stat-l">หมู่บ้าน</div></div>
+  </div>
+  ${overdue.length?`<h2>⚠️ ผู้ป่วยเกินนัด (${overdue.length} ราย)</h2>
+  <table><tr><th>ชื่อ-นามสกุล</th><th>หมู่บ้าน</th><th style="text-align:center">เกินนัด</th></tr>${overdueRows}${overdue.length>20?`<tr><td colspan="3" style="color:#6b7280;text-align:center">...และอีก ${overdue.length-20} ราย</td></tr>`:''}</table>`:''}
+  <h2>🏘️ ผู้ป่วยแยกตามหมู่บ้าน</h2>
+  <table><tr><th>หมู่บ้าน</th><th style="text-align:center">จำนวน</th></tr>${villageRows}</table>
+  <div style="margin-top:20px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px">พิมพ์โดย: ${esc(currentDisplayName)} · ${new Date().toLocaleString('th-TH')} · JitHome</div>
+  </body></html>`
+  const w=window.open('','_blank','width=800,height=700')
+  w.document.write(html)
+  w.document.close()
+}
+
+async function showPatientTimeline(id,name){
+  const[{data:visits},{data:injRecs},{data:docAppts}]=await Promise.all([
+    sb.from('home_visits').select('visit_date,visit_type,visitor,note,refer,score,assessment_json').eq('patient_id',id).order('visit_date',{ascending:false}),
+    sb.from('injection_records').select('injection_date,interval_str,note,record_type').eq('patient_id',id).order('injection_date',{ascending:false}),
+    sb.from('doctor_appointments').select('appoint_date,appoint_type,hospital,doctor_name,note,status').eq('patient_id',id).order('appoint_date',{ascending:false})
+  ])
+  const today=todayISO()
+  const all=[
+    ...(visits||[]).map(v=>({date:v.visit_date,type:'visit',sub:v.visit_type,label:v.visit_type==='aosomo'?'🏡 เยี่ยมบ้าน อสม.':'🏠 เยี่ยมบ้าน เจ้าหน้าที่',note:v.note,extra:v.visitor?`โดย ${v.visitor}`:'',refer:v.refer,score:v.score,future:v.visit_date>today})),
+    ...(injRecs||[]).map(r=>({date:r.injection_date,type:r.record_type||'inject',label:r.record_type==='visit'?'🏡 เยี่ยมบ้าน':'💉 ฉีดยา',note:r.note,extra:r.interval_str?`นัดถัดไป: ${r.interval_str}`:'',future:r.injection_date>today})),
+    ...(docAppts||[]).map(a=>({date:a.appoint_date,type:'doctor',label:'🏥 พบแพทย์',note:a.note,extra:[a.hospital,a.doctor_name].filter(Boolean).join(' · '),future:a.appoint_date>today}))
+  ].sort((a,b)=>b.date.localeCompare(a.date))
+  const typeColor={visit:'#0d9488',aosomo:'#7c3aed',inject:'#0a7ea4',doctor:'#ea580c'}
+  const rows=all.map(r=>{
+    const c=r.type==='visit'?(r.sub==='aosomo'?typeColor.aosomo:typeColor.visit):r.type==='doctor'?typeColor.doctor:typeColor.inject
+    const dParts=r.date.split('-')
+    const dTh=dParts.length===3?`${parseInt(dParts[2])} ${['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][parseInt(dParts[1])]} ${parseInt(dParts[0])+543}`:r.date
+    return`<div style="display:flex;gap:12px;margin-bottom:12px;${r.future?'opacity:.7':''}">
+      <div style="display:flex;flex-direction:column;align-items:center">
+        <div style="width:32px;height:32px;border-radius:50%;background:${c}20;border:2px solid ${c};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${r.label.split(' ')[0]}</div>
+        <div style="width:2px;flex:1;background:#e5e7eb;margin-top:4px"></div>
+      </div>
+      <div style="flex:1;padding-bottom:8px">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:${c}">${r.label.split(' ').slice(1).join(' ')}</span>
+          ${r.future?'<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-weight:700">📅 นัดหมาย</span>':''}
+          ${r.refer?'<span style="font-size:10px;background:#fef2f2;color:#b91c1c;padding:1px 6px;border-radius:4px;font-weight:700">🏥 ส่งต่อ</span>':''}
+        </div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px">${dTh}${r.extra?` · ${esc(r.extra)}`:''}</div>
+        ${r.note?`<div style="font-size:11px;color:#374151;background:#f9fafb;border-radius:6px;padding:5px 8px;margin-top:4px;line-height:1.5">${esc(r.note.slice(0,120))}${r.note.length>120?'...':''}</div>`:''}
+      </div>
+    </div>`}).join('')
+  const w=window.open('','_blank','width=480,height=700')
+  w.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>Timeline — ${name}</title>
+  <style>body{font-family:'Sarabun',sans-serif;margin:0;padding:20px;background:#f9fafb;color:#111}
+  h2{font-size:16px;font-weight:800;margin:0 0 4px;color:#0a7ea4}
+  @media print{.no-print{display:none}}</style>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  </head><body>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h2>📅 Timeline การรักษา</h2><div style="font-size:12px;color:#6b7280">${esc(name)} · ${all.length} รายการ</div></div>
+    <button class="no-print" onclick="window.print()" style="padding:6px 14px;background:#0a7ea4;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🖨️ พิมพ์</button>
+  </div>
+  ${all.length?rows:'<div style="text-align:center;padding:40px;color:#9ca3af">ยังไม่มีประวัติการรักษา</div>'}
+  </body></html>`)
+  w.document.close()
+}
+
 async function sendTelegramReport(){
   const btn=document.getElementById('tg-report-btn')
   const status=document.getElementById('tg-report-status')
@@ -2846,6 +2962,7 @@ async function openModal(id){
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')}${p.house_no?` · 🏠 ${esc(p.house_no)}`:''} · ${esc(hospitalName)}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
+        <button onclick="showPatientTimeline(${p.id},'${jsStr(p.name)}')" style="background:none;border:1px solid #bae6fd;border-radius:6px;cursor:pointer;color:#0369a1;padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">📅 Timeline</button>
         ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${jsStr(p.name)}','${jsStr(p.village||'')}','${jsStr(p.house_no||'')}','${jsStr(p.note||'')}','${jsStr(p.staff_responsible||'')}','${jsStr(p.aosomo_responsible||'')}','${jsStr(p.national_id||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
         <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
