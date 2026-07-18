@@ -93,6 +93,10 @@ let currentDisplayName = ''
 let currentVillage     = ''        // หมู่บ้านที่ อสม. รับผิดชอบ
 let _previewOrigRole   = null      // เก็บ role จริงของ admin ขณะ preview
 let _previewOrigVillage= null
+let _mfaFactorId       = null      // factorId สำหรับ verify
+let _mfaEnrollId       = null      // factorId สำหรับ enroll ครั้งแรก
+let _mfaEnrollData     = null      // { totp: { qr_code, secret } }
+let _mfaEmail          = ''        // เก็บ email ชั่วคราวระหว่าง MFA flow
 
 const ROLE_LABEL = {admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',aosomo:'อสม.',viewer:'ผู้สังเกตการณ์'}
 const ROLE_COLOR = {admin:'var(--primary)',staff:'#0d9488',aosomo:'#7c3aed',viewer:'var(--text3)'}
@@ -4080,6 +4084,59 @@ function showAuthWall(mode='login'){
     <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
     <button class="btn btn-primary btn-block" id="auth-btn" onclick="registerAosomo()" style="background:#7c3aed;border-color:#7c3aed">🏡 ส่งคำขอสมัคร อสม.</button>
     <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)">มีบัญชีแล้ว? <a href="#" onclick="showAuthWall('login');return false" style="color:var(--primary);font-weight:700">เข้าสู่ระบบ</a></div>`
+  } else if(mode==='mfa_verify'){
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:40px;margin-bottom:6px">🔐</div>
+      <div style="font-size:20px;font-weight:800;color:var(--primary)">ยืนยันตัวตน 2FA</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">กรอกรหัส 6 หลักจากแอป Authenticator</div>
+    </div>
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#0369a1;line-height:1.6">
+      📱 เปิดแอป <strong>Google Authenticator</strong> หรือ <strong>Authy</strong><br>แล้วกรอกรหัส 6 หลักที่แสดงสำหรับ <strong>JitHome</strong>
+    </div>
+    <div class="form-group">
+      <label>รหัส OTP</label>
+      <input type="text" id="mfa-otp" inputmode="numeric" maxlength="6" placeholder="000000"
+        autocomplete="one-time-code"
+        onkeydown="if(event.key==='Enter')mfaVerify()"
+        style="font-size:28px;letter-spacing:10px;text-align:center;font-family:monospace;font-weight:700">
+    </div>
+    <div id="mfa-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="mfa-btn" onclick="mfaVerify()">ยืนยัน</button>
+    <div style="text-align:center;margin-top:12px;font-size:12px"><a href="#" onclick="logoutUser();return false" style="color:var(--text3)">← ยกเลิกและออกจากระบบ</a></div>`
+    setTimeout(()=>document.getElementById('mfa-otp')?.focus(),100)
+  } else if(mode==='mfa_enroll'){
+    const qr=_mfaEnrollData?.totp?.qr_code||''
+    const secret=_mfaEnrollData?.totp?.secret||''
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:36px;margin-bottom:6px">📱</div>
+      <div style="font-size:18px;font-weight:800;color:var(--primary)">ตั้งค่า 2-Factor Authentication</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">บัญชี admin ต้องการการยืนยันตัวตน 2 ชั้น</div>
+    </div>
+    <div style="background:#fefce8;border:1.5px solid #fde68a;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">
+      1️⃣ ติดตั้งแอป <strong>Google Authenticator</strong> หรือ <strong>Authy</strong><br>
+      2️⃣ กด <strong>"+"</strong> → <strong>สแกน QR code</strong> ด้านล่าง<br>
+      3️⃣ กรอกรหัส 6 หลักที่แสดงในแอปเพื่อยืนยัน
+    </div>
+    <div style="text-align:center;margin-bottom:12px">
+      ${qr?`<img src="${qr}" style="width:180px;height:180px;border:3px solid var(--border);border-radius:10px">`:'<div style="font-size:12px;color:var(--red)">ไม่สามารถโหลด QR code — กรุณา refresh</div>'}
+    </div>
+    ${secret?`<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:12px">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:4px">รหัส Manual Entry (กรณีสแกนไม่ได้)</div>
+      <div style="font-family:monospace;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--text1);word-break:break-all">${secret}</div>
+    </div>`:''}
+    <div class="form-group">
+      <label>รหัส OTP จากแอป (6 หลัก)</label>
+      <input type="text" id="mfa-otp" inputmode="numeric" maxlength="6" placeholder="000000"
+        autocomplete="one-time-code"
+        onkeydown="if(event.key==='Enter')mfaEnrollConfirm()"
+        style="font-size:24px;letter-spacing:8px;text-align:center;font-family:monospace;font-weight:700">
+    </div>
+    <div id="mfa-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="mfa-enroll-btn" onclick="mfaEnrollConfirm()">ยืนยันและเปิดใช้ 2FA</button>
+    <div style="text-align:center;margin-top:12px;font-size:12px"><a href="#" onclick="logoutUser();return false" style="color:var(--text3)">← ยกเลิกและออกจากระบบ</a></div>`
+    setTimeout(()=>document.getElementById('mfa-otp')?.focus(),100)
   } else if(mode==='submitted'){
     ct.innerHTML=`
     <div style="text-align:center;padding:16px 0">
@@ -4192,14 +4249,72 @@ async function loginUser(){
   startSessionTimer()
   if(prof?.status==='pending'){hideAuthWall();showAuthWall('pending');return}
   if(prof?.status==='rejected'||prof?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
+  if(currentRole==='admin'){
+    _mfaEmail=email
+    const blocked=await _handleAdminMFA()
+    if(blocked)return
+  }
+  await _postLoginSuccess(email)
+}
+
+async function _postLoginSuccess(email=''){
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
   if(email.endsWith('@jithome.local')){
-    setTimeout(()=>{
-      showToast('⚠️ กรุณาเปลี่ยนรหัสผ่านในเมนูบัญชีของคุณ เพื่อความปลอดภัย',5000)
-    },1500)
+    setTimeout(()=>{showToast('⚠️ กรุณาเปลี่ยนรหัสผ่านในเมนูบัญชีของคุณ เพื่อความปลอดภัย',5000)},1500)
   }
+}
+
+async function _handleAdminMFA(){
+  const{data,error}=await sb.auth.mfa.listFactors()
+  if(error){console.error('MFA listFactors:',error);return false}
+  const verified=(data?.totp||[]).filter(f=>f.status==='verified')
+  if(verified.length>0){
+    _mfaFactorId=verified[0].id
+    showAuthWall('mfa_verify')
+    return true
+  }
+  const{data:enroll,error:eErr}=await sb.auth.mfa.enroll({factorType:'totp',issuer:'JitHome',friendlyName:'JitHome Admin'})
+  if(eErr){console.error('MFA enroll:',eErr);return false}
+  _mfaEnrollId=enroll.id
+  _mfaEnrollData=enroll
+  showAuthWall('mfa_enroll')
+  return true
+}
+
+async function mfaVerify(){
+  const code=(document.getElementById('mfa-otp')?.value||'').replace(/\s/g,'')
+  const err=document.getElementById('mfa-error')
+  const btn=document.getElementById('mfa-btn')
+  if(!code||code.length!==6){err.textContent='กรุณากรอกรหัส 6 หลัก';return}
+  btn.disabled=true;btn.textContent='กำลังตรวจสอบ...'
+  err.textContent=''
+  const{error}=await sb.auth.mfa.challengeAndVerify({factorId:_mfaFactorId,code})
+  if(error){
+    err.textContent='❌ รหัสไม่ถูกต้อง หรือหมดอายุแล้ว — กรุณาลองใหม่'
+    btn.disabled=false;btn.textContent='ยืนยัน'
+    document.getElementById('mfa-otp').value='';document.getElementById('mfa-otp').focus()
+    return
+  }
+  await _postLoginSuccess(_mfaEmail)
+}
+
+async function mfaEnrollConfirm(){
+  const code=(document.getElementById('mfa-otp')?.value||'').replace(/\s/g,'')
+  const err=document.getElementById('mfa-error')
+  const btn=document.getElementById('mfa-enroll-btn')
+  if(!code||code.length!==6){err.textContent='กรุณากรอกรหัส 6 หลักจากแอป';return}
+  btn.disabled=true;btn.textContent='กำลังยืนยัน...'
+  err.textContent=''
+  const{error}=await sb.auth.mfa.challengeAndVerify({factorId:_mfaEnrollId,code})
+  if(error){
+    err.textContent='❌ รหัสไม่ถูกต้อง — สแกน QR ใหม่แล้วลองอีกครั้ง'
+    btn.disabled=false;btn.textContent='ยืนยันและเปิดใช้ 2FA'
+    document.getElementById('mfa-otp').value='';document.getElementById('mfa-otp').focus()
+    return
+  }
+  await _postLoginSuccess(_mfaEmail)
 }
 
 async function registerUser(){
