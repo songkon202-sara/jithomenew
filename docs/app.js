@@ -3854,7 +3854,7 @@ function update2QScore(){
   const s=(q1||0)+(q2||0)
   const suicide=q3===1
   let txt,bg,color
-  if(suicide){txt='⚠️ ความเสี่ยงสูง — ต้องส่งต่อด่วน';bg='#fef2f2';color='#b91c1c'}
+  if(suicide){txt='⚠️ ความเสี่ยงสูง — ต้องส่งต่อด่วน';bg='#fef2f2';color='#b91c1c';const r=document.getElementById('v-refer');if(r)r.checked=true}
   else if(s===0){txt='ผลลัพธ์: ไม่พบภาวะซึมเศร้า';bg='#f0fdf4';color='#15803d'}
   else{txt=`ผลลัพธ์: คะแนน ${s}/2 — ควรประเมินเพิ่มเติม (PHQ-9)`;bg='#fefce8';color='#854d0e'}
   el.style.cssText=`display:block;margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
