@@ -4417,6 +4417,8 @@ async function _handleAdminMFA(){
     showAuthWall('mfa_verify')
     return true
   }
+  const unverified=(data?.totp||[]).filter(f=>f.status==='unverified')
+  for(const f of unverified){await sb.auth.mfa.unenroll({factorId:f.id})}
   const{data:enroll,error:eErr}=await sb.auth.mfa.enroll({factorType:'totp',issuer:'JitHome',friendlyName:'JitHome'})
   if(eErr){
     console.error('MFA enroll:',eErr)
