@@ -3308,9 +3308,83 @@ async function deletePatient(id,name){
     if(location.hash==='#patients')navigate('patients')
   }catch(e){alert('❌ ลบไม่สำเร็จ: '+e.message)}
 }
-async function giveConsent(id){
-  const{error}=await sb.from('patients').update({consent_given:true,consent_date:todayISO()}).eq('id',id)
-  if(error){alert('❌ '+error.message);return}
+function giveConsent(id){
+  const p=allPatients.find(x=>x.id===id)||{}
+  const el=document.getElementById('consent-modal')
+  if(el)el.remove()
+  const m=document.createElement('div')
+  m.id='consent-modal'
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center'
+  m.innerHTML=`
+  <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:540px;max-height:92vh;display:flex;flex-direction:column">
+    <div style="padding:16px 18px 10px;border-bottom:1px solid #e5e7eb;flex-shrink:0">
+      <div style="font-size:15px;font-weight:800;color:#15803d">🔒 ใบยินยอมคุ้มครองข้อมูลส่วนบุคคล (PDPA)</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px">ผู้ป่วย: ${esc(p.name||'')}</div>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:14px 18px;font-size:12.5px;color:#374151;line-height:1.8">
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:11.5px;color:#166534">
+        โรงพยาบาลส่งเสริมสุขภาพตำบล ขอแจ้งให้ทราบว่าจะมีการเก็บรวบรวม ใช้ และเปิดเผยข้อมูลส่วนบุคคลของท่านตาม พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
+      </div>
+      <p><strong>1. ข้อมูลที่เก็บรวบรวม</strong><br>ชื่อ-นามสกุล, เลขบัตรประชาชน, เบอร์โทรศัพท์, ที่อยู่, ข้อมูลสุขภาพจิต, ประวัติการรับยา, วันนัดหมาย</p>
+      <p><strong>2. วัตถุประสงค์การใช้ข้อมูล</strong><br>เพื่อการดูแลสุขภาพจิตในชุมชน การติดตามการรับยา การนัดหมายแพทย์ และการรายงานทางสาธารณสุข</p>
+      <p><strong>3. ผู้ที่เข้าถึงข้อมูล</strong><br>บุคลากรสาธารณสุขที่ได้รับอนุญาต ได้แก่ เจ้าหน้าที่ รพ.สต. พยาบาล แพทย์ และ อสม. ประจำหมู่บ้าน</p>
+      <p><strong>4. ระยะเวลาการเก็บข้อมูล</strong><br>ตลอดระยะเวลาการรักษาและตามที่กฎหมายกำหนด</p>
+      <p><strong>5. สิทธิ์ของท่าน</strong><br>ท่านมีสิทธิ์ขอดู แก้ไข หรือลบข้อมูลส่วนบุคคลของท่าน โดยติดต่อเจ้าหน้าที่ รพ.สต.</p>
+      <p><strong>6. การถอนความยินยอม</strong><br>ท่านสามารถถอนความยินยอมได้ตลอดเวลา โดยไม่มีผลต่อการประมวลผลข้อมูลที่ดำเนินการไปแล้ว</p>
+      <div style="margin-top:10px;padding:10px 12px;background:#fefce8;border:1px solid #fde68a;border-radius:8px;font-size:11.5px;color:#92400e">
+        ข้าพเจ้าได้อ่านและเข้าใจรายละเอียดข้างต้นแล้ว และยินยอมให้เก็บและประมวลผลข้อมูลส่วนบุคคลของข้าพเจ้าตามวัตถุประสงค์ดังกล่าว
+      </div>
+      <div style="margin-top:16px;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">✍️ ลายเซ็นผู้ยินยอม</div>
+      <div style="position:relative;border:2px dashed #d1d5db;border-radius:10px;background:#f9fafb;touch-action:none">
+        <canvas id="consent-sig-canvas" style="display:block;width:100%;height:160px;border-radius:8px;cursor:crosshair"></canvas>
+        <div id="consent-sig-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#9ca3af;font-size:12px">เซ็นชื่อในกรอบนี้</div>
+      </div>
+      <button onclick="clearConsentSig()" style="margin-top:6px;padding:4px 12px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif">🗑 ล้างลายเซ็น</button>
+      <div style="margin-top:10px;font-size:11px;color:#6b7280">วันที่: ${thDate(todayISO())}</div>
+    </div>
+    <div style="padding:12px 18px 20px;border-top:1px solid #e5e7eb;flex-shrink:0;display:flex;gap:10px">
+      <button onclick="document.getElementById('consent-modal').remove()" style="flex:1;padding:10px;background:#f3f4f6;color:#374151;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">ยกเลิก</button>
+      <button onclick="saveConsent(${id})" style="flex:2;padding:10px;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ยืนยันยินยอม</button>
+    </div>
+  </div>`
+  document.body.appendChild(m)
+  m.addEventListener('click',e=>{if(e.target===m)m.remove()})
+  const canvas=document.getElementById('consent-sig-canvas')
+  const rect=canvas.getBoundingClientRect()
+  canvas.width=Math.round(rect.width*devicePixelRatio)||600
+  canvas.height=Math.round(rect.height*devicePixelRatio)||320
+  const ctx=canvas.getContext('2d')
+  ctx.scale(devicePixelRatio,devicePixelRatio)
+  ctx.strokeStyle='#111'
+  ctx.lineWidth=2.5
+  ctx.lineCap='round'
+  ctx.lineJoin='round'
+  let drawing=false
+  const getPos=e=>{const r=canvas.getBoundingClientRect();const src=e.touches?e.touches[0]:e;return{x:(src.clientX-r.left),y:(src.clientY-r.top)}}
+  canvas.addEventListener('pointerdown',e=>{drawing=true;const{x,y}=getPos(e);ctx.beginPath();ctx.moveTo(x,y);document.getElementById('consent-sig-hint').style.display='none'})
+  canvas.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();const{x,y}=getPos(e);ctx.lineTo(x,y);ctx.stroke()},{passive:false})
+  canvas.addEventListener('pointerup',()=>{drawing=false})
+  canvas.addEventListener('pointerleave',()=>{drawing=false})
+}
+function clearConsentSig(){
+  const canvas=document.getElementById('consent-sig-canvas')
+  if(!canvas)return
+  const ctx=canvas.getContext('2d')
+  ctx.clearRect(0,0,canvas.width,canvas.height)
+  const hint=document.getElementById('consent-sig-hint')
+  if(hint)hint.style.display='flex'
+}
+async function saveConsent(id){
+  const canvas=document.getElementById('consent-sig-canvas')
+  if(!canvas){alert('❌ ไม่พบกรอบลายเซ็น');return}
+  const blank=!canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some(v=>v!==0)
+  if(blank){alert('กรุณาลงลายเซ็นก่อนยืนยัน');return}
+  const sig=canvas.toDataURL('image/png')
+  const btn=document.querySelector('#consent-modal button[onclick^="saveConsent"]')
+  if(btn){btn.disabled=true;btn.textContent='กำลังบันทึก...'}
+  const{error}=await sb.from('patients').update({consent_given:true,consent_date:todayISO(),consent_signature:sig}).eq('id',id)
+  if(error){alert('❌ '+error.message);if(btn){btn.disabled=false;btn.textContent='✅ ยืนยันยินยอม'}return}
+  document.getElementById('consent-modal')?.remove()
   openModal(id)
 }
 async function saveEditPatient(id){
