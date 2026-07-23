@@ -4706,9 +4706,13 @@ function resetActivityTimer(){
   _lastActivity=Date.now()
   if(_warnShown){_warnShown=false;document.getElementById('session-warn-toast')?.remove()}
 }
+let _activityListenersAdded=false
 function startSessionTimer(){
   if(_sessionTimer)clearInterval(_sessionTimer)
-  ;['click','keydown','mousedown','touchstart'].forEach(ev=>document.addEventListener(ev,resetActivityTimer,true))
+  if(!_activityListenersAdded){
+    ;['click','keydown','mousedown','touchstart'].forEach(ev=>document.addEventListener(ev,resetActivityTimer,true))
+    _activityListenersAdded=true
+  }
   _sessionTimer=setInterval(()=>{
     const idle=Date.now()-_lastActivity
     if(idle>=SESSION_TIMEOUT_MS){
