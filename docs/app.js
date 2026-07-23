@@ -3091,9 +3091,15 @@ async function openModal(id){
             </div>
             ${canDo('record')&&!p.consent_given?`<button onclick="giveConsent(${p.id})" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">รับยินยอม</button>`:''}
           </div>
-          ${p.consent_signature?`<div style="margin-top:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center">
-            <div style="font-size:10px;color:#6b7280;margin-bottom:4px">✍️ ลายเซ็นผู้ยินยอม</div>
-            <img src="${p.consent_signature}" style="max-width:100%;max-height:80px;border-radius:4px;background:#fff">
+          ${p.consent_signature?`<div style="margin-top:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px">
+            <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:6px">📄 เอกสารความยินยอม PDPA</div>
+            <div style="font-size:11px;color:#6b7280;line-height:1.7;margin-bottom:8px">
+              ผู้ป่วยได้อ่านและยินยอมให้ รพ.สต. เก็บรวบรวม ใช้ และเปิดเผยข้อมูลส่วนบุคคล ได้แก่ ชื่อ-นามสกุล เลขบัตรประชาชน เบอร์โทรศัพท์ ที่อยู่ และข้อมูลสุขภาพจิต เพื่อการดูแลสุขภาพในชุมชน ตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
+            </div>
+            <div style="text-align:center;border-top:1px dashed #d1d5db;padding-top:8px">
+              <div style="font-size:10px;color:#6b7280;margin-bottom:4px">✍️ ลายเซ็นผู้ยินยอม${p.consent_date?' · '+thDate(p.consent_date):''}</div>
+              <img src="${p.consent_signature}" style="max-width:100%;max-height:90px;border-radius:4px;background:#fff;border:1px solid #e5e7eb">
+            </div>
           </div>`:''}
         </div>
       </div>
@@ -3389,8 +3395,11 @@ async function saveConsent(id){
   const sig=canvas.toDataURL('image/png')
   const btn=document.querySelector('#consent-modal button[onclick^="saveConsent"]')
   if(btn){btn.disabled=true;btn.textContent='กำลังบันทึก...'}
-  const{error}=await sb.from('patients').update({consent_given:true,consent_date:todayISO(),consent_signature:sig}).eq('id',id)
+  const today=todayISO()
+  const{error}=await sb.from('patients').update({consent_given:true,consent_date:today,consent_signature:sig}).eq('id',id)
   if(error){alert('❌ '+error.message);if(btn){btn.disabled=false;btn.textContent='✅ ยืนยันยินยอม'}return}
+  const pt=allPatients.find(x=>x.id===id)
+  if(pt){pt.consent_given=true;pt.consent_date=today;pt.consent_signature=sig}
   document.getElementById('consent-modal')?.remove()
   openModal(id)
 }
