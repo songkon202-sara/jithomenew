@@ -2917,10 +2917,11 @@ async function openModal(id){
     // ตรวจสิทธิ์: อสม. เข้าถึงได้เฉพาะหมู่บ้านที่รับผิดชอบ
     if(currentRole==='aosomo'&&currentVillage&&p.village!==currentVillage)throw new Error('ไม่มีสิทธิ์เข้าถึงข้อมูลผู้ป่วยหมู่อื่น')
     auditLog('view_patient','patient',id,{name:p.name,village:p.village})
-    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date,consent_signature').eq('id',id).single()
+    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date,consent_signature,consent_given,consent_date').eq('id',id).single()
     p.photo_urls=pExtra?.photo_urls||[]
     p.oral_medication=pExtra?.oral_medication||null
     p.consent_signature=pExtra?.consent_signature||null
+    if(pExtra?.consent_given!=null){p.consent_given=pExtra.consent_given;p.consent_date=pExtra.consent_date||p.consent_date}
     if(pExtra?.next_inject_date) p.next_inject_date=pExtra.next_inject_date
     if(pExtra?.next_visit_date) p.next_visit_date=pExtra.next_visit_date
     p.group_label=groupLabel(p.group_color)
