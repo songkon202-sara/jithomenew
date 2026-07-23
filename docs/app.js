@@ -3081,7 +3081,10 @@ async function openModal(id){
           <div style="flex:1;min-width:0">
             <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:4px">ภาพถ่ายบริบท / สภาพแวดล้อม</div>
             ${(p.photo_urls&&p.photo_urls.length>0)
-              ? p.photo_urls.map(url=>`<a href="${esc(url)}" target="_blank" style="display:block;margin-bottom:6px"><img src="${esc(url)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>`).join('')
+              ? p.photo_urls.map((url,i)=>`<div style="position:relative;display:inline-block;margin-bottom:6px;max-width:100%">
+                  <a href="${esc(url)}" target="_blank"><img src="${esc(url)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>
+                  ${canDo('record')?`<button onclick="removePatientPhoto(${p.id},${i})" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center" title="ลบรูป">×</button>`:''}
+                </div>`).join('')
               : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้อัปโหลด</div>`}
           </div>
         </div>
@@ -3114,7 +3117,10 @@ async function openModal(id){
       </div>
     </div>`:''}
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
-    ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
+    ${p.file_url?`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <a href="${esc(p.file_url)}" target="_blank" style="flex:1;display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>
+      ${canDo('record')?`<button onclick="removePatientFile(${p.id})" style="padding:7px 10px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:8px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🗑 ลบ</button>`:''}
+    </div>`:''}
     ${(p.staff_responsible||p.aosomo_responsible)?`
     <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap">
       ${p.staff_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">👨‍⚕️ เจ้าหน้าที่:</span> <strong>${esc(p.staff_responsible)}</strong></div>`:''}
@@ -3150,6 +3156,12 @@ async function removePatientPhoto(patientId,index){
   const urls=[...(data?.photo_urls||[])]
   urls.splice(index,1)
   await sb.from('patients').update({photo_urls:urls}).eq('id',patientId)
+  await openModal(patientId)
+}
+async function removePatientFile(patientId){
+  if(!confirm('ลบไฟล์แนบนี้ออก?'))return
+  const{error}=await sb.from('patients').update({file_url:null}).eq('id',patientId)
+  if(error){alert('❌ ลบไม่สำเร็จ: '+error.message);return}
   await openModal(patientId)
 }
 
