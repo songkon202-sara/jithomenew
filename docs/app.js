@@ -2455,6 +2455,11 @@ async function saveTelegramSettings(){
   const errs=[]
   if(chatid){const{error}=await sb.from('app_settings').upsert({setting_key:'telegram_chatid',setting_value:chatid},{onConflict:'setting_key'});if(error)errs.push(error.message)}
   if(token){const{error}=await sb.from('app_settings').upsert({setting_key:'telegram_token',setting_value:token},{onConflict:'setting_key'});if(error)errs.push(error.message)}
+  if(chatid||token){
+    const nsUpdate={enabled:true,...(chatid&&{telegram_chat_id:chatid}),...(token&&{telegram_bot_token:token})}
+    const{error}=await sb.from('notification_settings').update(nsUpdate).gte('id',1)
+    if(error)errs.push(error.message)
+  }
   if(errs.length){status.style.color='var(--red)';status.textContent='❌ '+errs.join(', ');btn.textContent='💾 บันทึก';btn.disabled=false;return}
   status.style.color='var(--green)';status.textContent='✅ บันทึกสำเร็จ'
   btn.textContent='✅ บันทึกแล้ว'
