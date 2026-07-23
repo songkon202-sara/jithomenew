@@ -4933,16 +4933,18 @@ function _onRealtimeChange(payload){
   if(changedId&&_ownWriteIds.has(changedId))return
   clearTimeout(_realtimeDebounce)
   _realtimeDebounce=setTimeout(async()=>{
-    const page=(location.hash||'').slice(1)||'dashboard'
-    allPatients=await getPatients()
-    const el=document.getElementById('page-content')
-    if(!el)return
-    if(page==='dashboard')renderDashboard(el)
-    else if(page==='patients')renderPatients(el)
-    else if(page==='timeline')renderTimeline(el)
-    else if(page==='overview')renderOverview(el)
-    else if(page==='visit')renderVisit(el)
-    showToast('🔄 ข้อมูลอัปเดตแล้ว',2000)
+    try{
+      const page=(location.hash||'').slice(1)||'dashboard'
+      allPatients=await getPatients()
+      const el=document.getElementById('page-content')
+      if(!el)return
+      if(page==='dashboard')renderDashboard(el)
+      else if(page==='patients')renderPatients(el)
+      else if(page==='timeline')renderTimeline(el)
+      else if(page==='overview')renderOverview(el)
+      else if(page==='visit')renderVisit(el)
+      showToast('🔄 ข้อมูลอัปเดตแล้ว',2000)
+    }catch(e){console.error('Realtime update failed:',e)}
   },800)
 }
 
