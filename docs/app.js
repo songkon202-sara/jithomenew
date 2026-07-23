@@ -2917,9 +2917,10 @@ async function openModal(id){
     // ตรวจสิทธิ์: อสม. เข้าถึงได้เฉพาะหมู่บ้านที่รับผิดชอบ
     if(currentRole==='aosomo'&&currentVillage&&p.village!==currentVillage)throw new Error('ไม่มีสิทธิ์เข้าถึงข้อมูลผู้ป่วยหมู่อื่น')
     auditLog('view_patient','patient',id,{name:p.name,village:p.village})
-    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date').eq('id',id).single()
+    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date,consent_signature').eq('id',id).single()
     p.photo_urls=pExtra?.photo_urls||[]
     p.oral_medication=pExtra?.oral_medication||null
+    p.consent_signature=pExtra?.consent_signature||null
     if(pExtra?.next_inject_date) p.next_inject_date=pExtra.next_inject_date
     if(pExtra?.next_visit_date) p.next_visit_date=pExtra.next_visit_date
     p.group_label=groupLabel(p.group_color)
@@ -3082,12 +3083,18 @@ async function openModal(id){
               : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้อัปโหลด</div>`}
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;padding-top:6px;border-top:1px solid var(--border)">
-          <span style="font-size:16px">${p.consent_given?'✅':'⚠️'}</span>
-          <div style="flex:1">
-            <span style="font-size:12px;font-weight:700;color:${p.consent_given?'#15803d':'#b91c1c'}">${p.consent_given?'ความยินยอม PDPA: ยินยอมแล้ว'+(p.consent_date?' · '+thDate(p.consent_date):''):'ยังไม่ได้รับความยินยอม PDPA'}</span>
+        <div style="padding-top:6px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:16px">${p.consent_given?'✅':'⚠️'}</span>
+            <div style="flex:1">
+              <span style="font-size:12px;font-weight:700;color:${p.consent_given?'#15803d':'#b91c1c'}">${p.consent_given?'ความยินยอม PDPA: ยินยอมแล้ว'+(p.consent_date?' · '+thDate(p.consent_date):''):'ยังไม่ได้รับความยินยอม PDPA'}</span>
+            </div>
+            ${canDo('record')&&!p.consent_given?`<button onclick="giveConsent(${p.id})" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">รับยินยอม</button>`:''}
           </div>
-          ${canDo('record')&&!p.consent_given?`<button onclick="giveConsent(${p.id})" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">รับยินยอม</button>`:''}
+          ${p.consent_signature?`<div style="margin-top:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center">
+            <div style="font-size:10px;color:#6b7280;margin-bottom:4px">✍️ ลายเซ็นผู้ยินยอม</div>
+            <img src="${p.consent_signature}" style="max-width:100%;max-height:80px;border-radius:4px;background:#fff">
+          </div>`:''}
         </div>
       </div>
     </div>
