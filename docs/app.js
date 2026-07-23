@@ -3394,14 +3394,18 @@ async function saveConsent(id){
   if(!canvas){alert('❌ ไม่พบกรอบลายเซ็น');return}
   const blank=!canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some(v=>v!==0)
   if(blank){alert('กรุณาลงลายเซ็นก่อนยืนยัน');return}
-  const sig=canvas.toDataURL('image/png')
   const btn=document.querySelector('#consent-modal button[onclick^="saveConsent"]')
   if(btn){btn.disabled=true;btn.textContent='กำลังบันทึก...'}
+  const blob=await new Promise(res=>canvas.toBlob(res,'image/png'))
+  const filename=`signatures/${id}_${Date.now()}.png`
+  const{error:ue}=await sb.storage.from('patient-files').upload(filename,blob,{contentType:'image/png'})
+  if(ue){alert('❌ อัพโหลดลายเซ็นไม่สำเร็จ: '+ue.message);if(btn){btn.disabled=false;btn.textContent='✅ ยืนยันยินยอม'}return}
+  const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
   const today=todayISO()
-  const{error}=await sb.from('patients').update({consent_given:true,consent_date:today,consent_signature:sig}).eq('id',id)
+  const{error}=await sb.from('patients').update({consent_given:true,consent_date:today,consent_signature:publicUrl}).eq('id',id)
   if(error){alert('❌ '+error.message);if(btn){btn.disabled=false;btn.textContent='✅ ยืนยันยินยอม'}return}
   const pt=allPatients.find(x=>x.id===id)
-  if(pt){pt.consent_given=true;pt.consent_date=today;pt.consent_signature=sig}
+  if(pt){pt.consent_given=true;pt.consent_date=today;pt.consent_signature=publicUrl}
   document.getElementById('consent-modal')?.remove()
   openModal(id)
 }
