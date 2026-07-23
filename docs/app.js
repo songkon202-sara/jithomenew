@@ -2842,11 +2842,19 @@ function exportJSON(){
 
 async function exportVisitExcel(){
   if(!canDo('record')){alert('🔒 ไม่มีสิทธิ์ Export ข้อมูล');return}
+  const now=new Date()
+  const defFrom=new Date(now.getFullYear(),now.getMonth()-5,1).toISOString().split('T')[0]
+  const defTo=now.toISOString().split('T')[0]
+  const fromDate=prompt('ตั้งแต่วันที่ (YYYY-MM-DD):',defFrom)
+  if(fromDate===null)return
+  const toDate=prompt('ถึงวันที่ (YYYY-MM-DD):',defTo)
+  if(toDate===null)return
   try{
-    const{data:visits}=await sb.from('home_visits')
-      .select('*')
-      .order('visit_date',{ascending:false})
-    if(!visits||!visits.length){alert('ไม่พบข้อมูลการเยี่ยมบ้าน');return}
+    let q=sb.from('home_visits').select('*').order('visit_date',{ascending:false}).limit(1000)
+    if(fromDate)q=q.gte('visit_date',fromDate)
+    if(toDate)q=q.lte('visit_date',toDate)
+    const{data:visits}=await q
+    if(!visits||!visits.length){alert('ไม่พบข้อมูลการเยี่ยมบ้านในช่วงวันที่เลือก');return}
     const patMap=Object.fromEntries(allPatients.map(p=>[p.id,p]))
     const typeLabel={staff:'เจ้าหน้าที่',aosomo:'อสม.'}
     const hdr=['วันที่เยี่ยม','ประเภท','ชื่อ-สกุล','หมู่บ้าน','บ้านเลขที่','เลขบัตรประชาชน','รหัสโรค','ชื่อโรค','ผู้เยี่ยม','คะแนน','ส่งต่อ','หมายเหตุ']
