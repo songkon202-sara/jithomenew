@@ -1,4 +1,4 @@
-const CACHE = 'jithome-20260718l'
+const CACHE = 'jithome-20260723a'
 const OFFLINE_URL = '/jithomenew/index.html'
 
 self.addEventListener('install', e => {
