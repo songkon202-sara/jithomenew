@@ -3085,13 +3085,13 @@ async function openModal(id){
           </div>
         </div>
         <div style="padding-top:6px;border-top:1px solid var(--border)">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-size:16px">${p.consent_given?'✅':'⚠️'}</span>
+          ${(()=>{const consented=p.consent_given||!!p.consent_signature;return`<div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:16px">${consented?'✅':'⚠️'}</span>
             <div style="flex:1">
-              <span style="font-size:12px;font-weight:700;color:${p.consent_given?'#15803d':'#b91c1c'}">${p.consent_given?'ความยินยอม PDPA: ยินยอมแล้ว'+(p.consent_date?' · '+thDate(p.consent_date):''):'ยังไม่ได้รับความยินยอม PDPA'}</span>
+              <span style="font-size:12px;font-weight:700;color:${consented?'#15803d':'#b91c1c'}">${consented?'ความยินยอม PDPA: ยินยอมแล้ว'+(p.consent_date?' · '+thDate(p.consent_date):''):'ยังไม่ได้รับความยินยอม PDPA'}</span>
             </div>
-            ${canDo('record')&&!p.consent_given?`<button onclick="giveConsent(${p.id})" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">รับยินยอม</button>`:''}
-          </div>
+            ${canDo('record')&&!consented?`<button onclick="giveConsent(${p.id})" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">รับยินยอม</button>`:''}
+          </div>`})()
           ${p.consent_signature?`<div style="margin-top:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px">
             <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:6px">📄 เอกสารความยินยอม PDPA</div>
             <div style="font-size:11px;color:#6b7280;line-height:1.7;margin-bottom:8px">
