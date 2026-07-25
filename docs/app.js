@@ -2735,7 +2735,7 @@ async function importFromSheets(){
         await sb.from('patients').upsert({name,village},{onConflict:'name'})
         const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
         if(!found)throw new Error('patient not found')
-        await sb.from('injection_records').insert({patient_id:found.id,injection_date:dateISO,group_color:gc,group_label:gl,interval_str:intervalStr,interval_days:parseInterval(intervalStr),note})
+        await sb.from('injection_records').insert({patient_id:found.id,injection_date:dateISO,group_color:gc,group_label:gl,interval_str:intervalStr,interval_days:parseInterval(intervalStr),note,recorded_by:currentDisplayName||null})
         inserted++
       }catch(e){errors.push(name+': '+e.message)}
       if((i+1)%5===0)btn.textContent=`⏳ ${i+1}/${rows.length}`
@@ -2771,7 +2771,7 @@ async function saveAdminRecord(){
     if(!found)throw new Error('ไม่พบผู้ป่วย')
     await sb.from('patients').update({village}).eq('id',found.id)
     const record_type=document.querySelector('input[name="adm-type"]:checked')?.value||'injection'
-    const{data:newRec,error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str,interval_days,note,record_type}).select('id').single()
+    const{data:newRec,error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str,interval_days,note,record_type,recorded_by:currentDisplayName||null}).select('id').single()
     if(error)throw error
     _markOwnWrite(found.id)
     if(newRec)_markOwnWrite(newRec.id)
@@ -2966,6 +2966,7 @@ async function openModal(id){
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(h.group_label||'')}${h.interval_str?` · ${h.record_type==='visit'?'🏡 นัดเยี่ยม':'💉 นัด'}${esc(h.interval_str)}`:''}</div>
         ${h.note?`<div class="history-note">${esc(h.note)}</div>`:''}
+        ${h.recorded_by?`<div style="font-size:10px;color:var(--text3);margin-top:2px">👤 ${esc(h.recorded_by)}</div>`:''}
         <div id="edit-rec-${h.id}" style="display:none;background:#f0f9ff;border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:10px;margin-top:8px">
           <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px">แก้ไขรายการ</div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">${isFuture?'วันนัดหมาย':'วันที่ฉีดยา'}</label><input type="date" id="er-date-${h.id}" value="${h.injection_date}"></div>
@@ -3203,7 +3204,7 @@ async function saveEditRecord(id,patientId){
       } else {
         const{data:exist}=await sb.from('injection_records').select('id').eq('patient_id',patientId).eq('injection_date',nextDate).maybeSingle()
         if(!exist){
-          await sb.from('injection_records').insert({patient_id:patientId,injection_date:nextDate,group_color:rec?.group_color,group_label:rec?.group_label,interval_str,interval_days,note:'',record_type:rec?.record_type||'injection'})
+          await sb.from('injection_records').insert({patient_id:patientId,injection_date:nextDate,group_color:rec?.group_color,group_label:rec?.group_label,interval_str,interval_days,note:'',record_type:rec?.record_type||'injection',recorded_by:currentDisplayName||null})
         }
         await sb.from('patients').update({next_inject_date:nextDate}).eq('id',patientId)
       }
@@ -3523,7 +3524,7 @@ async function saveModalRecord(pid,gc){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const record_type=window._modalRecType||'injection'
-    const{data:newRec2,error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type}).select('id').single()
+    const{data:newRec2,error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type,recorded_by:currentDisplayName||null}).select('id').single()
     if(error)throw error
     _markOwnWrite(pid)
     if(newRec2)_markOwnWrite(newRec2.id)
@@ -3534,7 +3535,7 @@ async function saveModalRecord(pid,gc){
         await sb.from('patients').update({next_visit_date:nextDate}).eq('id',pid)
       } else {
         // ฉีดยา: สร้าง record นัดหมายล่วงหน้า + อัปเดต next_inject_date
-        await sb.from('injection_records').insert({patient_id:pid,injection_date:nextDate,group_color:gc,group_label:gl,interval_str,interval_days,note:'',record_type})
+        await sb.from('injection_records').insert({patient_id:pid,injection_date:nextDate,group_color:gc,group_label:gl,interval_str,interval_days,note:'',record_type,recorded_by:currentDisplayName||null})
         await sb.from('patients').update({next_inject_date:nextDate}).eq('id',pid)
       }
     }
@@ -4907,7 +4908,7 @@ async function saveNewPatient(){
     }
     if(newPt)_markOwnWrite(newPt.id)
     if(date&&newPt){
-      const{data:newRec3}=await sb.from('injection_records').insert({patient_id:newPt.id,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note}).select('id').single()
+      const{data:newRec3}=await sb.from('injection_records').insert({patient_id:newPt.id,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note,recorded_by:currentDisplayName||null}).select('id').single()
       if(newRec3)_markOwnWrite(newRec3.id)
     }
     btn.textContent='✅ บันทึกสำเร็จ'
