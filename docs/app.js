@@ -192,6 +192,10 @@ function parseGroupColor(g) {
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
+function safeUrl(u){
+  if(!u)return'#'
+  try{const p=new URL(u);return(p.protocol==='https:'||p.protocol==='http:')?esc(u):'#'}catch{return'#'}
+}
 // สำหรับค่าที่ใส่ใน single-quoted JS string ภายใน HTML attribute เช่น onclick="func('${jsStr(val)}')"
 function jsStr(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\/g,'\\\\').replace(/'/g,"\\'")
@@ -495,7 +499,7 @@ function renderTimeline(el) {
   </div>`
   if(t==='doctor'&&!window._doctorAppts){
     document.getElementById('tl-list').innerHTML='<div class="empty"><p>⏳ กำลังโหลด...</p></div>'
-    loadDoctorAppts().then(()=>renderTimeline(el))
+    loadDoctorAppts().then(()=>renderTimeline(el)).catch(e=>{document.getElementById('tl-list').innerHTML=`<div class="empty"><p>❌ โหลดไม่สำเร็จ: ${esc(e.message)}</p></div>`})
   } else {
     renderTLList()
   }
@@ -1215,7 +1219,7 @@ function renderVisitList(visits){
       <div style="font-size:12px;color:var(--text2)">${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'} ${esc(v.visitor||'')}${v.refer?` <span style="color:#b91c1c;font-weight:700">⚠️ ส่งต่อ</span>`:''}</div>
       ${v.note?`<div style="font-size:12px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:pre-line">${esc(v.note)}</div>`:''}
       ${v.assessment_json&&canDo('record')?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">${renderMHAssessResult(v.assessment_json,true)}</div>`:''}
-      ${v.photo_url&&canDo('record')?`<div style="margin-top:8px"><a href="${esc(v.photo_url)}" target="_blank"><img src="${esc(v.photo_url)}" alt="รูปถ่ายการเยี่ยมบ้าน" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer"></a></div>`:''}
+      ${v.photo_url&&canDo('record')?`<div style="margin-top:8px"><a href="${safeUrl(v.photo_url)}" target="_blank"><img src="${safeUrl(v.photo_url)}" alt="รูปถ่ายการเยี่ยมบ้าน" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer"></a></div>`:''}
       ${canDo('record')&&v.visit_type==='aosomo'?`<div style="margin-top:8px;padding:8px 10px;border-top:1px solid var(--border)">${v.verified_by?`<div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:${v.verify_result==='improve'?'#b45309':'#16a34a'}">${v.verify_result==='improve'?'⚠️ ต้องปรับปรุง':'✅ ถูกต้อง'} · ${esc(v.verified_by)} · ${v.verified_at||''}</span>${v.verify_note?`<span style="font-size:11px;color:var(--text2)">💬 ${esc(v.verify_note)}</span>`:''}</div>`:`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11px;color:var(--text3)">⏳ รอเจ้าหน้าที่ตรวจสอบ</span><button onclick="verifyVisit(${v.id})" style="padding:4px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ตรวจสอบแล้ว</button></div><div id="vf-${v.id}" style="display:none;margin-top:8px;padding:8px;background:var(--bg2,#f8fafc);border-radius:8px;border:1px solid var(--border)"><div style="display:flex;gap:12px;margin-bottom:6px"><label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif"><input type="radio" name="vr-${v.id}" value="pass" checked> ✅ ถูกต้อง</label><label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif"><input type="radio" name="vr-${v.id}" value="improve"> ⚠️ ต้องปรับปรุง</label></div><input id="vn-${v.id}" type="text" placeholder="หมายเหตุ (ถ้ามี)" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);margin-bottom:6px"><div style="display:flex;gap:6px;justify-content:flex-end"><button onclick="verifyVisit(${v.id})" style="padding:4px 10px;background:none;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif;color:var(--text2)">ยกเลิก</button><button onclick="submitVerify(${v.id})" style="padding:4px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:6px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;font-family:'Sarabun',sans-serif">บันทึก</button></div></div>`}</div>`:''}
     </div>`
   }).join('')
@@ -1292,7 +1296,7 @@ async function openEditVisit(id){
     const ntEl=document.getElementById('v-note');if(ntEl)ntEl.value=cleanNote
     // แสดงรูปเดิม (ถ้ามี)
     const prevEl=document.getElementById('v-photo-preview')
-    if(prevEl&&v.photo_url)prevEl.innerHTML=`<a href="${esc(v.photo_url)}" target="_blank"><img src="${esc(v.photo_url)}" style="max-width:100%;max-height:120px;border-radius:8px;object-fit:cover"></a><div style="font-size:11px;color:var(--text3);margin-top:2px">📷 รูปเดิม — อัปโหลดใหม่เพื่อแทนที่</div>`
+    if(prevEl&&v.photo_url)prevEl.innerHTML=`<a href="${safeUrl(v.photo_url)}" target="_blank"><img src="${safeUrl(v.photo_url)}" style="max-width:100%;max-height:120px;border-radius:8px;object-fit:cover"></a><div style="font-size:11px;color:var(--text3);margin-top:2px">📷 รูปเดิม — อัปโหลดใหม่เพื่อแทนที่</div>`
     // เปลี่ยนปุ่มบันทึกเป็น saveEditVisit
     const saveBtn=document.getElementById('v-save-btn')
     if(saveBtn){saveBtn.textContent='💾 บันทึกการแก้ไข';saveBtn.onclick=()=>saveEditVisit(id)}
@@ -1786,21 +1790,6 @@ async function renderAdmin(el) {
       <input type="file" id="hospital-import-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importHospitalFile(this)">
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:32px;height:32px;background:#0f9d58;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px">G</div>
-          <div><div style="font-size:13px;font-weight:700">Google Sheets</div><div style="font-size:11px;color:var(--text3)">ซิงค์อัตโนมัติ</div></div>
-        </div>
-        <span style="font-size:10px;background:var(--green-lt);color:var(--green);padding:2px 8px;border-radius:20px;font-weight:700">● Active</span>
-      </div>
-      <input type="text" id="sheets-url-input" value="${esc(settings.sheets_url||'')}" placeholder="https://docs.google.com/spreadsheets/d/..." style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
-      <div style="display:flex;gap:8px">
-        <button id="sheets-save-btn" onclick="saveSheetURL()" style="flex:1;padding:7px;background:#0f9d58;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก URL</button>
-        <button id="sheets-import-btn" onclick="importFromSheets()" style="flex:1;padding:7px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📥 นำเข้าข้อมูล</button>
-      </div>
-      <div id="sheets-status" style="font-size:11px;color:var(--text3);margin-top:6px;min-height:16px"></div>
-    </div>
-    <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div style="display:flex;align-items:center;gap:8px">
           <div style="width:32px;height:32px;background:#0a7ea4;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px">H</div>
@@ -2071,7 +2060,7 @@ async function loadMembersList(){
               <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
               <div style="font-size:11px;color:var(--text3)">📱 ${esc(p.email.replace('@jithome.local',''))} · 🏡 ${esc(p.village||'—')}</div>
               ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace">🪪 ${maskNationalId(p.national_id)}</div>`:''}
-              ${p.profile_file_url?`<a href="${esc(p.profile_file_url)}" target="_blank" style="font-size:11px;color:#7c3aed;text-decoration:none">📎 ดูไฟล์แนบ</a>`:''}
+              ${p.profile_file_url?`<a href="${safeUrl(p.profile_file_url)}" target="_blank" style="font-size:11px;color:#7c3aed;text-decoration:none">📎 ดูไฟล์แนบ</a>`:''}
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0">
               <button onclick="approvePendingMember('${p.id}')" style="padding:6px 12px;background:#166534;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✅ อนุมัติ</button>
@@ -2647,110 +2636,6 @@ async function saveTokenSetting(key,inputId,btnId){
   setTimeout(()=>{btn.textContent=origText;btn.disabled=false},2000)
 }
 
-async function saveSheetURL(){
-  const inp=document.getElementById('sheets-url-input')
-  const btn=document.getElementById('sheets-save-btn')
-  const status=document.getElementById('sheets-status')
-  const val=(inp?.value||'').trim()
-  if(!val){status.textContent='❌ กรุณากรอก URL';return}
-  btn.disabled=true;btn.textContent='กำลังบันทึก...'
-  try{
-    const{error}=await sb.from('app_settings').upsert({setting_key:'sheets_url',setting_value:val},{onConflict:'setting_key'})
-    if(error)throw error
-    status.style.color='var(--green)';status.textContent='✅ บันทึก URL สำเร็จ'
-    btn.textContent='✅ บันทึกแล้ว'
-    setTimeout(()=>{btn.textContent='💾 บันทึก URL';btn.disabled=false;status.textContent=''},2500)
-  }catch(e){status.style.color='var(--red)';status.textContent='❌ '+e.message;btn.textContent='💾 บันทึก URL';btn.disabled=false}
-}
-
-async function importFromSheets(){
-  const inp=document.getElementById('sheets-url-input')
-  const btn=document.getElementById('sheets-import-btn')
-  const status=document.getElementById('sheets-status')
-  let url=(inp?.value||'').trim()
-  if(!url){status.textContent='❌ กรุณากรอก URL ก่อน';return}
-  // Extract sheet ID
-  const m=url.match(/\/d\/([a-zA-Z0-9_-]{20,})/)
-  if(!m){status.style.color='var(--red)';status.textContent='❌ URL ไม่ถูกต้อง';return}
-  const sheetId=m[1]
-  btn.disabled=true;btn.textContent='⏳ กำลังโหลด...'
-  status.style.color='var(--text3)';status.textContent='กำลังดึงข้อมูลจาก Google Sheets...'
-  try{
-    const resp=await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`)
-    if(!resp.ok)throw new Error('ไม่สามารถเข้าถึง Sheet ได้ (ตรวจสอบว่า Sheet เป็น Public)')
-    const text=await resp.text()
-    const json=JSON.parse(text.replace(/^[^(]+\(/,'').replace(/\);?\s*$/,''))
-    const cols=json.table.cols.map(c=>(c.label||c.id||'').toLowerCase().trim())
-    const rows=json.table.rows||[]
-    if(!rows.length)throw new Error('ไม่พบข้อมูลใน Sheet')
-    // Map columns → find name, village, group, date, interval, note
-    const ci={
-      name: cols.findIndex(c=>c.includes('ชื่อ')||c.includes('name')),
-      village: cols.findIndex(c=>c.includes('หมู่')||c.includes('village')||c.includes('บ้าน')),
-      group: cols.findIndex(c=>c.includes('กลุ่ม')||c.includes('group')||c.includes('สี')),
-      date: cols.findIndex(c=>c.includes('วัน')||c.includes('date')||c.includes('ฉีด')),
-      interval: cols.findIndex(c=>c.includes('รอบ')||c.includes('interval')||c.includes('นัด')),
-      note: cols.findIndex(c=>c.includes('หมาย')||c.includes('note')||c.includes('บันทึก')),
-    }
-    // Fallback by position if no Thai header found
-    if(ci.name<0) ci.name=0
-    if(ci.village<0) ci.village=1
-    if(ci.group<0) ci.group=2
-    if(ci.date<0) ci.date=3
-    if(ci.interval<0) ci.interval=4
-    if(ci.note<0) ci.note=5
-    const getVal=(row,i)=>{if(i<0||!row.c||!row.c[i])return '';const v=row.c[i];return v.f||v.v||''}
-    let inserted=0,skipped=0,errors=[]
-    btn.textContent=`⏳ 0/${rows.length}`
-    for(let i=0;i<rows.length;i++){
-      const row=rows[i]
-      const name=String(getVal(row,ci.name)).trim()
-      if(!name||name==='ชื่อ'||name==='name'){skipped++;continue}
-      const village=String(getVal(row,ci.village)).trim()||'หมู่ 1'
-      const groupStr=String(getVal(row,ci.group)).trim()
-      const dateRaw=String(getVal(row,ci.date)).trim()
-      const intervalStr=String(getVal(row,ci.interval)).trim()||'1 เดือน'
-      const note=String(getVal(row,ci.note)).trim()
-      // Parse date — may be Thai BE (พ.ศ.) or ISO
-      let dateISO=''
-      if(/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)){
-        dateISO=dateRaw
-      } else if(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(dateRaw)){
-        const pts2=dateRaw.split(/[\/\-]/)
-        let yr=parseInt(pts2[2])
-        if(yr>2400)yr=yr-543
-        dateISO=`${yr}-${String(pts2[1]).padStart(2,'0')}-${String(pts2[0]).padStart(2,'0')}`
-      } else if(/^\d{1,2}\s+\S+\s+\d{4}$/.test(dateRaw)){
-        // Thai format like "15 มิ.ย. 2566"
-        const TH_M={'ม.ค.':1,'ก.พ.':2,'มี.ค.':3,'เม.ย.':4,'พ.ค.':5,'มิ.ย.':6,'ก.ค.':7,'ส.ค.':8,'ก.ย.':9,'ต.ค.':10,'พ.ย.':11,'ธ.ค.':12,'มกราคม':1,'กุมภาพันธ์':2,'มีนาคม':3,'เมษายน':4,'พฤษภาคม':5,'มิถุนายน':6,'กรกฎาคม':7,'สิงหาคม':8,'กันยายน':9,'ตุลาคม':10,'พฤศจิกายน':11,'ธันวาคม':12}
-        const dp=dateRaw.split(/\s+/)
-        const mm=TH_M[dp[1]]||1
-        let yr=parseInt(dp[2]);if(yr>2400)yr=yr-543
-        dateISO=`${yr}-${String(mm).padStart(2,'0')}-${String(dp[0]).padStart(2,'0')}`
-      }
-      if(!dateISO){skipped++;continue}
-      try{
-        const gc=parseGroupColor(groupStr)
-        const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
-        await sb.from('patients').upsert({name,village},{onConflict:'name'})
-        const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
-        if(!found)throw new Error('patient not found')
-        await sb.from('injection_records').insert({patient_id:found.id,injection_date:dateISO,group_color:gc,group_label:gl,interval_str:intervalStr,interval_days:parseInterval(intervalStr),note,recorded_by:currentDisplayName||null})
-        inserted++
-      }catch(e){errors.push(name+': '+e.message)}
-      if((i+1)%5===0)btn.textContent=`⏳ ${i+1}/${rows.length}`
-    }
-    allPatients=await getPatients()
-    status.style.color='var(--green)'
-    status.textContent=`✅ นำเข้าสำเร็จ ${inserted} รายการ${skipped?` · ข้ามไป ${skipped}`:''}`
-    if(errors.length)status.textContent+=` · ผิดพลาด ${errors.length} รายการ`
-    btn.textContent='📥 นำเข้าข้อมูล';btn.disabled=false
-  }catch(e){
-    status.style.color='var(--red)';status.textContent='❌ '+e.message
-    btn.textContent='📥 นำเข้าข้อมูล';btn.disabled=false
-  }
-}
-
 function appendNote(text){const ta=document.getElementById('adm-note');if(ta)ta.value=ta.value?ta.value+' · '+text:text}
 
 async function saveAdminRecord(){
@@ -2866,7 +2751,7 @@ async function exportVisitExcel(){
         v.patient_name||'',
         v.village||'',
         p.house_no||'',
-        p.national_id||'',
+        maskNationalId(p.national_id)||'',
         p.disease_code||'',
         p.disease_name||'',
         v.visitor||'',
@@ -3032,7 +2917,7 @@ async function openModal(id){
       </div>
       <div class="form-group">
         <label>📎 แนบไฟล์เอกสาร (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
-        ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--primary);margin-bottom:6px;text-decoration:none">📄 ไฟล์ปัจจุบัน (คลิกดู) — อัปโหลดใหม่เพื่อแทนที่</a>`:''}
+        ${p.file_url?`<a href="${safeUrl(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--primary);margin-bottom:6px;text-decoration:none">📄 ไฟล์ปัจจุบัน (คลิกดู) — อัปโหลดใหม่เพื่อแทนที่</a>`:''}
         <div id="edit-pt-file-wrap" onclick="document.getElementById('edit-pt-file').click()"
           style="border:2px dashed var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer;background:#fff">
           <div id="edit-pt-file-label" style="font-size:12px;color:var(--text3)">📁 กดเพื่อเลือกไฟล์</div>
@@ -3091,7 +2976,7 @@ async function openModal(id){
             <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:4px">ภาพถ่ายบริบท / สภาพแวดล้อม</div>
             ${(p.photo_urls&&p.photo_urls.length>0)
               ? p.photo_urls.map((url,i)=>`<div style="position:relative;display:inline-block;margin-bottom:6px;max-width:100%">
-                  <a href="${esc(url)}" target="_blank"><img src="${esc(url)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>
+                  <a href="${safeUrl(url)}" target="_blank"><img src="${safeUrl(url)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>
                   ${canDo('record')?`<button onclick="removePatientPhoto(${p.id},${i})" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center" title="ลบรูป">×</button>`:''}
                 </div>`).join('')
               : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้อัปโหลด</div>`}
@@ -3127,7 +3012,7 @@ async function openModal(id){
     </div>`:''}
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
     ${p.file_url?`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <a href="${esc(p.file_url)}" target="_blank" style="flex:1;display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>
+      <a href="${safeUrl(p.file_url)}" target="_blank" style="flex:1;display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>
       ${canDo('record')?`<button onclick="removePatientFile(${p.id})" style="padding:7px 10px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:8px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🗑 ลบ</button>`:''}
     </div>`:''}
     ${(p.staff_responsible||p.aosomo_responsible)?`
