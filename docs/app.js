@@ -61,6 +61,11 @@ const AOSOMO_PROBLEMS = [
 let hospitalName = 'รพ.สต.สองคอน'
 let appSubtitle  = 'ระบบติดตามผู้ป่วยจิตเวช'
 let allPatients  = []
+let _ptCache=null,_ptCacheAt=0
+async function getPatientsCached(maxAgeMs=30000){
+  if(_ptCache&&Date.now()-_ptCacheAt<maxAgeMs)return _ptCache
+  _ptCache=await getPatients();_ptCacheAt=Date.now();return _ptCache
+}
 let _visitChecks = []
 let _visitProblems = []
 let _visitType   = 'aosomo'
@@ -196,6 +201,12 @@ function safeUrl(u){
   if(!u)return'#'
   try{const p=new URL(u);return(p.protocol==='https:'||p.protocol==='http:')?esc(u):'#'}catch{return'#'}
 }
+async function fetchWithTimeout(url,opts,ms=10000){
+  const ctrl=new AbortController()
+  const timer=setTimeout(()=>ctrl.abort(),ms)
+  try{return await fetch(url,{...opts,signal:ctrl.signal})}
+  finally{clearTimeout(timer)}
+}
 // สำหรับค่าที่ใส่ใน single-quoted JS string ภายใน HTML attribute เช่น onclick="func('${jsStr(val)}')"
 function jsStr(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\/g,'\\\\').replace(/'/g,"\\'")
@@ -318,7 +329,6 @@ async function getTrend() {
 // ─── Router ──────────────────────────────────────────────────────
 async function navigate(page) {
   if (!PAGES.includes(page)) page = 'dashboard'
-  // viewer เข้าได้เฉพาะหน้า overview
   if(currentRole==='viewer' && !_previewOrigRole && !VIEWER_PAGES.includes(page)) page='overview'
   document.querySelectorAll('[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === page))
   const titles = {
@@ -336,15 +346,20 @@ async function navigate(page) {
   setSubtitle(document.getElementById('header-sub'), s)
   const el = document.getElementById('page-content')
   el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text3)">⏳ กำลังโหลด...</div>'
-  allPatients = await getPatients()
-  if (page==='dashboard') renderDashboard(el)
-  else if (page==='patients')  renderPatients(el)
-  else if (page==='timeline')  renderTimeline(el)
-  else if (page==='overview')  renderOverview(el)
-  else if (page==='visit')     renderVisit(el)
-  else if (page==='admin')     renderAdmin(el)
-  else if (page==='members')   renderMembers(el)
-  else if (page==='guide')     renderGuide(el)
+  try{
+    allPatients = await getPatientsCached()
+    if (page==='dashboard') renderDashboard(el)
+    else if (page==='patients')  renderPatients(el)
+    else if (page==='timeline')  renderTimeline(el)
+    else if (page==='overview')  renderOverview(el)
+    else if (page==='visit')     renderVisit(el)
+    else if (page==='admin')     renderAdmin(el)
+    else if (page==='members')   renderMembers(el)
+    else if (page==='guide')     renderGuide(el)
+  }catch(e){
+    el.innerHTML=`<div style="text-align:center;padding:60px 20px;color:#ef4444">❌ โหลดไม่สำเร็จ: ${esc(e.message)}</div>`
+    console.error('navigate error:',e)
+  }
   history.replaceState(null,'','#'+page)
   updatePreviewHeader()
   updateUserUI()
@@ -2321,7 +2336,7 @@ async function testLine(){
   const status=document.getElementById('line-status')
   btn.disabled=true;btn.textContent='กำลังส่ง...'
   try{
-    const res=await fetch(LINE_FUNC_URL,{
+    const res=await fetchWithTimeout(LINE_FUNC_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},
       body:JSON.stringify({message:`🏥 JitHome ทดสอบแจ้งเตือน LINE\nระบบติดตามผู้ป่วยจิตเวช ${hospitalName}\nเวลา: ${new Date().toLocaleString('th-TH')}`})
@@ -2338,7 +2353,7 @@ async function sendLineVisitReport(visitData){
     const{data}=await sb.from('app_settings').select('setting_value').eq('setting_key','line_enabled').single()
     if(data?.setting_value!=='1')return
     const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
-    await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:msg})})
+    await fetchWithTimeout(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:msg})})
   }catch(e){console.warn('LINE notify error:',e)}
 }
 
@@ -2379,10 +2394,10 @@ async function sendReferralToHospital(visitData){
     if(lineGroupId){
       const body={message:msg,groupId:lineGroupId}
       if(lineToken)body.token=lineToken
-      await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
+      await fetchWithTimeout(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
     }
     if(tgToken&&tgChatId){
-      await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:msg})})
+      await fetchWithTimeout(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:msg})})
     }
   }catch(e){console.warn('Referral notify error:',e)}
 }
@@ -2420,13 +2435,13 @@ async function testReferNotify(){
     try{
       const body={message:testMsg,groupId:lineGroupId}
       if(lineToken)body.token=lineToken
-      const res=await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
+      const res=await fetchWithTimeout(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
       const d=await res.json();if(d.error)errs.push('LINE: '+d.error)
     }catch(e){errs.push('LINE: '+e.message)}
   }
   if(tgToken&&tgChatId){
     try{
-      const res=await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:testMsg})})
+      const res=await fetchWithTimeout(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:testMsg})})
       const d=await res.json();if(!d.ok)errs.push('Telegram: '+(d.description||'ส่งไม่สำเร็จ'))
     }catch(e){errs.push('Telegram: '+e.message)}
   }
@@ -2465,7 +2480,7 @@ async function testTelegram(){
   status.style.color='var(--text3)';status.textContent='กำลังทดสอบ...'
   try{
     const msg=`🏥 *JitHome ทดสอบการแจ้งเตือน*\n\nระบบติดตามผู้ป่วยจิตเวช\nโรงพยาบาล: ${hospitalName}\n\n✅ เชื่อมต่อสำเร็จ!`
-    const res=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{
+    const res=await fetchWithTimeout(`https://api.telegram.org/bot${token}/sendMessage`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({chat_id:chatid,text:msg,parse_mode:'Markdown'})
