@@ -201,6 +201,10 @@ function safeUrl(u){
   if(!u)return'#'
   try{const p=new URL(u);return(p.protocol==='https:'||p.protocol==='http:')?esc(u):'#'}catch{return'#'}
 }
+function genPassword(){
+  const chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+  return Array.from(crypto.getRandomValues(new Uint8Array(10))).map(b=>chars[b%chars.length]).join('')
+}
 async function fetchWithTimeout(url,opts,ms=10000){
   const ctrl=new AbortController()
   const timer=setTimeout(()=>ctrl.abort(),ms)
@@ -1887,7 +1891,7 @@ async function renderAdmin(el) {
     <h3>🏡 สร้างบัญชีสำหรับ อสม.</h3>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">สร้างบัญชีให้ อสม. ที่ไม่มีอีเมล — ใช้เบอร์โทรแทน</div>
     <div class="form-group"><label>ชื่อ-นามสกุล อสม. *</label><input type="text" id="ca-name" placeholder="เช่น นางสมศรี ใจดี" style="width:100%;box-sizing:border-box"></div>
-    <div class="form-group"><label>เบอร์โทรศัพท์ * (ใช้เป็นชื่อผู้ใช้และรหัสผ่าน)</label><input type="tel" id="ca-phone" placeholder="0812345678" maxlength="10" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>เบอร์โทรศัพท์ * (ใช้เป็นชื่อผู้ใช้)</label><input type="tel" id="ca-phone" placeholder="0812345678" maxlength="10" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>เลขบัตรประชาชน 🪪 (ไม่บังคับ)</label><input type="text" id="ca-nid" placeholder="เช่น 1234567890123" maxlength="13" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>หมู่บ้าน</label>
       <select id="ca-village" style="width:100%">
@@ -1919,11 +1923,10 @@ async function createAosomoAccount(){
   if(phone.length<9){result.style.color='var(--red)';result.textContent='❌ เบอร์โทรไม่ถูกต้อง';return}
   if(nid&&nid.length!==13){result.style.color='var(--red)';result.textContent='❌ เลขบัตรประชาชนต้องมี 13 หลัก';return}
   const email=phone+'@jithome.local'
-  const password=phone
+  const password=genPassword()
   btn.disabled=true;btn.textContent='กำลังสร้างบัญชี...'
   result.style.color='var(--text3)';result.textContent=''
   try{
-    // ใช้ temp client เพื่อไม่กระทบ session ของแอดมิน
     const tmp=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false}})
     const{data,error}=await tmp.auth.signUp({email,password})
     if(error){
@@ -1933,20 +1936,19 @@ async function createAosomoAccount(){
     }
     const uid=data?.user?.id
     if(uid){
-      // สร้าง profile ทันที ไม่ต้องรอ login ครั้งแรก
       const prof={id:uid,email,display_name:name,role:'aosomo',village,last_login:new Date().toISOString()}
       if(nid)prof.national_id=nid
       await sb.from('user_profiles').upsert(prof,{onConflict:'id'})
     }
-    // แสดงข้อมูลล็อกอินให้แอดมินส่งต่อ
     result.innerHTML=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;margin-top:4px">
       <div style="font-weight:700;color:#166534;margin-bottom:6px">✅ สร้างบัญชีสำเร็จ! แจ้ง อสม. ดังนี้:</div>
       <div style="font-size:12px;line-height:1.8">
         👤 ชื่อผู้ใช้: <strong>${esc(email)}</strong><br>
-        🔑 รหัสผ่าน: <strong>${esc(phone)}</strong><br>
+        🔑 รหัสผ่าน: <strong id="ca-pw-display" style="font-family:monospace;letter-spacing:1px">${esc(password)}</strong>
+        <button onclick="navigator.clipboard.writeText('${esc(password)}').then(()=>{this.textContent='✅ คัดลอกแล้ว';setTimeout(()=>this.textContent='📋 คัดลอก',2000)})" style="margin-left:8px;font-size:10px;padding:2px 8px;border:1px solid #16a34a;border-radius:4px;background:#fff;color:#16a34a;cursor:pointer;font-family:'Sarabun',sans-serif">📋 คัดลอก</button><br>
         🏡 หมู่บ้าน: <strong>${esc(village)}</strong>${nid?`<br>🪪 บัตรประชาชน: <strong>${maskNationalId(nid)}</strong>`:''}
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px">💡 แนะนำให้เปลี่ยนรหัสผ่านหลังเข้าสู่ระบบครั้งแรก</div>
+      <div style="font-size:11px;color:#b45309;margin-top:6px;background:#fefce8;padding:6px 8px;border-radius:6px">⚠️ บันทึกรหัสผ่านนี้ไว้ก่อน — จะไม่แสดงอีก แนะนำให้ อสม. เปลี่ยนรหัสผ่านหลังเข้าสู่ระบบ</div>
     </div>`
     document.getElementById('ca-name').value=''
     document.getElementById('ca-phone').value=''
@@ -1985,6 +1987,7 @@ function memberCard(p,showVillage=false){
       <select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
         ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
       </select>
+      ${p.role==='aosomo'&&p.email?.endsWith('@jithome.local')?`<button onclick="adminResetAosomoPassword('${p.id}','${jsStr(p.display_name||p.email)}')" style="background:none;border:none;cursor:pointer;color:#d97706;padding:4px;font-size:16px;line-height:1" title="รีเซ็ตรหัสผ่าน">🔑</button>`:''}
       <button onclick="deleteMember('${p.id}','${jsStr(p.display_name||p.email)}')" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:`
       <span style="font-size:11px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">${ROLE_LABEL[p.role]||p.role}</span>`}
       </div>
@@ -2130,6 +2133,40 @@ async function deleteMember(userId, displayName){
     details:{deleted_name:displayName}
   }).catch(()=>{})
   loadMembersList()
+}
+
+async function adminResetAosomoPassword(userId, displayName){
+  if(!canDo('admin')){alert('ไม่มีสิทธิ์');return}
+  if(!confirm(`รีเซ็ตรหัสผ่านสำหรับ "${displayName}"?\n\nระบบจะสร้างรหัสผ่านใหม่แบบสุ่ม\nคุณต้องแจ้ง อสม. คนนี้ด้วยตนเองหลังจากนี้`))return
+  try{
+    const{data:{session}}=await sb.auth.getSession()
+    const res=await fetchWithTimeout(`${SUPABASE_URL}/functions/v1/reset-aosomo-password`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${session?.access_token}`},
+      body:JSON.stringify({targetUserId:userId})
+    })
+    const data=await res.json()
+    if(!res.ok||data.error)throw new Error(data.error||'รีเซ็ตไม่สำเร็จ')
+    const overlay=document.createElement('div')
+    overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px'
+    overlay.innerHTML=`
+      <div style="background:var(--card);border-radius:16px;padding:24px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+        <div style="font-size:18px;font-weight:700;margin-bottom:4px">🔑 รหัสผ่านใหม่</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">${esc(displayName)}</div>
+        <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:14px 10px;text-align:center;margin-bottom:14px">
+          <div id="_reset-pw" style="font-size:24px;font-weight:900;font-family:monospace;letter-spacing:3px;color:#166534">${esc(data.password)}</div>
+        </div>
+        <button id="_reset-copy" style="width:100%;padding:10px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;margin-bottom:8px">📋 คัดลอกรหัสผ่าน</button>
+        <div style="font-size:11px;color:#dc2626;text-align:center;margin-bottom:14px">⚠️ แจ้ง อสม. ให้เรียบร้อยก่อนปิด — จะไม่แสดงอีก</div>
+        <button id="_reset-close" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer;font-family:'Sarabun',sans-serif">ปิด</button>
+      </div>`
+    document.body.appendChild(overlay)
+    overlay.querySelector('#_reset-copy').onclick=()=>{
+      navigator.clipboard.writeText(data.password)
+      overlay.querySelector('#_reset-copy').textContent='✅ คัดลอกแล้ว'
+    }
+    overlay.querySelector('#_reset-close').onclick=()=>overlay.remove()
+  }catch(e){alert('❌ รีเซ็ตรหัสผ่านไม่สำเร็จ: '+e.message)}
 }
 
 async function importAosomoFile(input){
@@ -4228,6 +4265,7 @@ function showAuthWall(mode='login'){
     </div>
     <div class="form-group"><label>ชื่อ-นามสกุล *</label><input type="text" id="rg-name" placeholder="เช่น นางสมศรี ใจดี" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>เบอร์โทรศัพท์ * (ใช้เป็นชื่อผู้ใช้)</label><input type="tel" id="rg-phone" placeholder="0812345678" maxlength="10" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>รหัสผ่าน * (อย่างน้อย 8 ตัวอักษร)</label><input type="password" id="rg-password" placeholder="ตั้งรหัสผ่านที่จำได้ง่าย" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>เลขบัตรประชาชน (ไม่บังคับ)</label><input type="text" id="rg-nid" placeholder="1234567890123" maxlength="13" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>หมู่บ้าน</label><select id="rg-village" style="width:100%">${vOpts}</select></div>
     <div class="form-group"><label>ไฟล์แนบ เช่น สำเนาบัตร อสม. (ไม่บังคับ)</label><input type="file" id="rg-file" accept="image/*,.pdf" style="width:100%;box-sizing:border-box"></div>
@@ -4518,6 +4556,7 @@ async function registerUser(){
 async function registerAosomo(){
   const name=(document.getElementById('rg-name')?.value||'').trim()
   const phone=(document.getElementById('rg-phone')?.value||'').replace(/\D/g,'')
+  const password=(document.getElementById('rg-password')?.value||'')
   const nid=(document.getElementById('rg-nid')?.value||'').replace(/\D/g,'')
   const village=document.getElementById('rg-village')?.value||''
   const file=document.getElementById('rg-file')?.files?.[0]||null
@@ -4526,10 +4565,10 @@ async function registerAosomo(){
   const err=document.getElementById('auth-error')
   if(!name){err.textContent='❌ กรุณากรอกชื่อ-นามสกุล';return}
   if(phone.length<9){err.textContent='❌ เบอร์โทรไม่ถูกต้อง (ต้องมีอย่างน้อย 9 หลัก)';return}
+  if(password.length<8){err.textContent='❌ รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';return}
   if(nid&&nid.length!==13){err.textContent='❌ เลขบัตรประชาชนต้องมี 13 หลัก';return}
   if(!consent){err.textContent='❌ กรุณายืนยันความยินยอม PDPA';return}
   const email=phone+'@jithome.local'
-  const password=phone
   btn.disabled=true;btn.textContent='กำลังส่งคำขอ...'
   err.textContent=''
   try{
