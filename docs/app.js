@@ -141,6 +141,21 @@ function daysChip(n) {
 function groupLabel(g) {
   return {red:'กลุ่มสีแดง',yellow:'กลุ่มสีเหลือง',green:'กลุ่มสีเขียว'}[g] || 'กลุ่มสีเหลือง'
 }
+let _xlsxP=null
+function loadXLSX(){
+  if(typeof XLSX!=='undefined')return Promise.resolve()
+  if(_xlsxP)return _xlsxP
+  _xlsxP=new Promise((res,rej)=>{
+    const s=document.createElement('script')
+    s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'
+    s.integrity='sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'
+    s.crossOrigin='anonymous'
+    s.onload=res
+    s.onerror=()=>rej(new Error('โหลด xlsx ไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'))
+    document.head.appendChild(s)
+  })
+  return _xlsxP
+}
 function parseInterval(s) {
   if (!s) return 30
   if (/3\s*เดือน/.test(s))   return 90
@@ -2198,6 +2213,7 @@ async function adminResetAosomoPassword(userId, displayName){
 async function importAosomoFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
+    await loadXLSX()
     const data=await file.arrayBuffer()
     const wb=XLSX.read(data)
     const ws=wb.Sheets[wb.SheetNames[0]]
@@ -2227,6 +2243,7 @@ async function deleteAosomoDirectory(id){
 async function importStaffDirFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
+    await loadXLSX()
     const data=await file.arrayBuffer()
     const wb=XLSX.read(data)
     const ws=wb.Sheets[wb.SheetNames[0]]
@@ -2296,6 +2313,7 @@ async function mergeAndSavePatients(records, confirmMsg){
 async function importPatientFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
+    await loadXLSX()
     const data=await file.arrayBuffer()
     const wb=XLSX.read(data)
     const ws=wb.Sheets[wb.SheetNames[0]]
@@ -2320,6 +2338,7 @@ async function importPatientFile(input){
 async function importHospitalFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
+    await loadXLSX()
     const data=await file.arrayBuffer()
     const wb=XLSX.read(data)
     const ws=wb.Sheets[wb.SheetNames[0]]
@@ -2805,6 +2824,7 @@ function exportJSON(){
 
 async function exportVisitExcel(){
   if(!canDo('record')){alert('🔒 ไม่มีสิทธิ์ Export ข้อมูล');return}
+  await loadXLSX()
   const now=new Date()
   const defFrom=new Date(now.getFullYear(),now.getMonth()-5,1).toISOString().split('T')[0]
   const defTo=now.toISOString().split('T')[0]
