@@ -4460,6 +4460,20 @@ async function _postLoginSuccess(email=''){
   if(email.endsWith('@jithome.local')){
     setTimeout(()=>{showToast('⚠️ กรุณาเปลี่ยนรหัสผ่านในเมนูบัญชีของคุณ เพื่อความปลอดภัย',5000)},1500)
   }
+  checkPrivacyConsent()
+}
+
+function checkPrivacyConsent(){
+  if(localStorage.getItem('jithome_privacy_v1'))return
+  const el=document.getElementById('privacy-overlay')
+  if(el)el.style.display='flex'
+}
+
+async function acceptPrivacyConsent(){
+  localStorage.setItem('jithome_privacy_v1',Date.now().toString())
+  const el=document.getElementById('privacy-overlay')
+  if(el)el.style.display='none'
+  auditLog('privacy_accepted','consent',currentUser?.id,{version:'v1',role:currentRole})
 }
 
 async function _handleAdminMFA(){
