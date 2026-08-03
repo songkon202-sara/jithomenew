@@ -572,7 +572,8 @@ function doctorApptCard(a){
   const p=a.patients||{}
   const typeLabel={'medicine':'💊 รับยา','check':'🩺 ตรวจ','other':'📋 อื่นๆ'}[a.appoint_type]||a.appoint_type||'รับยา'
   const gc=p.group_color||'green'
-  const dot=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc==='red'?'#ef4444':gc==='yellow'?'#f59e0b':'#22c55e'};margin-right:4px;vertical-align:middle"></span>`
+  const gcLabel={red:'กลุ่มสีแดง',yellow:'กลุ่มสีเหลือง',green:'กลุ่มสีเขียว'}[gc]||'กลุ่มสีเขียว'
+  const dot=`<span role="img" aria-label="${gcLabel}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc==='red'?'#ef4444':gc==='yellow'?'#f59e0b':'#22c55e'};margin-right:4px;vertical-align:middle"></span>`
   const daysUntil=Math.round((new Date(a.appoint_date+'T00:00:00')-new Date(todayISO()+'T00:00:00'))/86400000)
   const isOverdue=daysUntil<0&&a.status!=='done'&&a.status!=='missed'
   const chip=daysChip(a.status==='done'||a.status==='missed'?NaN:daysUntil)
