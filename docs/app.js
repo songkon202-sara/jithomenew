@@ -201,6 +201,27 @@ function safeUrl(u){
   if(!u)return'#'
   try{const p=new URL(u);return(p.protocol==='https:'||p.protocol==='http:')?esc(u):'#'}catch{return'#'}
 }
+function extractStoragePath(url){
+  if(!url)return null
+  const m=url.match(/\/object\/(?:public|sign)\/patient-files\/(.+?)(?:\?|$)/)
+  return m?decodeURIComponent(m[1]):(!url.startsWith('http')?url:null)
+}
+async function getSignedUrl(url,expiresIn=3600){
+  const path=extractStoragePath(url)
+  if(!path)return safeUrl(url)
+  const{data}=await sb.storage.from('patient-files').createSignedUrl(path,expiresIn)
+  return data?.signedUrl||''
+}
+async function batchSignedUrls(urls,expiresIn=3600){
+  const valid=(urls||[]).filter(Boolean)
+  if(!valid.length)return{}
+  const pairs=valid.map(u=>({u,p:extractStoragePath(u)})).filter(x=>x.p)
+  if(!pairs.length)return{}
+  const{data}=await sb.storage.from('patient-files').createSignedUrls(pairs.map(x=>x.p),expiresIn)
+  const map={}
+  ;(data||[]).forEach((d,i)=>{if(d?.signedUrl)map[pairs[i].u]=d.signedUrl})
+  return map
+}
 function genPassword(){
   const chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
   return Array.from(crypto.getRandomValues(new Uint8Array(10))).map(b=>chars[b%chars.length]).join('')
@@ -1051,6 +1072,8 @@ async function renderOverview(el) {
 // ─── Visit ───────────────────────────────────────────────────────
 async function renderVisit(el) {
   const visits=await getVisits()
+  const _vPhotoMap=await batchSignedUrls(visits.filter(v=>v.photo_url).map(v=>v.photo_url))
+  visits.forEach(v=>{if(v.photo_url&&_vPhotoMap[v.photo_url])v.photo_url=_vPhotoMap[v.photo_url]})
   window._allVisits=visits
   // โหลด referrals สำหรับ staff/admin
   let referralHtml=''
@@ -2071,6 +2094,8 @@ async function loadMembersList(){
   if(pendingEl&&pendingSection){
     if(pending.length){
       pendingSection.style.display=''
+      const _pfMap=await batchSignedUrls(pending.filter(p=>p.profile_file_url).map(p=>p.profile_file_url))
+      pending.forEach(p=>{if(p.profile_file_url&&_pfMap[p.profile_file_url])p.profile_file_url=_pfMap[p.profile_file_url]})
       pendingEl.innerHTML=pending.map(p=>`
         <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:12px 14px;margin-bottom:8px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
@@ -2866,6 +2891,9 @@ async function openModal(id){
     p.photo_urls=pExtra?.photo_urls||[]
     p.oral_medication=pExtra?.oral_medication||null
     p.consent_signature=pExtra?.consent_signature||null
+    const _sMap=await batchSignedUrls([...p.photo_urls,...(p.consent_signature?[p.consent_signature]:[])])
+    p.photo_urls=p.photo_urls.map(u=>_sMap[u]||u)
+    if(p.consent_signature)p.consent_signature=_sMap[p.consent_signature]||p.consent_signature
     if(pExtra?.consent_given!=null){p.consent_given=pExtra.consent_given;p.consent_date=pExtra.consent_date||p.consent_date}
     if(pExtra?.next_inject_date) p.next_inject_date=pExtra.next_inject_date
     if(pExtra?.next_visit_date) p.next_visit_date=pExtra.next_visit_date
