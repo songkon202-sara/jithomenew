@@ -588,7 +588,9 @@ function doctorApptCard(a){
   const typeLabel={'medicine':'💊 รับยา','check':'🩺 ตรวจ','other':'📋 อื่นๆ'}[a.appoint_type]||a.appoint_type||'รับยา'
   const gc=p.group_color||'green'
   const gcLabel={red:'กลุ่มสีแดง',yellow:'กลุ่มสีเหลือง',green:'กลุ่มสีเขียว'}[gc]||'กลุ่มสีเขียว'
-  const dot=`<span role="img" aria-label="${gcLabel}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc==='red'?'#ef4444':gc==='yellow'?'#f59e0b':'#22c55e'};margin-right:4px;vertical-align:middle"></span>`
+  const gcShape={red:'▲',yellow:'◆',green:'●'}[gc]||'●'
+  const gcColor={red:'#ef4444',yellow:'#f59e0b',green:'#22c55e'}[gc]||'#22c55e'
+  const dot=`<span role="img" aria-label="${gcLabel}" style="color:${gcColor};font-size:10px;font-weight:900;margin-right:4px;vertical-align:middle">${gcShape}</span>`
   const daysUntil=Math.round((new Date(a.appoint_date+'T00:00:00')-new Date(todayISO()+'T00:00:00'))/86400000)
   const isOverdue=daysUntil<0&&a.status!=='done'&&a.status!=='missed'
   const chip=daysChip(a.status==='done'||a.status==='missed'?NaN:daysUntil)
@@ -606,8 +608,8 @@ function doctorApptCard(a){
         <span class="days-chip ${chip.cls}">${chip.label}</span>
         ${statusLabel?`<span style="font-size:11px;font-weight:700;color:${statusColor}">${statusLabel}</span>`:''}
         ${canDo('record')?`<div style="display:flex;gap:4px">
-          <button onclick="editDoctorAppt(${a.id})" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>
-          <button onclick="deleteDoctorAppt(${a.id})" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>
+          <button onclick="editDoctorAppt(${a.id})" aria-label="แก้ไขนัดพบแพทย์" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>
+          <button onclick="deleteDoctorAppt(${a.id})" aria-label="ลบนัดพบแพทย์" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>
         </div>`:''}
       </div>
     </div>
@@ -1096,26 +1098,44 @@ async function renderVisit(el) {
   let clinicQueueHtml=''
   if(canDo('record')){
     // queue 1: อสม. → เจ้าหน้าที่
-    const{data:refs}=await sb.from('home_visits')
-      .select('patient_name,village,visit_date,visitor,note')
-      .eq('refer',true).eq('visit_type','aosomo')
-      .order('visit_date',{ascending:false}).limit(20)
+    const[{data:refs},{data:aosomoDir},{data:aosomoProfiles}]=await Promise.all([
+      sb.from('home_visits')
+        .select('patient_name,village,visit_date,visitor,note')
+        .eq('refer',true).eq('visit_type','aosomo')
+        .order('visit_date',{ascending:false}).limit(20),
+      sb.from('aosomo_directory').select('name,phone,line_id'),
+      sb.from('user_profiles').select('display_name,email').eq('role','aosomo')
+    ])
+    const aosomoPhoneMap={},aosomoLineMap={}
+    ;(aosomoDir||[]).forEach(a=>{if(a.phone)aosomoPhoneMap[a.name]=a.phone;if(a.line_id)aosomoLineMap[a.name]=a.line_id})
+    ;(aosomoProfiles||[]).forEach(p=>{
+      const name=p.display_name||'';const phone=(p.email||'').split('@')[0]
+      if(name&&phone&&!aosomoPhoneMap[name])aosomoPhoneMap[name]=phone
+    })
     const staffVisitedNames=new Set(visits.filter(v=>v.visit_type==='staff').map(v=>v.patient_name))
     const pending=(refs||[]).filter(r=>!staffVisitedNames.has(r.patient_name))
     if(pending.length){
       referralHtml=`<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:16px">
         <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:10px">⚠️ รายการส่งต่อจาก อสม. รอเจ้าหน้าที่ลงเยี่ยม (${pending.length} ราย)</div>
-        ${pending.map(r=>`<div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #fecaca;display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <div style="min-width:0">
+        ${pending.map(r=>{
+          const phone=aosomoPhoneMap[r.visitor||'']||''
+          const lineId=aosomoLineMap[r.visitor||'']||''
+          const contactBtn=phone?`<a href="tel:${esc(phone)}" aria-label="โทรหา อสม.${esc(r.visitor||'')}" style="flex-shrink:0;padding:7px 10px;background:#fff;color:#0369a1;border:1.5px solid #7dd3fc;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;text-decoration:none;display:flex;align-items:center;gap:4px">📞 โทร</a>`:''
+          const lineBtn=lineId?`<a href="https://line.me/ti/p/~${esc(lineId)}" target="_blank" rel="noopener" aria-label="ส่ง LINE หา อสม.${esc(r.visitor||'')}" style="flex-shrink:0;padding:7px 10px;background:#06C755;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;text-decoration:none;display:flex;align-items:center;gap:4px">💬 LINE</a>`:''
+          return`<div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #fecaca;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="min-width:0;flex:1">
             <div style="font-size:13px;font-weight:700;color:var(--text1)">${esc(r.patient_name)}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(r.village||'')} · อสม.${esc(r.visitor||'')} · ${r.visit_date||''}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(r.village||'')} · อสม.${esc(r.visitor||'')}${phone?` · <span style="color:#0369a1">${esc(phone)}</span>`:''}${lineId?` · LINE: ${esc(lineId)}`:''} · ${r.visit_date||''}</div>
             ${r.note?`<div style="font-size:11px;color:#b91c1c;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.note.split('\n')[0])}</div>`:''}
           </div>
-          <button onclick="openVisitFormFor('${jsStr(r.patient_name)}','${jsStr(r.village||'')}')"
-            style="flex-shrink:0;padding:7px 12px;background:#b91c1c;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
-            🏥 ลงเยี่ยม
-          </button>
-        </div>`).join('')}
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            ${contactBtn}${lineBtn}
+            <button onclick="openVisitFormFor('${jsStr(r.patient_name)}','${jsStr(r.village||'')}')"
+              style="padding:7px 12px;background:#b91c1c;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
+              🏥 ลงเยี่ยม
+            </button>
+          </div>
+        </div>`}).join('')}
       </div>`
     }
     // queue 2: เจ้าหน้าที่ → รพ./คลินิก
@@ -1270,8 +1290,8 @@ function renderVisitList(visits){
         <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700">${esc(v.patient_name)}</div><div style="font-size:12px;color:var(--text3)">${esc(v.village||'')} · ${v.visit_date_th||v.visit_date}</div></div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
           <span style="background:${bg};color:${clr};padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700">${lbl}</span>
-          ${canEdit?`<button onclick="openEditVisit(${v.id})" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>`:''}
-          ${canDo('admin')?`<button onclick="deleteVisit(${v.id},'${jsStr(v.patient_name)}')" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>`:''}
+          ${canEdit?`<button onclick="openEditVisit(${v.id})" aria-label="แก้ไขบันทึกเยี่ยมบ้าน" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>`:''}
+          ${canDo('admin')?`<button onclick="deleteVisit(${v.id},'${jsStr(v.patient_name)}')" aria-label="ลบบันทึกเยี่ยมบ้าน" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>`:''}
         </div>
       </div>
       <div style="font-size:12px;color:var(--text2)">${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'} ${esc(v.visitor||'')}${v.refer?` <span style="color:#b91c1c;font-weight:700">⚠️ ส่งต่อ</span>`:''}</div>
@@ -1455,7 +1475,7 @@ function renderMembers(el){
       <input type="file" id="aosomo-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importAosomoFile(this)">
     </div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;padding:6px 10px;background:#f5f3ff;border-radius:6px">
-      📋 นำเข้าจาก Excel/CSV — คอลัมน์: <strong>ชื่อ, หมู่บ้าน, เบอร์โทร</strong> (แถวแรกเป็น header)
+      📋 นำเข้าจาก Excel/CSV — คอลัมน์: <strong>ชื่อ, หมู่บ้าน, เบอร์โทร, LINE ID</strong> (แถวแรกเป็น header — LINE ID เป็นคอลัมน์ที่ 4 ไม่บังคับ)
     </div>
     <div id="group-aosomo"><div style="color:var(--text3);font-size:12px;padding:8px">⏳ กำลังโหลด...</div></div>
   </div>
@@ -2015,7 +2035,7 @@ function memberCard(p,showVillage=false){
         <div style="min-width:0;flex:1">
           <div style="display:flex;align-items:center;gap:6px">
             <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
-            ${canEdit?`<button onclick="editMemberName('${p.id}','${jsStr(p.display_name||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
+            ${canEdit?`<button onclick="editMemberName('${p.id}','${jsStr(p.display_name||'')}')" aria-label="แก้ไขชื่อ" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
           </div>
           <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
           ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace;margin-top:1px">🪪 ${maskNationalId(p.national_id)}</div>`:''}
@@ -2026,8 +2046,8 @@ function memberCard(p,showVillage=false){
       <select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
         ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
       </select>
-      ${p.role==='aosomo'&&p.email?.endsWith('@jithome.local')?`<button onclick="adminResetAosomoPassword('${p.id}','${jsStr(p.display_name||p.email)}')" style="background:none;border:none;cursor:pointer;color:#d97706;padding:4px;font-size:16px;line-height:1" title="รีเซ็ตรหัสผ่าน">🔑</button>`:''}
-      <button onclick="deleteMember('${p.id}','${jsStr(p.display_name||p.email)}')" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:`
+      ${p.role==='aosomo'&&p.email?.endsWith('@jithome.local')?`<button onclick="adminResetAosomoPassword('${p.id}','${jsStr(p.display_name||p.email)}')" aria-label="รีเซ็ตรหัสผ่าน" style="background:none;border:none;cursor:pointer;color:#d97706;padding:4px;font-size:16px;line-height:1" title="รีเซ็ตรหัสผ่าน">🔑</button>`:''}
+      <button onclick="deleteMember('${p.id}','${jsStr(p.display_name||p.email)}')" aria-label="ลบสมาชิก" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:`
       <span style="font-size:11px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">${ROLE_LABEL[p.role]||p.role}</span>`}
       </div>
     </div>
@@ -2065,7 +2085,7 @@ function staffDirectoryCard(s){
         <div style="font-size:11px;color:var(--text3)">${esc(s.position||'—')}${s.phone?` · ${esc(s.phone)}`:''}</div>
       </div>
     </div>
-    <button onclick="deleteStaffDirectory(${s.id})" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
+    <button onclick="deleteStaffDirectory(${s.id})" aria-label="ลบรายชื่อเจ้าหน้าที่" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
   </div>`
 }
 
@@ -2076,10 +2096,10 @@ function aosomoDirectoryCard(a){
       <div style="width:32px;height:32px;border-radius:50%;background:#ede9fe;color:#7c3aed;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${esc((a.name||'?').slice(0,2))}</div>
       <div>
         <div style="font-size:13px;font-weight:700">${esc(a.name)}</div>
-        <div style="font-size:11px;color:var(--text3)">${esc(a.village||'—')}${a.phone?` · ${esc(a.phone)}`:''}</div>
+        <div style="font-size:11px;color:var(--text3)">${esc(a.village||'—')}${a.phone?` · ${esc(a.phone)}`:''}${a.line_id?` · <span style="color:#06C755">LINE: ${esc(a.line_id)}</span>`:''}</div>
       </div>
     </div>
-    <button onclick="deleteAosomoDirectory(${a.id})" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
+    <button onclick="deleteAosomoDirectory(${a.id})" aria-label="ลบรายชื่อ อสม." style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
   </div>`
 }
 
@@ -2222,7 +2242,8 @@ async function importAosomoFile(input){
     const records=rows.slice(1).filter(r=>r[0]).map(r=>({
       name:String(r[0]||'').trim(),
       village:String(r[1]||'').trim(),
-      phone:String(r[2]||'').trim(),
+      phone:String(r[2]||'').trim()||null,
+      line_id:String(r[3]||'').trim()||null,
     })).filter(r=>r.name)
     if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
     if(!confirm(`นำเข้า ${records.length} รายชื่อ อสม. ใช่หรือไม่?`))return
@@ -2875,12 +2896,12 @@ function downloadTemplate(type){
       'นายวิชัย มั่นคง,นักวิชาการสาธารณสุข,0834567890'
     filename='ตัวอย่าง_รายชื่อเจ้าหน้าที่.csv'
   } else if(type==='aosomo'){
-    csv='ชื่อ-นามสกุล,หมู่บ้าน,เบอร์โทร\n'+
-      'นางสาวมาลี ใจดี,หมู่ 1,0812345678\n'+
-      'นายสมชาย รักษ์ดี,หมู่ 1,0823456789\n'+
-      'นางวิไล สุขสันต์,หมู่ 2,0834567890\n'+
-      'นางสาวอารีย์ แก้วใส,หมู่ 2,0845678901\n'+
-      'นายประสิทธิ์ ทองดี,หมู่ 3,0856789012'
+    csv='ชื่อ-นามสกุล,หมู่บ้าน,เบอร์โทร,LINE ID\n'+
+      'นางสาวมาลี ใจดี,หมู่ 1,0812345678,mali.jaidee\n'+
+      'นายสมชาย รักษ์ดี,หมู่ 1,0823456789,\n'+
+      'นางวิไล สุขสันต์,หมู่ 2,0834567890,wilai_suksan\n'+
+      'นางสาวอารีย์ แก้วใส,หมู่ 2,0845678901,\n'+
+      'นายประสิทธิ์ ทองดี,หมู่ 3,0856789012,'
     filename='ตัวอย่าง_รายชื่ออสม.csv'
   } else {
     csv='ชื่อ-นามสกุล,บ้านเลขที่,หมู่บ้าน,หมายเหตุ,เลขบัตรประชาชน,รหัสโรค,ชื่อโรค,เยี่ยมบ้านทุก(เดือน),ฉีดยาทุก(เดือน),รายการยาที่ฉีด\n'+
@@ -2946,8 +2967,8 @@ async function openModal(id){
         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
           <div class="history-date">${esc(h.date_th)} ${badge}</div>
           ${canDo('record')?`<div style="display:flex;gap:2px">
-            <button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${jsStr(h.interval_str||'')}','${jsStr(h.note||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="แก้ไข">✏️</button>
-            <button onclick="deleteRecord(${h.id},${p.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="ลบรายการนี้">🗑️</button>
+            <button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${jsStr(h.interval_str||'')}','${jsStr(h.note||'')}')" aria-label="แก้ไขบันทึกยา" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="แก้ไข">✏️</button>
+            <button onclick="deleteRecord(${h.id},${p.id})" aria-label="ลบบันทึกยา" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="ลบรายการนี้">🗑️</button>
           </div>`:''}
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(h.group_label||'')}${h.interval_str?` · ${h.record_type==='visit'?'🏡 นัดเยี่ยม':'💉 นัด'}${esc(h.interval_str)}`:''}</div>
