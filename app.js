@@ -61,6 +61,11 @@ const AOSOMO_PROBLEMS = [
 let hospitalName = 'รพ.สต.สองคอน'
 let appSubtitle  = 'ระบบติดตามผู้ป่วยจิตเวช'
 let allPatients  = []
+let _ptCache=null,_ptCacheAt=0
+async function getPatientsCached(maxAgeMs=30000){
+  if(_ptCache&&Date.now()-_ptCacheAt<maxAgeMs)return _ptCache
+  _ptCache=await getPatients();_ptCacheAt=Date.now();return _ptCache
+}
 let _visitChecks = []
 let _visitProblems = []
 let _visitType   = 'aosomo'
@@ -93,6 +98,13 @@ let currentDisplayName = ''
 let currentVillage     = ''        // หมู่บ้านที่ อสม. รับผิดชอบ
 let _previewOrigRole   = null      // เก็บ role จริงของ admin ขณะ preview
 let _previewOrigVillage= null
+let _realtimeChannel   = null      // Supabase Realtime channel
+let _realtimeDebounce  = null      // debounce timer สำหรับ reload
+const _ownWriteIds     = new Set() // IDs ที่ client นี้เพิ่งเขียน (กรองไม่ให้ reload ซ้ำ)
+let _mfaFactorId       = null      // factorId สำหรับ verify
+let _mfaEnrollId       = null      // factorId สำหรับ enroll ครั้งแรก
+let _mfaEnrollData     = null      // { totp: { qr_code, secret } }
+let _mfaEmail          = ''        // เก็บ email ชั่วคราวระหว่าง MFA flow
 
 const ROLE_LABEL = {admin:'ผู้ดูแลระบบ',staff:'เจ้าหน้าที่',aosomo:'อสม.',viewer:'ผู้สังเกตการณ์'}
 const ROLE_COLOR = {admin:'var(--primary)',staff:'#0d9488',aosomo:'#7c3aed',viewer:'var(--text3)'}
@@ -128,6 +140,21 @@ function daysChip(n) {
 }
 function groupLabel(g) {
   return {red:'กลุ่มสีแดง',yellow:'กลุ่มสีเหลือง',green:'กลุ่มสีเขียว'}[g] || 'กลุ่มสีเหลือง'
+}
+let _xlsxP=null
+function loadXLSX(){
+  if(typeof XLSX!=='undefined')return Promise.resolve()
+  if(_xlsxP)return _xlsxP
+  _xlsxP=new Promise((res,rej)=>{
+    const s=document.createElement('script')
+    s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'
+    s.integrity='sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'
+    s.crossOrigin='anonymous'
+    s.onload=res
+    s.onerror=()=>rej(new Error('โหลด xlsx ไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต'))
+    document.head.appendChild(s)
+  })
+  return _xlsxP
 }
 function parseInterval(s) {
   if (!s) return 30
@@ -184,6 +211,52 @@ function parseGroupColor(g) {
 }
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+function safeUrl(u){
+  if(!u)return'#'
+  try{const p=new URL(u);return(p.protocol==='https:'||p.protocol==='http:')?esc(u):'#'}catch{return'#'}
+}
+function extractStoragePath(url){
+  if(!url)return null
+  const m=url.match(/\/object\/(?:public|sign)\/patient-files\/(.+?)(?:\?|$)/)
+  return m?decodeURIComponent(m[1]):(!url.startsWith('http')?url:null)
+}
+async function getSignedUrl(url,expiresIn=3600){
+  const path=extractStoragePath(url)
+  if(!path)return safeUrl(url)
+  const{data}=await sb.storage.from('patient-files').createSignedUrl(path,expiresIn)
+  return data?.signedUrl||''
+}
+async function batchSignedUrls(urls,expiresIn=3600){
+  const valid=(urls||[]).filter(Boolean)
+  if(!valid.length)return{}
+  const pairs=valid.map(u=>({u,p:extractStoragePath(u)})).filter(x=>x.p)
+  if(!pairs.length)return{}
+  const{data}=await sb.storage.from('patient-files').createSignedUrls(pairs.map(x=>x.p),expiresIn)
+  const map={}
+  ;(data||[]).forEach((d,i)=>{if(d?.signedUrl)map[pairs[i].u]=d.signedUrl})
+  return map
+}
+function genPassword(){
+  const chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+  return Array.from(crypto.getRandomValues(new Uint8Array(10))).map(b=>chars[b%chars.length]).join('')
+}
+async function fetchWithTimeout(url,opts,ms=10000){
+  const ctrl=new AbortController()
+  const timer=setTimeout(()=>ctrl.abort(),ms)
+  try{return await fetch(url,{...opts,signal:ctrl.signal})}
+  finally{clearTimeout(timer)}
+}
+// สำหรับค่าที่ใส่ใน single-quoted JS string ภายใน HTML attribute เช่น onclick="func('${jsStr(val)}')"
+function jsStr(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\/g,'\\\\').replace(/'/g,"\\'")
+}
+function showToast(msg,duration=2500){
+  document.getElementById('_toast')?.remove()
+  const t=document.createElement('div');t.id='_toast'
+  t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:99999;font-family:Sarabun,sans-serif;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,0.3)'
+  t.textContent=msg;document.body.appendChild(t)
+  setTimeout(()=>t.remove(),duration)
 }
 function setSubtitle(el,text){if(!el)return;el.innerHTML=esc(text||'').replace(/\n/g,'<br>')}
 function todayISO() { return new Date().toISOString().slice(0,10) }
@@ -296,7 +369,6 @@ async function getTrend() {
 // ─── Router ──────────────────────────────────────────────────────
 async function navigate(page) {
   if (!PAGES.includes(page)) page = 'dashboard'
-  // viewer เข้าได้เฉพาะหน้า overview
   if(currentRole==='viewer' && !_previewOrigRole && !VIEWER_PAGES.includes(page)) page='overview'
   document.querySelectorAll('[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === page))
   const titles = {
@@ -314,15 +386,20 @@ async function navigate(page) {
   setSubtitle(document.getElementById('header-sub'), s)
   const el = document.getElementById('page-content')
   el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text3)">⏳ กำลังโหลด...</div>'
-  allPatients = await getPatients()
-  if (page==='dashboard') renderDashboard(el)
-  else if (page==='patients')  renderPatients(el)
-  else if (page==='timeline')  renderTimeline(el)
-  else if (page==='overview')  renderOverview(el)
-  else if (page==='visit')     renderVisit(el)
-  else if (page==='admin')     renderAdmin(el)
-  else if (page==='members')   renderMembers(el)
-  else if (page==='guide')     renderGuide(el)
+  try{
+    allPatients = await getPatientsCached()
+    if (page==='dashboard') renderDashboard(el)
+    else if (page==='patients')  renderPatients(el)
+    else if (page==='timeline')  renderTimeline(el)
+    else if (page==='overview')  renderOverview(el)
+    else if (page==='visit')     renderVisit(el)
+    else if (page==='admin')     renderAdmin(el)
+    else if (page==='members')   renderMembers(el)
+    else if (page==='guide')     renderGuide(el)
+  }catch(e){
+    el.innerHTML=`<div style="text-align:center;padding:60px 20px;color:#ef4444">❌ โหลดไม่สำเร็จ: ${esc(e.message)}</div>`
+    console.error('navigate error:',e)
+  }
   history.replaceState(null,'','#'+page)
   updatePreviewHeader()
   updateUserUI()
@@ -404,7 +481,7 @@ function renderPatients(el) {
   </div>
   <div class="filter-row">
     <button class="filter-chip active" data-vf="all" onclick="setVF('all')">ทุกหมู่บ้าน</button>
-    ${villages.map(v=>`<button class="filter-chip" data-vf="${esc(v)}" onclick="setVF('${esc(v)}')">${esc(v)}</button>`).join('')}
+    ${villages.map(v=>`<button class="filter-chip" data-vf="${esc(v)}" onclick="setVF('${jsStr(v)}')">${esc(v)}</button>`).join('')}
   </div>
   <div id="pt-list"></div>
   </div>`
@@ -441,17 +518,21 @@ function renderTimeline(el) {
   if(!window._tlf) window._tlf='all'
   const today=todayISO()
   const t=window._tlType, f=window._tlf
-  const df=t==='inject'?'next_inject_date':'next_visit_date'
   const injectPts=allPatients.filter(p=>p.next_inject_date)
   const visitPts=allPatients.filter(p=>p.next_visit_date)
-  const basePts=t==='inject'?injectPts:visitPts
+  const doctorAppts=window._doctorAppts||[]
   const daysDiff=d=>Math.round((new Date(d+'T00:00:00')-new Date(today+'T00:00:00'))/86400000)
-  const cnt={
-    all:basePts.length,
-    overdue:basePts.filter(p=>p[df]<today).length,
-    today:basePts.filter(p=>p[df]===today).length,
-    week:basePts.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=7}).length,
-    month:basePts.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=30}).length,
+  let cnt={all:0,overdue:0,today:0,week:0,month:0}
+  if(t==='doctor'){
+    cnt.all=doctorAppts.filter(a=>a.status!=='done').length
+    cnt.overdue=doctorAppts.filter(a=>a.appoint_date<today&&a.status!=='done').length
+    cnt.today=doctorAppts.filter(a=>a.appoint_date===today).length
+    cnt.week=doctorAppts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=7}).length
+    cnt.month=doctorAppts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=30}).length
+  } else {
+    const df=t==='inject'?'next_inject_date':'next_visit_date'
+    const bp=t==='inject'?injectPts:visitPts
+    cnt={all:bp.length,overdue:bp.filter(p=>p[df]<today).length,today:bp.filter(p=>p[df]===today).length,week:bp.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=7}).length,month:bp.filter(p=>{const d=daysDiff(p[df]);return d>=0&&d<=30}).length}
   }
   el.innerHTML=`<div class="page">
     <div class="page-title">ตารางนัดหมาย</div>
@@ -459,6 +540,7 @@ function renderTimeline(el) {
     <div class="filter-row">
       <button class="filter-chip${t==='inject'?' active':''}" onclick="setTLType('inject')">💉 นัดฉีดยา (${injectPts.length})</button>
       <button class="filter-chip${t==='visit'?' active':''}" onclick="setTLType('visit')">🏡 นัดเยี่ยมบ้าน (${visitPts.length})</button>
+      <button class="filter-chip${t==='doctor'?' active':''}" onclick="setTLType('doctor')">🏥 นัดพบแพทย์ (${doctorAppts.length})</button>
     </div>
     <div class="filter-row">
       <button class="filter-chip${f==='all'?' active':''}" data-tlf="all" onclick="setTLF('all')">ทั้งหมด (${cnt.all})</button>
@@ -467,12 +549,19 @@ function renderTimeline(el) {
       <button class="filter-chip${f==='week'?' active':''}" data-tlf="week" onclick="setTLF('week')">7 วัน (${cnt.week})</button>
       <button class="filter-chip${f==='month'?' active':''}" data-tlf="month" onclick="setTLF('month')">30 วัน (${cnt.month})</button>
     </div>
+    ${t==='doctor'&&canDo('record')?`<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button onclick="openDoctorApptForm()" style="padding:6px 16px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">+ เพิ่มนัดพบแพทย์</button></div>`:''}
     <div id="tl-list"></div>
   </div>`
-  renderTLList()
+  if(t==='doctor'&&!window._doctorAppts){
+    document.getElementById('tl-list').innerHTML='<div class="empty"><p>⏳ กำลังโหลด...</p></div>'
+    loadDoctorAppts().then(()=>renderTimeline(el)).catch(e=>{document.getElementById('tl-list').innerHTML=`<div class="empty"><p>❌ โหลดไม่สำเร็จ: ${esc(e.message)}</p></div>`})
+  } else {
+    renderTLList()
+  }
 }
-function setTLType(t){
+async function setTLType(t){
   window._tlType=t; window._tlf='all'
+  if(t==='doctor'&&!window._doctorAppts) await loadDoctorAppts()
   renderTimeline(document.getElementById('page-content'))
 }
 function setTLF(f){
@@ -480,13 +569,79 @@ function setTLF(f){
   document.querySelectorAll('[data-tlf]').forEach(e=>e.classList.toggle('active',e.dataset.tlf===f))
   renderTLList()
 }
+async function loadDoctorAppts(){
+  let q=sb.from('doctor_appointments').select('*').order('appoint_date')
+  // อสม. เห็นเฉพาะนัดหมายของผู้ป่วยในหมู่บ้านที่รับผิดชอบ
+  if(currentRole==='aosomo'&&currentVillage){
+    const ids=allPatients.filter(p=>p.village===currentVillage).map(p=>p.id)
+    if(ids.length>0)q=q.in('patient_id',ids);else{window._doctorAppts=[];return}
+  }
+  const{data,error}=await q
+  if(error){console.error('loadDoctorAppts error:',error);window._doctorAppts=[];return}
+  window._doctorAppts=(data||[]).map(a=>{
+    const p=allPatients.find(x=>x.id===a.patient_id)||{}
+    return{...a,patients:{name:p.name,village:p.village,group_color:p.group_color}}
+  })
+}
+function doctorApptCard(a){
+  const p=a.patients||{}
+  const typeLabel={'medicine':'💊 รับยา','check':'🩺 ตรวจ','other':'📋 อื่นๆ'}[a.appoint_type]||a.appoint_type||'รับยา'
+  const gc=p.group_color||'green'
+  const gcLabel={red:'กลุ่มสีแดง',yellow:'กลุ่มสีเหลือง',green:'กลุ่มสีเขียว'}[gc]||'กลุ่มสีเขียว'
+  const gcShape={red:'▲',yellow:'◆',green:'●'}[gc]||'●'
+  const gcColor={red:'#ef4444',yellow:'#f59e0b',green:'#22c55e'}[gc]||'#22c55e'
+  const dot=`<span role="img" aria-label="${gcLabel}" style="color:${gcColor};font-size:10px;font-weight:900;margin-right:4px;vertical-align:middle">${gcShape}</span>`
+  const daysUntil=Math.round((new Date(a.appoint_date+'T00:00:00')-new Date(todayISO()+'T00:00:00'))/86400000)
+  const isOverdue=daysUntil<0&&a.status!=='done'&&a.status!=='missed'
+  const chip=daysChip(a.status==='done'||a.status==='missed'?NaN:daysUntil)
+  const statusLabel=a.status==='done'?'✅ ไปแล้ว':a.status==='missed'?'❌ ขาดนัด':null
+  const statusColor=a.status==='done'?'#16a34a':'#b91c1c'
+  return`<div class="patient-card${isOverdue?' overdue':''}" style="margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:700">${esc(p.name||'?')}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${dot}${esc(p.village||'')} · 🏥 ${esc(a.hospital||'รพ.โพธิ์ไทร')}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px">${typeLabel} · 📅 ${thDate(a.appoint_date)}${a.doctor_name?` · 👨‍⚕️ ${esc(a.doctor_name)}`:''}</div>
+        ${a.note?`<div style="font-size:11px;color:var(--text3);margin-top:3px;white-space:pre-line">${esc(a.note)}</div>`:''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+        <span class="days-chip ${chip.cls}">${chip.label}</span>
+        ${statusLabel?`<span style="font-size:11px;font-weight:700;color:${statusColor}">${statusLabel}</span>`:''}
+        ${canDo('record')?`<div style="display:flex;gap:4px">
+          <button onclick="editDoctorAppt(${a.id})" aria-label="แก้ไขนัดพบแพทย์" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>
+          <button onclick="deleteDoctorAppt(${a.id})" aria-label="ลบนัดพบแพทย์" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>
+        </div>`:''}
+      </div>
+    </div>
+  </div>`
+}
 function renderTLList(){
   const el=document.getElementById('tl-list')
   if(!el)return
   const today=todayISO()
   const t=window._tlType||'inject', f=window._tlf||'all'
-  const df=t==='inject'?'next_inject_date':'next_visit_date'
   const daysDiff=d=>Math.round((new Date(d+'T00:00:00')-new Date(today+'T00:00:00'))/86400000)
+  if(t==='doctor'){
+    let appts=[...(window._doctorAppts||[])]
+    if(f==='overdue') appts=appts.filter(a=>a.appoint_date<today&&a.status!=='done')
+    else if(f==='today') appts=appts.filter(a=>a.appoint_date===today)
+    else if(f==='week') appts=appts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=7})
+    else if(f==='month') appts=appts.filter(a=>{const d=daysDiff(a.appoint_date);return d>=0&&d<=30})
+    else appts=appts.filter(a=>a.status!=='done')
+    appts.sort((a,b)=>(a.appoint_date||'').localeCompare(b.appoint_date||''))
+    if(!appts.length){el.innerHTML='<div class="empty"><p>ไม่มีข้อมูลในช่วงนี้</p></div>';return}
+    const groups={}
+    for(const a of appts){const k=a.appoint_date;if(!groups[k])groups[k]=[];groups[k].push(a)}
+    let html=''
+    for(const[date,group]of Object.entries(groups)){
+      const past=date<today,isToday=date===today
+      const hd=past?`⚠️ ${thDate(date)}`:isToday?`📅 วันนี้ — ${thDate(date)}`:thDate(date)
+      html+=`<div class="tl-date-hd${isToday?' today-hd':''}">${hd} · ${group.length} ราย</div>${group.map(doctorApptCard).join('')}`
+    }
+    el.innerHTML=html
+    return
+  }
+  const df=t==='inject'?'next_inject_date':'next_visit_date'
   let pts=[...allPatients].filter(p=>p[df])
   if(f==='overdue') pts=pts.filter(p=>p[df]<today)
   else if(f==='today') pts=pts.filter(p=>p[df]===today)
@@ -503,6 +658,78 @@ function renderTLList(){
     html+=`<div class="tl-date-hd${isToday?' today-hd':''}">${hd} · ${group.length} ราย</div>${group.map(patientCard).join('')}`
   }
   el.innerHTML=html
+}
+function filterDaPatients(){
+  const village=document.getElementById('da-vf')?.value||''
+  const search=(document.getElementById('da-search')?.value||'').toLowerCase()
+  const sel=document.getElementById('da-patient')
+  if(!sel)return
+  const cur=sel.value
+  const filtered=allPatients.filter(p=>(!village||p.village===village)&&(!search||(p.name||'').toLowerCase().includes(search)))
+  sel.innerHTML=`<option value="">-- เลือกผู้ป่วย --</option>`+filtered.map(p=>`<option value="${p.id}"${String(p.id)===String(cur)?' selected':''}>${esc(p.name)} — ${esc(p.village||'')}</option>`).join('')
+}
+function openDoctorApptForm(id=null){
+  const appt=id?(window._doctorAppts||[]).find(a=>a.id===id):null
+  const villages=[...new Set(allPatients.map(p=>p.village).filter(Boolean))].sort()
+  const villageOpts=villages.map(v=>`<option value="${v}">${v}</option>`).join('')
+  const selPid=appt?.patient_id
+  const patOpts=allPatients.map(p=>`<option value="${p.id}"${p.id===selPid?' selected':''}>${esc(p.name)} — ${esc(p.village||'')}</option>`).join('')
+  const selStyle='width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:\'Sarabun\',sans-serif;background:var(--bg);color:var(--text)'
+  document.body.insertAdjacentHTML('beforeend',`<div id="da-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center" onclick="if(event.target===this)closeDoctorApptModal()">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:700">🏥 ${id?'แก้ไข':'เพิ่ม'}นัดพบแพทย์</div>
+        <button onclick="closeDoctorApptModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text2);line-height:1">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><label style="font-size:11px;color:var(--text3);font-weight:600">กรองหมู่บ้าน</label><select id="da-vf" onchange="filterDaPatients()" style="${selStyle}"><option value="">-- ทุกหมู่บ้าน --</option>${villageOpts}</select></div>
+        <div><label style="font-size:11px;color:var(--text3);font-weight:600">ค้นหาชื่อ</label><input type="text" id="da-search" placeholder="พิมพ์ชื่อ..." oninput="filterDaPatients()" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text)"></div>
+      </div>
+      <div class="form-group"><label>ผู้ป่วย *</label><select id="da-patient" style="${selStyle}"><option value="">-- เลือกผู้ป่วย --</option>${patOpts}</select></div>
+      <div class="form-group"><label>วันนัด *</label><input type="date" id="da-date" value="${appt?.appoint_date||''}" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group"><label>ประเภท</label><select id="da-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text)">
+        <option value="medicine"${!appt||appt.appoint_type==='medicine'?' selected':''}>💊 รับยา</option>
+        <option value="check"${appt?.appoint_type==='check'?' selected':''}>🩺 ตรวจ</option>
+        <option value="other"${appt?.appoint_type==='other'?' selected':''}>📋 อื่นๆ</option>
+      </select></div>
+      <div class="form-group"><label>สถานพยาบาล</label><input type="text" id="da-hospital" value="${esc(appt?.hospital||'รพ.โพธิ์ไทร')}" placeholder="รพ.โพธิ์ไทร" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group"><label>ชื่อแพทย์ (ถ้ามี)</label><input type="text" id="da-doctor" value="${esc(appt?.doctor_name||'')}" placeholder="ชื่อแพทย์" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group"><label>หมายเหตุ</label><textarea id="da-note" rows="2" placeholder="หมายเหตุ..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);resize:vertical">${esc(appt?.note||'')}</textarea></div>
+      ${id?`<div class="form-group"><label>สถานะ</label><select id="da-status" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text)">
+        <option value="scheduled"${appt?.status==='scheduled'||!appt?.status?' selected':''}>⏳ นัดไว้</option>
+        <option value="done"${appt?.status==='done'?' selected':''}>✅ ไปแล้ว</option>
+        <option value="missed"${appt?.status==='missed'?' selected':''}>❌ ขาดนัด</option>
+      </select></div>`:''}
+      <button onclick="saveDoctorAppt(${id||'null'})" style="width:100%;padding:12px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;margin-top:4px">💾 บันทึก</button>
+    </div>
+  </div>`)
+}
+function closeDoctorApptModal(){document.getElementById('da-modal')?.remove()}
+async function saveDoctorAppt(id){
+  const pid=parseInt(document.getElementById('da-patient')?.value)
+  const date=document.getElementById('da-date')?.value
+  if(!pid){alert('กรุณาเลือกผู้ป่วย');return}
+  if(!date){alert('กรุณาเลือกวันนัด');return}
+  const payload={patient_id:pid,appoint_date:date,appoint_type:document.getElementById('da-type')?.value||'medicine',hospital:document.getElementById('da-hospital')?.value||'รพ.โพธิ์ไทร',doctor_name:document.getElementById('da-doctor')?.value||null,note:document.getElementById('da-note')?.value||null,status:document.getElementById('da-status')?.value||'scheduled',created_by:currentDisplayName||currentRole}
+  const{data:savedAppt,error}=id?await sb.from('doctor_appointments').update(payload).eq('id',id).select('id').single():await sb.from('doctor_appointments').insert(payload).select('id').single()
+  if(error){alert('❌ บันทึกไม่สำเร็จ: '+error.message);return}
+  _markOwnWrite(id||savedAppt?.id)
+  closeDoctorApptModal()
+  showToast('✅ บันทึกนัดพบแพทย์สำเร็จ')
+  await loadDoctorAppts()
+  renderTimeline(document.getElementById('page-content'))
+}
+async function editDoctorAppt(id){
+  if(!window._doctorAppts)await loadDoctorAppts()
+  openDoctorApptForm(id)
+}
+async function deleteDoctorAppt(id){
+  const a=(window._doctorAppts||[]).find(x=>x.id===id)
+  if(!confirm(`ลบนัดพบแพทย์?\nวันที่: ${thDate(a?.appoint_date||'')}\nผู้ป่วย: ${a?.patients?.name||''}`))return
+  const{error}=await sb.from('doctor_appointments').delete().eq('id',id)
+  if(error){alert('❌ '+error.message);return}
+  window._doctorAppts=(window._doctorAppts||[]).filter(x=>x.id!==id)
+  renderTimeline(document.getElementById('page-content'))
 }
 
 // ─── Overview ────────────────────────────────────────────────────
@@ -529,10 +756,12 @@ async function renderOverview(el) {
   const visitSoonCnt=pts.filter(p=>{if(!p.next_visit_date)return false;const d=Math.round((new Date(p.next_visit_date+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000);return d>0&&d<=7}).length
   const visitOkCnt=pts.filter(p=>{if(!p.next_visit_date)return false;return Math.round((new Date(p.next_visit_date+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000)>7}).length
 
+  // จำกัดข้อมูล overview ให้ตรงหมู่บ้านของ อสม.
+  const _ovVf=(q)=>currentRole==='aosomo'&&currentVillage?q.eq('village',currentVillage):q
   const [trendsData,allVisitsData,{data:tmvRaw},{data:arvRaw}]=await Promise.all([
     getTrend(),getVisits(),
-    sb.from('home_visits').select('patient_name,visit_type,refer,assessment_json,visitor,village').gte('visit_date',monthStart).lt('visit_date',monthEnd),
-    sb.from('home_visits').select('visit_date,visit_type,refer,assessment_json').gte('visit_date',sixAgo).order('visit_date',{ascending:true})
+    _ovVf(sb.from('home_visits').select('patient_name,visit_type,refer,assessment_json,visitor,village').gte('visit_date',monthStart).lt('visit_date',monthEnd)),
+    _ovVf(sb.from('home_visits').select('visit_date,visit_type,refer,assessment_json').gte('visit_date',sixAgo).order('visit_date',{ascending:true}))
   ])
   const tmv=tmvRaw||[],arv=arvRaw||[],trends=trendsData,visits=allVisitsData
 
@@ -861,32 +1090,47 @@ async function renderOverview(el) {
 // ─── Visit ───────────────────────────────────────────────────────
 async function renderVisit(el) {
   const visits=await getVisits()
+  const _vPhotoMap=await batchSignedUrls(visits.filter(v=>v.photo_url).map(v=>v.photo_url))
+  visits.forEach(v=>{if(v.photo_url&&_vPhotoMap[v.photo_url])v.photo_url=_vPhotoMap[v.photo_url]})
   window._allVisits=visits
   // โหลด referrals สำหรับ staff/admin
   let referralHtml=''
   let clinicQueueHtml=''
   if(canDo('record')){
     // queue 1: อสม. → เจ้าหน้าที่
-    const{data:refs}=await sb.from('home_visits')
-      .select('patient_name,village,visit_date,visitor,note')
-      .eq('refer',true).eq('visit_type','aosomo')
-      .order('visit_date',{ascending:false}).limit(20)
+    const[{data:refs},{data:aosomoDir}]=await Promise.all([
+      sb.from('home_visits')
+        .select('patient_name,village,visit_date,visitor,note')
+        .eq('refer',true).eq('visit_type','aosomo')
+        .order('visit_date',{ascending:false}).limit(20),
+      sb.from('aosomo_directory').select('name,phone,line_id')
+    ])
+    const aosomoPhoneMap={},aosomoLineMap={}
+    ;(aosomoDir||[]).forEach(a=>{if(a.phone)aosomoPhoneMap[a.name]=a.phone;if(a.line_id)aosomoLineMap[a.name]=a.line_id})
     const staffVisitedNames=new Set(visits.filter(v=>v.visit_type==='staff').map(v=>v.patient_name))
     const pending=(refs||[]).filter(r=>!staffVisitedNames.has(r.patient_name))
     if(pending.length){
       referralHtml=`<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:14px;margin-bottom:16px">
         <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:10px">⚠️ รายการส่งต่อจาก อสม. รอเจ้าหน้าที่ลงเยี่ยม (${pending.length} ราย)</div>
-        ${pending.map(r=>`<div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #fecaca;display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <div style="min-width:0">
+        ${pending.map(r=>{
+          const phone=aosomoPhoneMap[r.visitor||'']||''
+          const lineId=aosomoLineMap[r.visitor||'']||''
+          const contactBtn=phone?`<a href="tel:${esc(phone)}" aria-label="โทรหา อสม.${esc(r.visitor||'')}" style="flex-shrink:0;padding:7px 10px;background:#fff;color:#0369a1;border:1.5px solid #7dd3fc;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;text-decoration:none;display:flex;align-items:center;gap:4px">📞 โทร</a>`:''
+          const lineBtn=lineId?`<a href="https://line.me/ti/p/~${esc(lineId)}" target="_blank" rel="noopener" aria-label="ส่ง LINE หา อสม.${esc(r.visitor||'')}" style="flex-shrink:0;padding:7px 10px;background:#06C755;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;text-decoration:none;display:flex;align-items:center;gap:4px">💬 LINE</a>`:''
+          return`<div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #fecaca;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="min-width:0;flex:1">
             <div style="font-size:13px;font-weight:700;color:var(--text1)">${esc(r.patient_name)}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(r.village||'')} · อสม.${esc(r.visitor||'')} · ${r.visit_date||''}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(r.village||'')} · อสม.${esc(r.visitor||'')}${phone?` · <span style="color:#0369a1">${esc(phone)}</span>`:''}${lineId?` · LINE: ${esc(lineId)}`:''} · ${r.visit_date||''}</div>
             ${r.note?`<div style="font-size:11px;color:#b91c1c;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.note.split('\n')[0])}</div>`:''}
           </div>
-          <button onclick="openVisitFormFor('${esc(r.patient_name)}','${esc(r.village||'')}')"
-            style="flex-shrink:0;padding:7px 12px;background:#b91c1c;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
-            🏥 ลงเยี่ยม
-          </button>
-        </div>`).join('')}
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            ${contactBtn}${lineBtn}
+            <button onclick="openVisitFormFor('${jsStr(r.patient_name)}','${jsStr(r.village||'')}')"
+              style="padding:7px 12px;background:#b91c1c;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">
+              🏥 ลงเยี่ยม
+            </button>
+          </div>
+        </div>`}).join('')}
       </div>`
     }
     // queue 2: เจ้าหน้าที่ → รพ./คลินิก
@@ -927,7 +1171,7 @@ async function renderVisit(el) {
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
               <span style="background:${bg};color:${clr};padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700">${lbl}</span>
-              <button onclick="openVisitFormFor('${esc(p.name)}','${esc(p.village||'')}')" style="padding:5px 12px;background:var(--primary);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🏡 เยี่ยม</button>
+              <button onclick="openVisitFormFor('${jsStr(p.name)}','${jsStr(p.village||'')}')" style="padding:5px 12px;background:var(--primary);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🏡 เยี่ยม</button>
             </div>
           </div>`
         }).join('')}
@@ -963,25 +1207,40 @@ function openVisitFormFor(name,village){
 }
 function renderMHAssessResult(a,detail=false){
   if(!a)return''
-  const chips=[],details=[]
+  const chips=[],detailSecs=[]
+  const ST5_Q=['มีปัญหาการนอน นอนไม่หลับ/นอนมากเกินไป','มีสมาธิน้อยลง','หุดหงิด/กระวนกระวาย/วิตกกังวล','รู้สึกเบื่อเซ็ง','ไม่อยากพบปะผู้คน']
+  const ST5_OPT=['แทบไม่มี','เป็นบางครั้ง','บ่อยครั้ง','เป็นประจำ']
+  const RQ_Q=['ความยากลำบากทำให้ฉันแกร่งขึ้น','มีกำลังใจและได้รับการสนับสนุนจากคนรอบข้าง','การแก้ไขปัญหาทำให้มีประสบการณ์มากขึ้น']
   if(a.twoq?.q1!==null||a.twoq?.q2!==null){
-    const s=(a.twoq.q1||0)+(a.twoq.q2||0)
-    const suicide=a.twoq.suicide
+    const s=(a.twoq.q1||0)+(a.twoq.q2||0),suicide=a.twoq.suicide
     const[bg,color,lbl]=suicide?['#fef2f2','#b91c1c','2Q+: ⚠️ ความเสี่ยงสูง']:s===0?['#f0fdf4','#15803d','2Q+: ไม่พบ']:['#fefce8','#854d0e',`2Q+: ${s}/2 ควรประเมินเพิ่ม`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
-    if(detail)details.push(`2Q+ ข้อ1:${a.twoq.q1===1?'ใช่':'ไม่ใช่'} · ข้อ2:${a.twoq.q2===1?'ใช่':'ไม่ใช่'}${a.twoq.suicide!==undefined?` · เสี่ยงฆ่าตัวตาย:${a.twoq.suicide?'⚠️ ใช่':'ไม่ใช่'}`:''}`)
+    if(detail){
+      const rows=[
+        `รู้สึกหดหู่ เศร้า หรือท้อแท้สิ้นหวัง → <b>${a.twoq.q1===1?'<span style="color:#b91c1c">ใช่</span>':'ไม่ใช่'}</b>`,
+        `รู้สึกเบื่อ ทำอะไรก็ไม่เพลิดเพลิน → <b>${a.twoq.q2===1?'<span style="color:#b91c1c">ใช่</span>':'ไม่ใช่'}</b>`,
+        ...(a.twoq.suicide!==undefined?[`มีความคิดอยากทำร้ายตัวเอง → <b>${a.twoq.suicide?'<span style="color:#b91c1c">⚠️ ใช่</span>':'ไม่ใช่'}</b>`]:[])
+      ]
+      detailSecs.push({title:'📋 2Q+ คัดกรองภาวะซึมเศร้า',rows})
+    }
   }
   if(a.st5?.total!==undefined&&a.st5.scores?.some(v=>v!==null)){
     const s=a.st5.total
     const[bg,color,lbl]=s<=4?['#f0fdf4','#15803d',`ST-5: ${s} ไม่เครียด`]:s<=7?['#fefce8','#854d0e',`ST-5: ${s} เครียดน้อย`]:s<=9?['#fff7ed','#c2410c',`ST-5: ${s} เครียดปานกลาง`]:['#fef2f2','#b91c1c',`ST-5: ${s} เครียดมาก`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
-    if(detail&&a.st5.scores)details.push(`ST-5 รายข้อ: ${a.st5.scores.map((sc,i)=>`ข้อ${i+1}=${sc??'-'}`).join(' · ')}`)
+    if(detail&&a.st5.scores){
+      const rows=a.st5.scores.map((sc,i)=>sc!=null?`${ST5_Q[i]} → <b>${ST5_OPT[sc]??sc} <span style="color:var(--text3)">(${sc})</span></b>`:null).filter(Boolean)
+      detailSecs.push({title:`😣 ST-5 ความเครียด (รวม ${s} คะแนน)`,rows})
+    }
   }
   if(a.rq?.total){
     const s=a.rq.total
     const[bg,color,lbl]=s<=17?['#fef2f2','#b91c1c',`RQ: ${s} พลังใจต่ำ`]:s<=23?['#fefce8','#854d0e',`RQ: ${s} ปานกลาง`]:['#f0fdf4','#15803d',`RQ: ${s} พลังใจดี`]
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${lbl}</span>`)
-    if(detail&&a.rq.scores)details.push(`RQ รายข้อ: ${a.rq.scores.map((sc,i)=>`ข้อ${i+1}=${sc}`).join(' · ')}`)
+    if(detail&&a.rq.scores){
+      const rows=a.rq.scores.map((sc,i)=>`${RQ_Q[i]} → <b>${sc}/10</b>`)
+      detailSecs.push({title:`🧡 RQ พลังใจ (รวม ${s} คะแนน)`,rows})
+    }
   }
   if(a.gaf!==null&&a.gaf!==undefined){
     const s=a.gaf
@@ -992,7 +1251,10 @@ function renderMHAssessResult(a,detail=false){
     const s=a.aims.total
     const[bg,color]=s===0?['#f0fdf4','#15803d']:s<=4?['#fefce8','#854d0e']:s<=8?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">AIMS: ${s}</span>`)
-    if(detail&&a.aims.scores)details.push(`AIMS รายข้อ: ${a.aims.scores.map((sc,i)=>`ข้อ${i+1}=${sc}`).join(' · ')}`)
+    if(detail&&a.aims.scores){
+      const rows=a.aims.scores.map((sc,i)=>`ข้อ${i+1} → <b>${sc}</b>`)
+      detailSecs.push({title:`AIMS การเคลื่อนไหวผิดปกติ (รวม ${s} คะแนน)`,rows})
+    }
   }
   if(a.medAdhere!==null&&a.medAdhere!==undefined){
     const[bg,color,lbl]=a.medAdhere.taken?['#f0fdf4','#15803d','💊 กินยาครบ']:['#fef2f2','#b91c1c',`💊 ขาดยา ${a.medAdhere.missedDays||0} วัน`]
@@ -1002,10 +1264,13 @@ function renderMHAssessResult(a,detail=false){
     const s=a.cgb.total
     const[bg,color]=s<=20?['#f0fdf4','#15803d']:s<=40?['#fff7ed','#c2410c']:['#fef2f2','#b91c1c']
     chips.push(`<span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">ภาระดูแล: ${s}</span>`)
-    if(detail&&a.cgb.scores)details.push(`ภาระดูแล รายข้อ: ${a.cgb.scores.map((sc,i)=>`ข้อ${i+1}=${sc}`).join(' · ')}`)
+    if(detail&&a.cgb.scores){
+      const rows=a.cgb.scores.map((sc,i)=>`ข้อ${i+1} → <b>${sc}</b>`)
+      detailSecs.push({title:`ภาระดูแลผู้ป่วย CGB (รวม ${s} คะแนน)`,rows})
+    }
   }
   if(!chips.length)return''
-  const detailHtml=detail&&details.length?`<div style="margin-top:5px;padding:5px 8px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">${details.map(d=>`<div style="font-size:10px;color:var(--text2);font-family:monospace;line-height:1.8">${d}</div>`).join('')}</div>`:''
+  const detailHtml=detail&&detailSecs.length?`<div style="margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden">${detailSecs.map((sec,si)=>`<div style="padding:6px 10px;${si<detailSecs.length-1?'border-bottom:1px solid var(--border)':''}"><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">${sec.title}</div>${sec.rows.map(r=>`<div style="font-size:11px;color:var(--text1);line-height:1.8;padding-left:6px">• ${r}</div>`).join('')}</div>`).join('')}</div>`:''
   return`<div style="display:flex;flex-direction:column;gap:4px;margin-top:2px"><div style="display:flex;flex-wrap:wrap;gap:4px"><span style="font-size:11px;color:var(--text3);margin-right:2px">🧠</span>${chips.join('')}</div>${detailHtml}</div>`
 }
 function renderVisitList(visits){
@@ -1020,15 +1285,15 @@ function renderVisitList(visits){
         <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700">${esc(v.patient_name)}</div><div style="font-size:12px;color:var(--text3)">${esc(v.village||'')} · ${v.visit_date_th||v.visit_date}</div></div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
           <span style="background:${bg};color:${clr};padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700">${lbl}</span>
-          ${canEdit?`<button onclick="openEditVisit(${v.id})" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>`:''}
-          ${canDo('admin')?`<button onclick="deleteVisit(${v.id},'${esc(v.patient_name)}')" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>`:''}
+          ${canEdit?`<button onclick="openEditVisit(${v.id})" aria-label="แก้ไขบันทึกเยี่ยมบ้าน" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>`:''}
+          ${canDo('admin')?`<button onclick="deleteVisit(${v.id},'${jsStr(v.patient_name)}')" aria-label="ลบบันทึกเยี่ยมบ้าน" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>`:''}
         </div>
       </div>
       <div style="font-size:12px;color:var(--text2)">${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'} ${esc(v.visitor||'')}${v.refer?` <span style="color:#b91c1c;font-weight:700">⚠️ ส่งต่อ</span>`:''}</div>
       ${v.note?`<div style="font-size:12px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:pre-line">${esc(v.note)}</div>`:''}
       ${v.assessment_json&&canDo('record')?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">${renderMHAssessResult(v.assessment_json,true)}</div>`:''}
-      ${v.photo_url?`<div style="margin-top:8px"><a href="${esc(v.photo_url)}" target="_blank"><img src="${esc(v.photo_url)}" alt="รูปถ่ายการเยี่ยมบ้าน" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer"></a></div>`:''}
-      ${canDo('record')&&v.visit_type==='aosomo'?`<div style="margin-top:8px;padding:6px 10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px">${v.verified_by?`<span style="font-size:11px;color:#16a34a;font-weight:700">✅ ตรวจสอบโดย ${esc(v.verified_by)} · ${v.verified_at||''}</span>`:`<span style="font-size:11px;color:var(--text3)">⏳ รอเจ้าหน้าที่ตรวจสอบ</span><button onclick="verifyVisit(${v.id})" style="padding:4px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ตรวจสอบแล้ว</button>`}</div>`:''}
+      ${v.photo_url&&canDo('record')?`<div style="margin-top:8px"><a href="${safeUrl(v.photo_url)}" target="_blank"><img src="${safeUrl(v.photo_url)}" alt="รูปถ่ายการเยี่ยมบ้าน" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer"></a></div>`:''}
+      ${canDo('record')&&v.visit_type==='aosomo'?`<div style="margin-top:8px;padding:8px 10px;border-top:1px solid var(--border)">${v.verified_by?`<div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:${v.verify_result==='improve'?'#b45309':'#16a34a'}">${v.verify_result==='improve'?'⚠️ ต้องปรับปรุง':'✅ ถูกต้อง'} · ${esc(v.verified_by)} · ${v.verified_at||''}</span>${v.verify_note?`<span style="font-size:11px;color:var(--text2)">💬 ${esc(v.verify_note)}</span>`:''}</div>`:`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11px;color:var(--text3)">⏳ รอเจ้าหน้าที่ตรวจสอบ</span><button onclick="verifyVisit(${v.id})" style="padding:4px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ตรวจสอบแล้ว</button></div><div id="vf-${v.id}" style="display:none;margin-top:8px;padding:8px;background:var(--bg2,#f8fafc);border-radius:8px;border:1px solid var(--border)"><div style="display:flex;gap:12px;margin-bottom:6px"><label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif"><input type="radio" name="vr-${v.id}" value="pass" checked> ✅ ถูกต้อง</label><label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif"><input type="radio" name="vr-${v.id}" value="improve"> ⚠️ ต้องปรับปรุง</label></div><input id="vn-${v.id}" type="text" placeholder="หมายเหตุ (ถ้ามี)" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);margin-bottom:6px"><div style="display:flex;gap:6px;justify-content:flex-end"><button onclick="verifyVisit(${v.id})" style="padding:4px 10px;background:none;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif;color:var(--text2)">ยกเลิก</button><button onclick="submitVerify(${v.id})" style="padding:4px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:6px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;font-family:'Sarabun',sans-serif">บันทึก</button></div></div>`}</div>`:''}
     </div>`
   }).join('')
 }
@@ -1047,13 +1312,20 @@ async function deleteVisit(id,patientName){
   }catch(e){alert('❌ ลบไม่สำเร็จ: '+e.message)}
 }
 
-async function verifyVisit(id){
+function verifyVisit(id){
+  const form=document.getElementById('vf-'+id)
+  if(form)form.style.display=form.style.display==='none'?'block':'none'
+}
+async function submitVerify(id){
+  if(!canDo('record')){alert('🔒 เฉพาะเจ้าหน้าที่เท่านั้น');return}
+  const result=document.querySelector(`input[name="vr-${id}"]:checked`)?.value||'pass'
+  const note=(document.getElementById('vn-'+id)?.value||'').trim()
   const verifier=currentDisplayName||currentRole
   const today=todayISO()
-  const{error}=await sb.from('home_visits').update({verified_by:verifier,verified_at:today}).eq('id',id)
+  const{error}=await sb.from('home_visits').update({verified_by:verifier,verified_at:today,verify_result:result,verify_note:note||null}).eq('id',id)
   if(error){alert('❌ '+error.message);return}
   const v=(window._allVisits||[]).find(x=>x.id===id)
-  if(v){v.verified_by=verifier;v.verified_at=today}
+  if(v){v.verified_by=verifier;v.verified_at=today;v.verify_result=result;v.verify_note=note}
   const el=document.getElementById('visit-list')
   if(!el)return
   const activeBtn=document.querySelector('.tab-btn.active')
@@ -1097,7 +1369,7 @@ async function openEditVisit(id){
     const ntEl=document.getElementById('v-note');if(ntEl)ntEl.value=cleanNote
     // แสดงรูปเดิม (ถ้ามี)
     const prevEl=document.getElementById('v-photo-preview')
-    if(prevEl&&v.photo_url)prevEl.innerHTML=`<a href="${esc(v.photo_url)}" target="_blank"><img src="${esc(v.photo_url)}" style="max-width:100%;max-height:120px;border-radius:8px;object-fit:cover"></a><div style="font-size:11px;color:var(--text3);margin-top:2px">📷 รูปเดิม — อัปโหลดใหม่เพื่อแทนที่</div>`
+    if(prevEl&&v.photo_url)prevEl.innerHTML=`<a href="${safeUrl(v.photo_url)}" target="_blank"><img src="${safeUrl(v.photo_url)}" style="max-width:100%;max-height:120px;border-radius:8px;object-fit:cover"></a><div style="font-size:11px;color:var(--text3);margin-top:2px">📷 รูปเดิม — อัปโหลดใหม่เพื่อแทนที่</div>`
     // เปลี่ยนปุ่มบันทึกเป็น saveEditVisit
     const saveBtn=document.getElementById('v-save-btn')
     if(saveBtn){saveBtn.textContent='💾 บันทึกการแก้ไข';saveBtn.onclick=()=>saveEditVisit(id)}
@@ -1131,6 +1403,7 @@ async function saveEditVisit(id){
   }
   const{error}=await sb.from('home_visits').update(updates).eq('id',id)
   if(error){btn.textContent='❌ '+error.message;btn.disabled=false;return}
+  _markOwnWrite(id)
   closeVisitModal()
   if(location.hash==='#visit')navigate('visit')
 }
@@ -1197,7 +1470,7 @@ function renderMembers(el){
       <input type="file" id="aosomo-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importAosomoFile(this)">
     </div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;padding:6px 10px;background:#f5f3ff;border-radius:6px">
-      📋 นำเข้าจาก Excel/CSV — คอลัมน์: <strong>ชื่อ, หมู่บ้าน, เบอร์โทร</strong> (แถวแรกเป็น header)
+      📋 นำเข้าจาก Excel/CSV — คอลัมน์: <strong>ชื่อ, หมู่บ้าน, เบอร์โทร, LINE ID</strong> (แถวแรกเป็น header — LINE ID เป็นคอลัมน์ที่ 4 ไม่บังคับ)
     </div>
     <div id="group-aosomo"><div style="color:var(--text3);font-size:12px;padding:8px">⏳ กำลังโหลด...</div></div>
   </div>
@@ -1426,6 +1699,7 @@ function updatePreviewHeader(){
 }
 
 async function renderAdmin(el) {
+  if(!canDo('admin')){el.innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--text3)">🔒 เฉพาะผู้ดูแลระบบเท่านั้น</div>';return}
   const settings=await getSettings()
   hospitalName=settings.hospital_name||hospitalName
   const pts=allPatients
@@ -1504,6 +1778,9 @@ async function renderAdmin(el) {
     <div style="display:flex;gap:8px;margin-top:10px">
       ${[['สีแดง',rc,'var(--red)'],['สีเหลือง',yc,'var(--yellow)'],['สีเขียว',gc,'var(--green)']].map(([l,n,c])=>`<div style="flex:1;background:var(--bg);border-radius:8px;padding:8px;text-align:center"><div style="width:10px;height:10px;border-radius:50%;background:${c};margin:0 auto 4px"></div><div style="font-size:16px;font-weight:700;color:${c}">${n}</div><div style="font-size:10px;color:var(--text3)">${l}</div></div>`).join('')}
     </div>
+    <button onclick="generateMonthlyReport()" style="width:100%;margin-top:12px;padding:10px;background:linear-gradient(135deg,#0a7ea4,#0369a1);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span>📄</span><span>พิมพ์รายงานสรุปรายเดือน</span>
+    </button>
   </div>
   <div class="form-section">
     <h3>📋 บันทึกนัดหมาย</h3>
@@ -1586,21 +1863,6 @@ async function renderAdmin(el) {
       <input type="file" id="hospital-import-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importHospitalFile(this)">
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:32px;height:32px;background:#0f9d58;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px">G</div>
-          <div><div style="font-size:13px;font-weight:700">Google Sheets</div><div style="font-size:11px;color:var(--text3)">ซิงค์อัตโนมัติ</div></div>
-        </div>
-        <span style="font-size:10px;background:var(--green-lt);color:var(--green);padding:2px 8px;border-radius:20px;font-weight:700">● Active</span>
-      </div>
-      <input type="text" id="sheets-url-input" value="${esc(settings.sheets_url||'')}" placeholder="https://docs.google.com/spreadsheets/d/..." style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
-      <div style="display:flex;gap:8px">
-        <button id="sheets-save-btn" onclick="saveSheetURL()" style="flex:1;padding:7px;background:#0f9d58;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก URL</button>
-        <button id="sheets-import-btn" onclick="importFromSheets()" style="flex:1;padding:7px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📥 นำเข้าข้อมูล</button>
-      </div>
-      <div id="sheets-status" style="font-size:11px;color:var(--text3);margin-top:6px;min-height:16px"></div>
-    </div>
-    <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div style="display:flex;align-items:center;gap:8px">
           <div style="width:32px;height:32px;background:#0a7ea4;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px">H</div>
@@ -1643,6 +1905,11 @@ async function renderAdmin(el) {
         <button onclick="testTelegram()" id="tg-test-btn" style="flex:1;padding:7px;background:#fff;color:#0088cc;border:1.5px solid #0088cc;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📨 ทดสอบส่ง</button>
       </div>
       <div id="tg-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:6px">📣 ส่งรายงานผู้เกินนัดและนัดพรุ่งนี้ไปยัง Telegram ทันที (ไม่ต้องรอ 07:00 น.)</div>
+        <button onclick="sendTelegramReport()" id="tg-report-btn" style="width:100%;padding:9px;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;letter-spacing:.3px">📣 ส่งรายงาน Telegram ตอนนี้</button>
+        <div id="tg-report-status" style="font-size:11px;margin-top:6px;min-height:16px"></div>
+      </div>
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between">
@@ -1678,7 +1945,7 @@ async function renderAdmin(el) {
     <h3>🏡 สร้างบัญชีสำหรับ อสม.</h3>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">สร้างบัญชีให้ อสม. ที่ไม่มีอีเมล — ใช้เบอร์โทรแทน</div>
     <div class="form-group"><label>ชื่อ-นามสกุล อสม. *</label><input type="text" id="ca-name" placeholder="เช่น นางสมศรี ใจดี" style="width:100%;box-sizing:border-box"></div>
-    <div class="form-group"><label>เบอร์โทรศัพท์ * (ใช้เป็นชื่อผู้ใช้และรหัสผ่าน)</label><input type="tel" id="ca-phone" placeholder="0812345678" maxlength="10" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>เบอร์โทรศัพท์ * (ใช้เป็นชื่อผู้ใช้)</label><input type="tel" id="ca-phone" placeholder="0812345678" maxlength="10" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>เลขบัตรประชาชน 🪪 (ไม่บังคับ)</label><input type="text" id="ca-nid" placeholder="เช่น 1234567890123" maxlength="13" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>หมู่บ้าน</label>
       <select id="ca-village" style="width:100%">
@@ -1699,6 +1966,7 @@ async function renderAdmin(el) {
 }
 
 async function createAosomoAccount(){
+  if(!canDo('admin')){alert('🔒 ไม่มีสิทธิ์สร้างบัญชี');return}
   const name=(document.getElementById('ca-name')?.value||'').trim()
   const phone=(document.getElementById('ca-phone')?.value||'').replace(/\D/g,'')
   const nid=(document.getElementById('ca-nid')?.value||'').replace(/\D/g,'')
@@ -1709,11 +1977,10 @@ async function createAosomoAccount(){
   if(phone.length<9){result.style.color='var(--red)';result.textContent='❌ เบอร์โทรไม่ถูกต้อง';return}
   if(nid&&nid.length!==13){result.style.color='var(--red)';result.textContent='❌ เลขบัตรประชาชนต้องมี 13 หลัก';return}
   const email=phone+'@jithome.local'
-  const password=phone
+  const password=genPassword()
   btn.disabled=true;btn.textContent='กำลังสร้างบัญชี...'
   result.style.color='var(--text3)';result.textContent=''
   try{
-    // ใช้ temp client เพื่อไม่กระทบ session ของแอดมิน
     const tmp=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false}})
     const{data,error}=await tmp.auth.signUp({email,password})
     if(error){
@@ -1723,20 +1990,19 @@ async function createAosomoAccount(){
     }
     const uid=data?.user?.id
     if(uid){
-      // สร้าง profile ทันที ไม่ต้องรอ login ครั้งแรก
       const prof={id:uid,email,display_name:name,role:'aosomo',village,last_login:new Date().toISOString()}
       if(nid)prof.national_id=nid
       await sb.from('user_profiles').upsert(prof,{onConflict:'id'})
     }
-    // แสดงข้อมูลล็อกอินให้แอดมินส่งต่อ
     result.innerHTML=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;margin-top:4px">
       <div style="font-weight:700;color:#166534;margin-bottom:6px">✅ สร้างบัญชีสำเร็จ! แจ้ง อสม. ดังนี้:</div>
       <div style="font-size:12px;line-height:1.8">
         👤 ชื่อผู้ใช้: <strong>${esc(email)}</strong><br>
-        🔑 รหัสผ่าน: <strong>${esc(phone)}</strong><br>
+        🔑 รหัสผ่าน: <strong id="ca-pw-display" style="font-family:monospace;letter-spacing:1px">${esc(password)}</strong>
+        <button onclick="navigator.clipboard.writeText('${esc(password)}').then(()=>{this.textContent='✅ คัดลอกแล้ว';setTimeout(()=>this.textContent='📋 คัดลอก',2000)})" style="margin-left:8px;font-size:10px;padding:2px 8px;border:1px solid #16a34a;border-radius:4px;background:#fff;color:#16a34a;cursor:pointer;font-family:'Sarabun',sans-serif">📋 คัดลอก</button><br>
         🏡 หมู่บ้าน: <strong>${esc(village)}</strong>${nid?`<br>🪪 บัตรประชาชน: <strong>${maskNationalId(nid)}</strong>`:''}
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px">💡 แนะนำให้เปลี่ยนรหัสผ่านหลังเข้าสู่ระบบครั้งแรก</div>
+      <div style="font-size:11px;color:#b45309;margin-top:6px;background:#fefce8;padding:6px 8px;border-radius:6px">⚠️ บันทึกรหัสผ่านนี้ไว้ก่อน — จะไม่แสดงอีก แนะนำให้ อสม. เปลี่ยนรหัสผ่านหลังเข้าสู่ระบบ</div>
     </div>`
     document.getElementById('ca-name').value=''
     document.getElementById('ca-phone').value=''
@@ -1749,26 +2015,35 @@ async function createAosomoAccount(){
 function memberCard(p,showVillage=false){
   const isSelf=p.id===currentUser?.id
   const canEdit=canDo('admin')||isSelf
+  const lockInfo=window._activeLockouts&&window._activeLockouts[p.email]
+  const isLocked=!!lockInfo
+  const lockMins=isLocked?Math.ceil((new Date(lockInfo.locked_until)-new Date())/60000):0
   return `
-  <div data-member-id="${p.id}" style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--border)">
+  <div data-member-id="${p.id}" style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid ${isLocked?'#fca5a5':'var(--border)'}">
+    ${isLocked?`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div style="font-size:12px;color:#dc2626;font-weight:700">🔒 บัญชีถูกล็อก — เหลือ ${lockMins} นาที (ผิด ${lockInfo.attempt_count} ครั้ง)</div>
+      ${canDo('admin')?`<button onclick="adminUnlockAccount('${jsStr(p.email)}')" style="padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🔓 ปลดล็อก</button>`:''}
+    </div>`:''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
-        <div style="width:34px;height:34px;border-radius:50%;background:${ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${(p.email||'?').slice(0,2).toUpperCase()}</div>
+        <div style="width:34px;height:34px;border-radius:50%;background:${isLocked?'#ef4444':ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${isLocked?'🔒':(p.email||'?').slice(0,2).toUpperCase()}</div>
         <div style="min-width:0;flex:1">
           <div style="display:flex;align-items:center;gap:6px">
             <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
-            ${canEdit?`<button onclick="editMemberName('${p.id}','${esc(p.display_name||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
+            ${canEdit?`<button onclick="editMemberName('${p.id}','${jsStr(p.display_name||'')}')" aria-label="แก้ไขชื่อ" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
           </div>
           <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
           ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace;margin-top:1px">🪪 ${maskNationalId(p.national_id)}</div>`:''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-      ${isSelf?`<span style="font-size:10px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">(คุณ)</span>`:`
+      ${isSelf?`<span style="font-size:10px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">(คุณ)</span>`:canDo('admin')?`
       <select onchange="changeMemberRole('${p.id}',this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-family:'Sarabun',sans-serif">
         ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
       </select>
-      ${canDo('admin')?`<button onclick="deleteMember('${p.id}','${esc(p.display_name||p.email)}')" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:''}`}
+      ${p.role==='aosomo'&&p.email?.endsWith('@jithome.local')?`<button onclick="adminResetAosomoPassword('${p.id}','${jsStr(p.display_name||p.email)}')" aria-label="รีเซ็ตรหัสผ่าน" style="background:none;border:none;cursor:pointer;color:#d97706;padding:4px;font-size:16px;line-height:1" title="รีเซ็ตรหัสผ่าน">🔑</button>`:''}
+      <button onclick="deleteMember('${p.id}','${jsStr(p.display_name||p.email)}')" aria-label="ลบสมาชิก" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:`
+      <span style="font-size:11px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">${ROLE_LABEL[p.role]||p.role}</span>`}
       </div>
     </div>
     ${showVillage&&!isSelf?`
@@ -1805,7 +2080,7 @@ function staffDirectoryCard(s){
         <div style="font-size:11px;color:var(--text3)">${esc(s.position||'—')}${s.phone?` · ${esc(s.phone)}`:''}</div>
       </div>
     </div>
-    <button onclick="deleteStaffDirectory(${s.id})" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
+    <button onclick="deleteStaffDirectory(${s.id})" aria-label="ลบรายชื่อเจ้าหน้าที่" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
   </div>`
 }
 
@@ -1816,19 +2091,23 @@ function aosomoDirectoryCard(a){
       <div style="width:32px;height:32px;border-radius:50%;background:#ede9fe;color:#7c3aed;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">${esc((a.name||'?').slice(0,2))}</div>
       <div>
         <div style="font-size:13px;font-weight:700">${esc(a.name)}</div>
-        <div style="font-size:11px;color:var(--text3)">${esc(a.village||'—')}${a.phone?` · ${esc(a.phone)}`:''}</div>
+        <div style="font-size:11px;color:var(--text3)">${esc(a.village||'—')}${a.phone?` · ${esc(a.phone)}`:''}${a.line_id?` · <span style="color:#06C755">LINE: ${esc(a.line_id)}</span>`:''}</div>
       </div>
     </div>
-    <button onclick="deleteAosomoDirectory(${a.id})" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
+    <button onclick="deleteAosomoDirectory(${a.id})" aria-label="ลบรายชื่อ อสม." style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:15px" title="ลบ">🗑️</button>
   </div>`
 }
 
 async function loadMembersList(){
-  const[{data:profiles},{data:aosomoDir},{data:staffDir}]=await Promise.all([
+  const[{data:profiles},{data:aosomoDir},{data:staffDir},{data:lockouts}]=await Promise.all([
     sb.from('user_profiles').select('*').order('created_at'),
     sb.from('aosomo_directory').select('*').order('village'),
-    sb.from('staff_directory').select('*').order('name')
+    sb.from('staff_directory').select('*').order('name'),
+    sb.from('login_lockouts').select('*').not('locked_until','is',null)
   ])
+  // Build map of currently-locked emails
+  window._activeLockouts={}
+  ;(lockouts||[]).forEach(l=>{if(l.locked_until&&new Date(l.locked_until)>new Date())window._activeLockouts[l.email]=l})
   const all=profiles||[]
   const staffEl=document.getElementById('group-staff')
   const aosomoEl=document.getElementById('group-aosomo')
@@ -1846,6 +2125,8 @@ async function loadMembersList(){
   if(pendingEl&&pendingSection){
     if(pending.length){
       pendingSection.style.display=''
+      const _pfMap=await batchSignedUrls(pending.filter(p=>p.profile_file_url).map(p=>p.profile_file_url))
+      pending.forEach(p=>{if(p.profile_file_url&&_pfMap[p.profile_file_url])p.profile_file_url=_pfMap[p.profile_file_url]})
       pendingEl.innerHTML=pending.map(p=>`
         <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:12px 14px;margin-bottom:8px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
@@ -1853,7 +2134,7 @@ async function loadMembersList(){
               <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
               <div style="font-size:11px;color:var(--text3)">📱 ${esc(p.email.replace('@jithome.local',''))} · 🏡 ${esc(p.village||'—')}</div>
               ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace">🪪 ${maskNationalId(p.national_id)}</div>`:''}
-              ${p.profile_file_url?`<a href="${esc(p.profile_file_url)}" target="_blank" style="font-size:11px;color:#7c3aed;text-decoration:none">📎 ดูไฟล์แนบ</a>`:''}
+              ${p.profile_file_url?`<a href="${safeUrl(p.profile_file_url)}" target="_blank" style="font-size:11px;color:#7c3aed;text-decoration:none">📎 ดูไฟล์แนบ</a>`:''}
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0">
               <button onclick="approvePendingMember('${p.id}')" style="padding:6px 12px;background:#166534;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✅ อนุมัติ</button>
@@ -1883,6 +2164,7 @@ async function approvePendingMember(userId){
   if(!confirm('อนุมัติสมาชิกคนนี้?'))return
   const{error}=await sb.from('user_profiles').update({status:'active'}).eq('id',userId)
   if(error){alert('❌ '+error.message);return}
+  auditLog('member_approved','user_profile',userId,{by:currentDisplayName||currentRole})
   loadMembersList()
 }
 
@@ -1890,6 +2172,7 @@ async function rejectPendingMember(userId){
   if(!confirm('ปฏิเสธและลบคำขอนี้?'))return
   const{error}=await sb.from('user_profiles').update({status:'rejected'}).eq('id',userId)
   if(error){alert('❌ '+error.message);return}
+  auditLog('member_rejected','user_profile',userId,{by:currentDisplayName||currentRole})
   loadMembersList()
 }
 
@@ -1908,9 +2191,44 @@ async function deleteMember(userId, displayName){
   loadMembersList()
 }
 
+async function adminResetAosomoPassword(userId, displayName){
+  if(!canDo('admin')){alert('ไม่มีสิทธิ์');return}
+  if(!confirm(`รีเซ็ตรหัสผ่านสำหรับ "${displayName}"?\n\nระบบจะสร้างรหัสผ่านใหม่แบบสุ่ม\nคุณต้องแจ้ง อสม. คนนี้ด้วยตนเองหลังจากนี้`))return
+  try{
+    const{data:{session}}=await sb.auth.getSession()
+    const res=await fetchWithTimeout(`${SUPABASE_URL}/functions/v1/reset-aosomo-password`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${session?.access_token}`},
+      body:JSON.stringify({targetUserId:userId})
+    })
+    const data=await res.json()
+    if(!res.ok||data.error)throw new Error(data.error||'รีเซ็ตไม่สำเร็จ')
+    const overlay=document.createElement('div')
+    overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px'
+    overlay.innerHTML=`
+      <div style="background:var(--card);border-radius:16px;padding:24px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+        <div style="font-size:18px;font-weight:700;margin-bottom:4px">🔑 รหัสผ่านใหม่</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">${esc(displayName)}</div>
+        <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:14px 10px;text-align:center;margin-bottom:14px">
+          <div id="_reset-pw" style="font-size:24px;font-weight:900;font-family:monospace;letter-spacing:3px;color:#166534">${esc(data.password)}</div>
+        </div>
+        <button id="_reset-copy" style="width:100%;padding:10px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;margin-bottom:8px">📋 คัดลอกรหัสผ่าน</button>
+        <div style="font-size:11px;color:#dc2626;text-align:center;margin-bottom:14px">⚠️ แจ้ง อสม. ให้เรียบร้อยก่อนปิด — จะไม่แสดงอีก</div>
+        <button id="_reset-close" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer;font-family:'Sarabun',sans-serif">ปิด</button>
+      </div>`
+    document.body.appendChild(overlay)
+    overlay.querySelector('#_reset-copy').onclick=()=>{
+      navigator.clipboard.writeText(data.password)
+      overlay.querySelector('#_reset-copy').textContent='✅ คัดลอกแล้ว'
+    }
+    overlay.querySelector('#_reset-close').onclick=()=>overlay.remove()
+  }catch(e){alert('❌ รีเซ็ตรหัสผ่านไม่สำเร็จ: '+e.message)}
+}
+
 async function importAosomoFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
+    await loadXLSX()
     const data=await file.arrayBuffer()
     const wb=XLSX.read(data)
     const ws=wb.Sheets[wb.SheetNames[0]]
@@ -1919,7 +2237,8 @@ async function importAosomoFile(input){
     const records=rows.slice(1).filter(r=>r[0]).map(r=>({
       name:String(r[0]||'').trim(),
       village:String(r[1]||'').trim(),
-      phone:String(r[2]||'').trim(),
+      phone:String(r[2]||'').trim()||null,
+      line_id:String(r[3]||'').trim()||null,
     })).filter(r=>r.name)
     if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return}
     if(!confirm(`นำเข้า ${records.length} รายชื่อ อสม. ใช่หรือไม่?`))return
@@ -1940,6 +2259,7 @@ async function deleteAosomoDirectory(id){
 async function importStaffDirFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
+    await loadXLSX()
     const data=await file.arrayBuffer()
     const wb=XLSX.read(data)
     const ws=wb.Sheets[wb.SheetNames[0]]
@@ -2009,6 +2329,7 @@ async function mergeAndSavePatients(records, confirmMsg){
 async function importPatientFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
+    await loadXLSX()
     const data=await file.arrayBuffer()
     const wb=XLSX.read(data)
     const ws=wb.Sheets[wb.SheetNames[0]]
@@ -2033,6 +2354,7 @@ async function importPatientFile(input){
 async function importHospitalFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
+    await loadXLSX()
     const data=await file.arrayBuffer()
     const wb=XLSX.read(data)
     const ws=wb.Sheets[wb.SheetNames[0]]
@@ -2074,8 +2396,10 @@ async function deleteStaffDirectory(id){
 }
 
 async function changeMemberRole(userId,role){
+  if(!canDo('admin')){alert('🔒 ไม่มีสิทธิ์เปลี่ยน role');return}
   const{error}=await sb.from('user_profiles').update({role}).eq('id',userId)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
+  auditLog('member_role_changed','user_profile',userId,{new_role:role,by:currentDisplayName||currentRole})
   await loadMembersList()
 }
 
@@ -2110,7 +2434,7 @@ async function testLine(){
   const status=document.getElementById('line-status')
   btn.disabled=true;btn.textContent='กำลังส่ง...'
   try{
-    const res=await fetch(LINE_FUNC_URL,{
+    const res=await fetchWithTimeout(LINE_FUNC_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},
       body:JSON.stringify({message:`🏥 JitHome ทดสอบแจ้งเตือน LINE\nระบบติดตามผู้ป่วยจิตเวช ${hospitalName}\nเวลา: ${new Date().toLocaleString('th-TH')}`})
@@ -2127,7 +2451,7 @@ async function sendLineVisitReport(visitData){
     const{data}=await sb.from('app_settings').select('setting_value').eq('setting_key','line_enabled').single()
     if(data?.setting_value!=='1')return
     const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
-    await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:msg})})
+    await fetchWithTimeout(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:msg})})
   }catch(e){console.warn('LINE notify error:',e)}
 }
 
@@ -2168,10 +2492,10 @@ async function sendReferralToHospital(visitData){
     if(lineGroupId){
       const body={message:msg,groupId:lineGroupId}
       if(lineToken)body.token=lineToken
-      await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
+      await fetchWithTimeout(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
     }
     if(tgToken&&tgChatId){
-      await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:msg})})
+      await fetchWithTimeout(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:msg})})
     }
   }catch(e){console.warn('Referral notify error:',e)}
 }
@@ -2209,13 +2533,13 @@ async function testReferNotify(){
     try{
       const body={message:testMsg,groupId:lineGroupId}
       if(lineToken)body.token=lineToken
-      const res=await fetch(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
+      const res=await fetchWithTimeout(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
       const d=await res.json();if(d.error)errs.push('LINE: '+d.error)
     }catch(e){errs.push('LINE: '+e.message)}
   }
   if(tgToken&&tgChatId){
     try{
-      const res=await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:testMsg})})
+      const res=await fetchWithTimeout(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:testMsg})})
       const d=await res.json();if(!d.ok)errs.push('Telegram: '+(d.description||'ส่งไม่สำเร็จ'))
     }catch(e){errs.push('Telegram: '+e.message)}
   }
@@ -2233,6 +2557,11 @@ async function saveTelegramSettings(){
   const errs=[]
   if(chatid){const{error}=await sb.from('app_settings').upsert({setting_key:'telegram_chatid',setting_value:chatid},{onConflict:'setting_key'});if(error)errs.push(error.message)}
   if(token){const{error}=await sb.from('app_settings').upsert({setting_key:'telegram_token',setting_value:token},{onConflict:'setting_key'});if(error)errs.push(error.message)}
+  if(chatid||token){
+    const nsUpdate={enabled:true,...(chatid&&{telegram_chat_id:chatid}),...(token&&{telegram_bot_token:token})}
+    const{error}=await sb.from('notification_settings').update(nsUpdate).gte('id',1)
+    if(error)errs.push(error.message)
+  }
   if(errs.length){status.style.color='var(--red)';status.textContent='❌ '+errs.join(', ');btn.textContent='💾 บันทึก';btn.disabled=false;return}
   status.style.color='var(--green)';status.textContent='✅ บันทึกสำเร็จ'
   btn.textContent='✅ บันทึกแล้ว'
@@ -2249,7 +2578,7 @@ async function testTelegram(){
   status.style.color='var(--text3)';status.textContent='กำลังทดสอบ...'
   try{
     const msg=`🏥 *JitHome ทดสอบการแจ้งเตือน*\n\nระบบติดตามผู้ป่วยจิตเวช\nโรงพยาบาล: ${hospitalName}\n\n✅ เชื่อมต่อสำเร็จ!`
-    const res=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{
+    const res=await fetchWithTimeout(`https://api.telegram.org/bot${token}/sendMessage`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({chat_id:chatid,text:msg,parse_mode:'Markdown'})
@@ -2269,6 +2598,142 @@ async function testTelegram(){
   btn.disabled=false
 }
 
+async function generateMonthlyReport(){
+  const now=new Date()
+  const y=now.getFullYear(),m=now.getMonth()
+  const monthStart=new Date(y,m,1).toISOString().split('T')[0]
+  const monthEnd=new Date(y,m+1,1).toISOString().split('T')[0]
+  const thMonth=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
+  const monthLabel=`${thMonth[m]} ${y+543}`
+  const[{data:visits},{data:docAppts}]=await Promise.all([
+    sb.from('home_visits').select('visit_type,village,refer,refer_resolved,visitor').gte('visit_date',monthStart).lt('visit_date',monthEnd),
+    sb.from('doctor_appointments').select('patient_id,appoint_date,status').gte('appoint_date',monthStart).lt('appoint_date',monthEnd)
+  ])
+  const pts=allPatients
+  const overdue=pts.filter(p=>parseInt(p.days_until)<0)
+  const byVillage={}
+  pts.forEach(p=>{byVillage[p.village]=(byVillage[p.village]||0)+1})
+  const staffVisits=(visits||[]).filter(v=>v.visit_type==='staff')
+  const aosomoVisits=(visits||[]).filter(v=>v.visit_type==='aosomo')
+  const refers=(visits||[]).filter(v=>v.refer)
+  const villageRows=Object.entries(byVillage).sort((a,b)=>a[0].localeCompare(b[0],undefined,{numeric:true}))
+    .map(([v,n])=>`<tr><td>${esc(v)}</td><td style="text-align:center">${n}</td></tr>`).join('')
+  const overdueRows=overdue.slice(0,20).map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.village||'')}</td><td style="text-align:center;color:#b91c1c">${Math.abs(parseInt(p.days_until||0))} วัน</td></tr>`).join('')
+  const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
+  <title>รายงานสรุป ${monthLabel}</title>
+  <style>
+    body{font-family:'Sarabun',sans-serif;margin:0;padding:24px;color:#111;font-size:13px}
+    h1{font-size:20px;font-weight:800;color:#0a7ea4;margin:0 0 4px}
+    h2{font-size:14px;font-weight:700;color:#374151;margin:20px 0 8px;border-bottom:1.5px solid #e5e7eb;padding-bottom:4px}
+    table{width:100%;border-collapse:collapse;margin-bottom:8px}
+    th{background:#f3f4f6;font-weight:700;padding:6px 10px;text-align:left;font-size:12px}
+    td{padding:5px 10px;border-bottom:1px solid #f3f4f6;font-size:12px}
+    .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:8px}
+    .stat{background:#f9fafb;border-radius:8px;padding:10px;text-align:center;border:1px solid #e5e7eb}
+    .stat-n{font-size:24px;font-weight:800;color:#0a7ea4}
+    .stat-l{font-size:11px;color:#6b7280;margin-top:2px}
+    .red{color:#b91c1c}.green{color:#15803d}
+    @media print{body{padding:12px}button{display:none}}
+  </style></head><body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+    <div><h1>รายงานสรุปรายเดือน</h1><div style="color:#6b7280;font-size:12px">${esc(hospitalName)} · ประจำเดือน ${monthLabel}</div></div>
+    <button onclick="window.print()" style="padding:8px 18px;background:#0a7ea4;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🖨️ พิมพ์ / บันทึก PDF</button>
+  </div>
+  <h2>📊 ภาพรวมผู้ป่วย</h2>
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-n">${pts.length}</div><div class="stat-l">ผู้ป่วยทั้งหมด</div></div>
+    <div class="stat"><div class="stat-n red">${overdue.length}</div><div class="stat-l">เกินนัด</div></div>
+    <div class="stat"><div class="stat-n">${staffVisits.length}</div><div class="stat-l">เยี่ยมบ้าน (เจ้าหน้าที่)</div></div>
+    <div class="stat"><div class="stat-n">${aosomoVisits.length}</div><div class="stat-l">เยี่ยมบ้าน (อสม.)</div></div>
+  </div>
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-n">${(docAppts||[]).length}</div><div class="stat-l">นัดพบแพทย์</div></div>
+    <div class="stat"><div class="stat-n red">${refers.length}</div><div class="stat-l">ส่งต่อ รพ.</div></div>
+    <div class="stat"><div class="stat-n green">${pts.filter(p=>parseInt(p.days_until||0)>=0&&parseInt(p.days_until||0)<=7).length}</div><div class="stat-l">นัดใน 7 วัน</div></div>
+    <div class="stat"><div class="stat-n">${Object.keys(byVillage).length}</div><div class="stat-l">หมู่บ้าน</div></div>
+  </div>
+  ${overdue.length?`<h2>⚠️ ผู้ป่วยเกินนัด (${overdue.length} ราย)</h2>
+  <table><tr><th>ชื่อ-นามสกุล</th><th>หมู่บ้าน</th><th style="text-align:center">เกินนัด</th></tr>${overdueRows}${overdue.length>20?`<tr><td colspan="3" style="color:#6b7280;text-align:center">...และอีก ${overdue.length-20} ราย</td></tr>`:''}</table>`:''}
+  <h2>🏘️ ผู้ป่วยแยกตามหมู่บ้าน</h2>
+  <table><tr><th>หมู่บ้าน</th><th style="text-align:center">จำนวน</th></tr>${villageRows}</table>
+  <div style="margin-top:20px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:8px">พิมพ์โดย: ${esc(currentDisplayName)} · ${new Date().toLocaleString('th-TH')} · JitHome</div>
+  </body></html>`
+  const w=window.open('','_blank','width=800,height=700')
+  if(!w){showToast('❌ กรุณาอนุญาต Popup สำหรับไซต์นี้ แล้วลองใหม่',4000);return}
+  w.document.write(html)
+  w.document.close()
+}
+
+async function showPatientTimeline(id,name){
+  const[{data:visits},{data:injRecs},{data:docAppts}]=await Promise.all([
+    sb.from('home_visits').select('visit_date,visit_type,visitor,note,refer,score,assessment_json').eq('patient_id',id).order('visit_date',{ascending:false}),
+    sb.from('injection_records').select('injection_date,interval_str,note,record_type').eq('patient_id',id).order('injection_date',{ascending:false}),
+    sb.from('doctor_appointments').select('appoint_date,appoint_type,hospital,doctor_name,note,status').eq('patient_id',id).order('appoint_date',{ascending:false})
+  ])
+  const today=todayISO()
+  const all=[
+    ...(visits||[]).map(v=>({date:v.visit_date,type:'visit',sub:v.visit_type,label:v.visit_type==='aosomo'?'🏡 เยี่ยมบ้าน อสม.':'🏠 เยี่ยมบ้าน เจ้าหน้าที่',note:v.note,extra:v.visitor?`โดย ${v.visitor}`:'',refer:v.refer,score:v.score,future:v.visit_date>today})),
+    ...(injRecs||[]).map(r=>({date:r.injection_date,type:r.record_type||'inject',label:r.record_type==='visit'?'🏡 เยี่ยมบ้าน':'💉 ฉีดยา',note:r.note,extra:r.interval_str?`นัดถัดไป: ${r.interval_str}`:'',future:r.injection_date>today})),
+    ...(docAppts||[]).map(a=>({date:a.appoint_date,type:'doctor',label:'🏥 พบแพทย์',note:a.note,extra:[a.hospital,a.doctor_name].filter(Boolean).join(' · '),future:a.appoint_date>today}))
+  ].sort((a,b)=>b.date.localeCompare(a.date))
+  const typeColor={visit:'#0d9488',aosomo:'#7c3aed',inject:'#0a7ea4',doctor:'#ea580c'}
+  const rows=all.map(r=>{
+    const c=r.type==='visit'?(r.sub==='aosomo'?typeColor.aosomo:typeColor.visit):r.type==='doctor'?typeColor.doctor:typeColor.inject
+    const dParts=r.date.split('-')
+    const dTh=dParts.length===3?`${parseInt(dParts[2])} ${['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][parseInt(dParts[1])]} ${parseInt(dParts[0])+543}`:r.date
+    return`<div style="display:flex;gap:12px;margin-bottom:12px;${r.future?'opacity:.7':''}">
+      <div style="display:flex;flex-direction:column;align-items:center">
+        <div style="width:32px;height:32px;border-radius:50%;background:${c}20;border:2px solid ${c};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${r.label.split(' ')[0]}</div>
+        <div style="width:2px;flex:1;background:#e5e7eb;margin-top:4px"></div>
+      </div>
+      <div style="flex:1;padding-bottom:8px">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:${c}">${r.label.split(' ').slice(1).join(' ')}</span>
+          ${r.future?'<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-weight:700">📅 นัดหมาย</span>':''}
+          ${r.refer?'<span style="font-size:10px;background:#fef2f2;color:#b91c1c;padding:1px 6px;border-radius:4px;font-weight:700">🏥 ส่งต่อ</span>':''}
+        </div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px">${dTh}${r.extra?` · ${esc(r.extra)}`:''}</div>
+        ${r.note?`<div style="font-size:11px;color:#374151;background:#f9fafb;border-radius:6px;padding:5px 8px;margin-top:4px;line-height:1.5">${esc(r.note.slice(0,120))}${r.note.length>120?'...':''}</div>`:''}
+      </div>
+    </div>`}).join('')
+  const w=window.open('','_blank','width=480,height=700')
+  if(!w){showToast('❌ กรุณาอนุญาต Popup สำหรับไซต์นี้ แล้วลองใหม่',4000);return}
+  w.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>Timeline — ${esc(name)}</title>
+  <style>body{font-family:'Sarabun',sans-serif;margin:0;padding:20px;background:#f9fafb;color:#111}
+  h2{font-size:16px;font-weight:800;margin:0 0 4px;color:#0a7ea4}
+  @media print{.no-print{display:none}}</style>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  </head><body>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h2>📅 Timeline การรักษา</h2><div style="font-size:12px;color:#6b7280">${esc(name)} · ${all.length} รายการ</div></div>
+    <button class="no-print" onclick="window.print()" style="padding:6px 14px;background:#0a7ea4;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🖨️ พิมพ์</button>
+  </div>
+  ${all.length?rows:'<div style="text-align:center;padding:40px;color:#9ca3af">ยังไม่มีประวัติการรักษา</div>'}
+  </body></html>`)
+  w.document.close()
+}
+
+async function sendTelegramReport(){
+  const btn=document.getElementById('tg-report-btn')
+  const status=document.getElementById('tg-report-status')
+  if(!btn||!status)return
+  btn.disabled=true;btn.textContent='กำลังส่ง...'
+  status.style.color='var(--text3)';status.textContent='กำลังส่งรายงาน...'
+  try{
+    const{data,error}=await sb.rpc('send_overdue_notification')
+    if(error)throw new Error(error.message)
+    status.style.color='var(--green)'
+    status.textContent='✅ ส่งรายงานสำเร็จ! ตรวจสอบกลุ่ม Telegram ได้เลย'
+    btn.textContent='✅ ส่งสำเร็จ'
+    setTimeout(()=>{btn.textContent='📣 ส่งรายงาน Telegram ตอนนี้';btn.disabled=false},3000)
+    return
+  }catch(e){
+    status.style.color='var(--red)';status.textContent='❌ '+e.message
+    btn.textContent='📣 ส่งรายงาน Telegram ตอนนี้'
+  }
+  btn.disabled=false
+}
+
 async function saveTokenSetting(key,inputId,btnId){
   const val=(document.getElementById(inputId)?.value||'').trim()
   const btn=document.getElementById(btnId)
@@ -2282,110 +2747,6 @@ async function saveTokenSetting(key,inputId,btnId){
   }
   btn.textContent='✅ บันทึกแล้ว'
   setTimeout(()=>{btn.textContent=origText;btn.disabled=false},2000)
-}
-
-async function saveSheetURL(){
-  const inp=document.getElementById('sheets-url-input')
-  const btn=document.getElementById('sheets-save-btn')
-  const status=document.getElementById('sheets-status')
-  const val=(inp?.value||'').trim()
-  if(!val){status.textContent='❌ กรุณากรอก URL';return}
-  btn.disabled=true;btn.textContent='กำลังบันทึก...'
-  try{
-    const{error}=await sb.from('app_settings').upsert({setting_key:'sheets_url',setting_value:val},{onConflict:'setting_key'})
-    if(error)throw error
-    status.style.color='var(--green)';status.textContent='✅ บันทึก URL สำเร็จ'
-    btn.textContent='✅ บันทึกแล้ว'
-    setTimeout(()=>{btn.textContent='💾 บันทึก URL';btn.disabled=false;status.textContent=''},2500)
-  }catch(e){status.style.color='var(--red)';status.textContent='❌ '+e.message;btn.textContent='💾 บันทึก URL';btn.disabled=false}
-}
-
-async function importFromSheets(){
-  const inp=document.getElementById('sheets-url-input')
-  const btn=document.getElementById('sheets-import-btn')
-  const status=document.getElementById('sheets-status')
-  let url=(inp?.value||'').trim()
-  if(!url){status.textContent='❌ กรุณากรอก URL ก่อน';return}
-  // Extract sheet ID
-  const m=url.match(/\/d\/([a-zA-Z0-9_-]{20,})/)
-  if(!m){status.style.color='var(--red)';status.textContent='❌ URL ไม่ถูกต้อง';return}
-  const sheetId=m[1]
-  btn.disabled=true;btn.textContent='⏳ กำลังโหลด...'
-  status.style.color='var(--text3)';status.textContent='กำลังดึงข้อมูลจาก Google Sheets...'
-  try{
-    const resp=await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`)
-    if(!resp.ok)throw new Error('ไม่สามารถเข้าถึง Sheet ได้ (ตรวจสอบว่า Sheet เป็น Public)')
-    const text=await resp.text()
-    const json=JSON.parse(text.replace(/^[^(]+\(/,'').replace(/\);?\s*$/,''))
-    const cols=json.table.cols.map(c=>(c.label||c.id||'').toLowerCase().trim())
-    const rows=json.table.rows||[]
-    if(!rows.length)throw new Error('ไม่พบข้อมูลใน Sheet')
-    // Map columns → find name, village, group, date, interval, note
-    const ci={
-      name: cols.findIndex(c=>c.includes('ชื่อ')||c.includes('name')),
-      village: cols.findIndex(c=>c.includes('หมู่')||c.includes('village')||c.includes('บ้าน')),
-      group: cols.findIndex(c=>c.includes('กลุ่ม')||c.includes('group')||c.includes('สี')),
-      date: cols.findIndex(c=>c.includes('วัน')||c.includes('date')||c.includes('ฉีด')),
-      interval: cols.findIndex(c=>c.includes('รอบ')||c.includes('interval')||c.includes('นัด')),
-      note: cols.findIndex(c=>c.includes('หมาย')||c.includes('note')||c.includes('บันทึก')),
-    }
-    // Fallback by position if no Thai header found
-    if(ci.name<0) ci.name=0
-    if(ci.village<0) ci.village=1
-    if(ci.group<0) ci.group=2
-    if(ci.date<0) ci.date=3
-    if(ci.interval<0) ci.interval=4
-    if(ci.note<0) ci.note=5
-    const getVal=(row,i)=>{if(i<0||!row.c||!row.c[i])return '';const v=row.c[i];return v.f||v.v||''}
-    let inserted=0,skipped=0,errors=[]
-    btn.textContent=`⏳ 0/${rows.length}`
-    for(let i=0;i<rows.length;i++){
-      const row=rows[i]
-      const name=String(getVal(row,ci.name)).trim()
-      if(!name||name==='ชื่อ'||name==='name'){skipped++;continue}
-      const village=String(getVal(row,ci.village)).trim()||'หมู่ 1'
-      const groupStr=String(getVal(row,ci.group)).trim()
-      const dateRaw=String(getVal(row,ci.date)).trim()
-      const intervalStr=String(getVal(row,ci.interval)).trim()||'1 เดือน'
-      const note=String(getVal(row,ci.note)).trim()
-      // Parse date — may be Thai BE (พ.ศ.) or ISO
-      let dateISO=''
-      if(/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)){
-        dateISO=dateRaw
-      } else if(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(dateRaw)){
-        const pts2=dateRaw.split(/[\/\-]/)
-        let yr=parseInt(pts2[2])
-        if(yr>2400)yr=yr-543
-        dateISO=`${yr}-${String(pts2[1]).padStart(2,'0')}-${String(pts2[0]).padStart(2,'0')}`
-      } else if(/^\d{1,2}\s+\S+\s+\d{4}$/.test(dateRaw)){
-        // Thai format like "15 มิ.ย. 2566"
-        const TH_M={'ม.ค.':1,'ก.พ.':2,'มี.ค.':3,'เม.ย.':4,'พ.ค.':5,'มิ.ย.':6,'ก.ค.':7,'ส.ค.':8,'ก.ย.':9,'ต.ค.':10,'พ.ย.':11,'ธ.ค.':12,'มกราคม':1,'กุมภาพันธ์':2,'มีนาคม':3,'เมษายน':4,'พฤษภาคม':5,'มิถุนายน':6,'กรกฎาคม':7,'สิงหาคม':8,'กันยายน':9,'ตุลาคม':10,'พฤศจิกายน':11,'ธันวาคม':12}
-        const dp=dateRaw.split(/\s+/)
-        const mm=TH_M[dp[1]]||1
-        let yr=parseInt(dp[2]);if(yr>2400)yr=yr-543
-        dateISO=`${yr}-${String(mm).padStart(2,'0')}-${String(dp[0]).padStart(2,'0')}`
-      }
-      if(!dateISO){skipped++;continue}
-      try{
-        const gc=parseGroupColor(groupStr)
-        const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
-        await sb.from('patients').upsert({name,village},{onConflict:'name'})
-        const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
-        if(!found)throw new Error('patient not found')
-        await sb.from('injection_records').insert({patient_id:found.id,injection_date:dateISO,group_color:gc,group_label:gl,interval_str:intervalStr,interval_days:parseInterval(intervalStr),note})
-        inserted++
-      }catch(e){errors.push(name+': '+e.message)}
-      if((i+1)%5===0)btn.textContent=`⏳ ${i+1}/${rows.length}`
-    }
-    allPatients=await getPatients()
-    status.style.color='var(--green)'
-    status.textContent=`✅ นำเข้าสำเร็จ ${inserted} รายการ${skipped?` · ข้ามไป ${skipped}`:''}`
-    if(errors.length)status.textContent+=` · ผิดพลาด ${errors.length} รายการ`
-    btn.textContent='📥 นำเข้าข้อมูล';btn.disabled=false
-  }catch(e){
-    status.style.color='var(--red)';status.textContent='❌ '+e.message
-    btn.textContent='📥 นำเข้าข้อมูล';btn.disabled=false
-  }
 }
 
 function appendNote(text){const ta=document.getElementById('adm-note');if(ta)ta.value=ta.value?ta.value+' · '+text:text}
@@ -2408,8 +2769,10 @@ async function saveAdminRecord(){
     if(!found)throw new Error('ไม่พบผู้ป่วย')
     await sb.from('patients').update({village}).eq('id',found.id)
     const record_type=document.querySelector('input[name="adm-type"]:checked')?.value||'injection'
-    const{error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str,interval_days,note,record_type})
+    const{data:newRec,error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str,interval_days,note,record_type,recorded_by:currentDisplayName||null}).select('id').single()
     if(error)throw error
+    _markOwnWrite(found.id)
+    if(newRec)_markOwnWrite(newRec.id)
     btn.textContent='✅ บันทึกสำเร็จ'
     document.getElementById('adm-name').value=''
     document.getElementById('adm-note').value=''
@@ -2445,6 +2808,7 @@ async function saveSettings(){
 }
 
 function exportCSV(){
+  if(!canDo('record')){alert('🔒 ไม่มีสิทธิ์ Export ข้อมูล');return}
   auditLog('export_csv','patients',null,{count:allPatients.length})
   const rows=allPatients.map(p=>[p.name,p.village,p.group_label,p.interval_str,thDate(p.last_date),thDate(p.next_date),p.days_until,p.note||''])
   const hdr=['ชื่อ','หมู่บ้าน','กลุ่มสี','รอบนัด','วันฉีดล่าสุด','วันนัดต่อไป','วันคงเหลือ','หมายเหตุ']
@@ -2469,16 +2833,27 @@ function toggleAdmType(type){
 }
 
 function exportJSON(){
+  if(!canDo('record')){alert('🔒 ไม่มีสิทธิ์ Export ข้อมูล');return}
   auditLog('export_json','patients',null,{count:allPatients.length})
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(allPatients,null,2)],{type:'application/json'}));a.download='jithome.json';a.click()
 }
 
 async function exportVisitExcel(){
+  if(!canDo('record')){alert('🔒 ไม่มีสิทธิ์ Export ข้อมูล');return}
+  await loadXLSX()
+  const now=new Date()
+  const defFrom=new Date(now.getFullYear(),now.getMonth()-5,1).toISOString().split('T')[0]
+  const defTo=now.toISOString().split('T')[0]
+  const fromDate=prompt('ตั้งแต่วันที่ (YYYY-MM-DD):',defFrom)
+  if(fromDate===null)return
+  const toDate=prompt('ถึงวันที่ (YYYY-MM-DD):',defTo)
+  if(toDate===null)return
   try{
-    const{data:visits}=await sb.from('home_visits')
-      .select('*')
-      .order('visit_date',{ascending:false})
-    if(!visits||!visits.length){alert('ไม่พบข้อมูลการเยี่ยมบ้าน');return}
+    let q=sb.from('home_visits').select('*').order('visit_date',{ascending:false}).limit(1000)
+    if(fromDate)q=q.gte('visit_date',fromDate)
+    if(toDate)q=q.lte('visit_date',toDate)
+    const{data:visits}=await q
+    if(!visits||!visits.length){alert('ไม่พบข้อมูลการเยี่ยมบ้านในช่วงวันที่เลือก');return}
     const patMap=Object.fromEntries(allPatients.map(p=>[p.id,p]))
     const typeLabel={staff:'เจ้าหน้าที่',aosomo:'อสม.'}
     const hdr=['วันที่เยี่ยม','ประเภท','ชื่อ-สกุล','หมู่บ้าน','บ้านเลขที่','เลขบัตรประชาชน','รหัสโรค','ชื่อโรค','ผู้เยี่ยม','คะแนน','ส่งต่อ','หมายเหตุ']
@@ -2490,7 +2865,7 @@ async function exportVisitExcel(){
         v.patient_name||'',
         v.village||'',
         p.house_no||'',
-        p.national_id||'',
+        maskNationalId(p.national_id)||'',
         p.disease_code||'',
         p.disease_name||'',
         v.visitor||'',
@@ -2516,12 +2891,12 @@ function downloadTemplate(type){
       'นายวิชัย มั่นคง,นักวิชาการสาธารณสุข,0834567890'
     filename='ตัวอย่าง_รายชื่อเจ้าหน้าที่.csv'
   } else if(type==='aosomo'){
-    csv='ชื่อ-นามสกุล,หมู่บ้าน,เบอร์โทร\n'+
-      'นางสาวมาลี ใจดี,หมู่ 1,0812345678\n'+
-      'นายสมชาย รักษ์ดี,หมู่ 1,0823456789\n'+
-      'นางวิไล สุขสันต์,หมู่ 2,0834567890\n'+
-      'นางสาวอารีย์ แก้วใส,หมู่ 2,0845678901\n'+
-      'นายประสิทธิ์ ทองดี,หมู่ 3,0856789012'
+    csv='ชื่อ-นามสกุล,หมู่บ้าน,เบอร์โทร,LINE ID\n'+
+      'นางสาวมาลี ใจดี,หมู่ 1,0812345678,mali.jaidee\n'+
+      'นายสมชาย รักษ์ดี,หมู่ 1,0823456789,\n'+
+      'นางวิไล สุขสันต์,หมู่ 2,0834567890,wilai_suksan\n'+
+      'นางสาวอารีย์ แก้วใส,หมู่ 2,0845678901,\n'+
+      'นายประสิทธิ์ ทองดี,หมู่ 3,0856789012,'
     filename='ตัวอย่าง_รายชื่ออสม.csv'
   } else {
     csv='ชื่อ-นามสกุล,บ้านเลขที่,หมู่บ้าน,หมายเหตุ,เลขบัตรประชาชน,รหัสโรค,ชื่อโรค,เยี่ยมบ้านทุก(เดือน),ฉีดยาทุก(เดือน),รายการยาที่ฉีด\n'+
@@ -2546,10 +2921,17 @@ async function openModal(id){
   try{
     const{data:p}=await sb.from('patient_status').select('*').eq('id',id).single()
     if(!p)throw new Error('ไม่พบผู้ป่วย')
+    // ตรวจสิทธิ์: อสม. เข้าถึงได้เฉพาะหมู่บ้านที่รับผิดชอบ
+    if(currentRole==='aosomo'&&currentVillage&&p.village!==currentVillage)throw new Error('ไม่มีสิทธิ์เข้าถึงข้อมูลผู้ป่วยหมู่อื่น')
     auditLog('view_patient','patient',id,{name:p.name,village:p.village})
-    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date').eq('id',id).single()
+    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date,consent_signature,consent_given,consent_date').eq('id',id).single()
     p.photo_urls=pExtra?.photo_urls||[]
     p.oral_medication=pExtra?.oral_medication||null
+    p.consent_signature=pExtra?.consent_signature||null
+    const _sMap=await batchSignedUrls([...p.photo_urls,...(p.consent_signature?[p.consent_signature]:[])])
+    p.photo_urls=p.photo_urls.map(u=>_sMap[u]||u)
+    if(p.consent_signature)p.consent_signature=_sMap[p.consent_signature]||p.consent_signature
+    if(pExtra?.consent_given!=null){p.consent_given=pExtra.consent_given;p.consent_date=pExtra.consent_date||p.consent_date}
     if(pExtra?.next_inject_date) p.next_inject_date=pExtra.next_inject_date
     if(pExtra?.next_visit_date) p.next_visit_date=pExtra.next_visit_date
     p.group_label=groupLabel(p.group_color)
@@ -2580,12 +2962,13 @@ async function openModal(id){
         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
           <div class="history-date">${esc(h.date_th)} ${badge}</div>
           ${canDo('record')?`<div style="display:flex;gap:2px">
-            <button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${esc(h.interval_str||'')}','${esc(h.note||'')}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="แก้ไข">✏️</button>
-            <button onclick="deleteRecord(${h.id},${p.id})" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="ลบรายการนี้">🗑️</button>
+            <button onclick="toggleEditRecord(${h.id},'${h.injection_date}','${jsStr(h.interval_str||'')}','${jsStr(h.note||'')}')" aria-label="แก้ไขบันทึกยา" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="แก้ไข">✏️</button>
+            <button onclick="deleteRecord(${h.id},${p.id})" aria-label="ลบบันทึกยา" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:11px;padding:2px 4px;font-family:'Sarabun',sans-serif" title="ลบรายการนี้">🗑️</button>
           </div>`:''}
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(h.group_label||'')}${h.interval_str?` · ${h.record_type==='visit'?'🏡 นัดเยี่ยม':'💉 นัด'}${esc(h.interval_str)}`:''}</div>
         ${h.note?`<div class="history-note">${esc(h.note)}</div>`:''}
+        ${h.recorded_by?`<div style="font-size:10px;color:var(--text3);margin-top:2px">👤 ${esc(h.recorded_by)}</div>`:''}
         <div id="edit-rec-${h.id}" style="display:none;background:#f0f9ff;border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:10px;margin-top:8px">
           <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px">แก้ไขรายการ</div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">${isFuture?'วันนัดหมาย':'วันที่ฉีดยา'}</label><input type="date" id="er-date-${h.id}" value="${h.injection_date}"></div>
@@ -2603,11 +2986,13 @@ async function openModal(id){
         </div>
       </div>
     </div>`}).join('')
+    const consented=p.consent_given||!!p.consent_signature
     ct.innerHTML=`
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
       <div><div style="font-size:20px;font-weight:700;margin-bottom:4px">${esc(p.name)}</div><div style="font-size:14px;color:var(--text3)">${esc(p.village||'')}${p.house_no?` · 🏠 ${esc(p.house_no)}`:''} · ${esc(hospitalName)}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
-        ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${esc(p.name)}','${esc(p.village||'')}','${esc(p.house_no||'')}','${esc(p.note||'')}','${esc(p.staff_responsible||'')}','${esc(p.aosomo_responsible||'')}','${esc(p.national_id||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
+        <button onclick="showPatientTimeline(${p.id},'${jsStr(p.name)}')" style="background:none;border:1px solid #bae6fd;border-radius:6px;cursor:pointer;color:#0369a1;padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">📅 Timeline</button>
+        ${canDo('record')?`<button onclick="openEditPatient(${p.id},'${jsStr(p.name)}','${jsStr(p.village||'')}','${jsStr(p.house_no||'')}','${jsStr(p.note||'')}','${jsStr(p.staff_responsible||'')}','${jsStr(p.aosomo_responsible||'')}','${jsStr(p.national_id||'')}')" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
         <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>
@@ -2649,7 +3034,7 @@ async function openModal(id){
       </div>
       <div class="form-group">
         <label>📎 แนบไฟล์เอกสาร (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
-        ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--primary);margin-bottom:6px;text-decoration:none">📄 ไฟล์ปัจจุบัน (คลิกดู) — อัปโหลดใหม่เพื่อแทนที่</a>`:''}
+        ${p.file_url?`<a href="${safeUrl(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--primary);margin-bottom:6px;text-decoration:none">📄 ไฟล์ปัจจุบัน (คลิกดู) — อัปโหลดใหม่เพื่อแทนที่</a>`:''}
         <div id="edit-pt-file-wrap" onclick="document.getElementById('edit-pt-file').click()"
           style="border:2px dashed var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer;background:#fff">
           <div id="edit-pt-file-label" style="font-size:12px;color:var(--text3)">📁 กดเพื่อเลือกไฟล์</div>
@@ -2661,7 +3046,7 @@ async function openModal(id){
         <button class="btn btn-primary" style="flex:1" id="edit-pt-save-btn" onclick="saveEditPatient(${p.id})">บันทึกการแก้ไข</button>
         <button class="btn btn-outline" onclick="closeEditPatient()">ยกเลิก</button>
       </div>
-      ${canDo('admin')?`<button onclick="deletePatient(${p.id},'${esc(p.name)}')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🗑️ ลบผู้ป่วยรายนี้ออกจากระบบ</button>`:''}
+      ${canDo('admin')?`<button onclick="deletePatient(${p.id},'${jsStr(p.name)}')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🗑️ ลบผู้ป่วยรายนี้ออกจากระบบ</button>`:''}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
       <span class="badge ${p.group_color}"><span class="badge-dot"></span>${esc(p.group_label)}</span>
@@ -2707,16 +3092,31 @@ async function openModal(id){
           <div style="flex:1;min-width:0">
             <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:4px">ภาพถ่ายบริบท / สภาพแวดล้อม</div>
             ${(p.photo_urls&&p.photo_urls.length>0)
-              ? p.photo_urls.map(url=>`<a href="${esc(url)}" target="_blank" style="display:block;margin-bottom:6px"><img src="${esc(url)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>`).join('')
+              ? p.photo_urls.map((url,i)=>`<div style="position:relative;display:inline-block;margin-bottom:6px;max-width:100%">
+                  <a href="${safeUrl(url)}" target="_blank"><img src="${safeUrl(url)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:cover;display:block;cursor:pointer"></a>
+                  ${canDo('record')?`<button onclick="removePatientPhoto(${p.id},${i})" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center" title="ลบรูป">×</button>`:''}
+                </div>`).join('')
               : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้อัปโหลด</div>`}
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;padding-top:6px;border-top:1px solid var(--border)">
-          <span style="font-size:16px">${p.consent_given?'✅':'⚠️'}</span>
-          <div style="flex:1">
-            <span style="font-size:12px;font-weight:700;color:${p.consent_given?'#15803d':'#b91c1c'}">${p.consent_given?'ความยินยอม PDPA: ยินยอมแล้ว'+(p.consent_date?' · '+thDate(p.consent_date):''):'ยังไม่ได้รับความยินยอม PDPA'}</span>
+        <div style="padding-top:6px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:16px">${consented?'✅':'⚠️'}</span>
+            <div style="flex:1">
+              <span style="font-size:12px;font-weight:700;color:${consented?'#15803d':'#b91c1c'}">${consented?'ความยินยอม PDPA: ยินยอมแล้ว'+(p.consent_date?' · '+thDate(p.consent_date):''):'ยังไม่ได้รับความยินยอม PDPA'}</span>
+            </div>
+            ${canDo('record')&&!consented?`<button onclick="giveConsent(${p.id})" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">รับยินยอม</button>`:''}
           </div>
-          ${canDo('record')&&!p.consent_given?`<button onclick="giveConsent(${p.id})" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">รับยินยอม</button>`:''}
+          ${p.consent_signature?`<div style="margin-top:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px">
+            <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:6px">📄 เอกสารความยินยอม PDPA</div>
+            <div style="font-size:11px;color:#6b7280;line-height:1.7;margin-bottom:8px">
+              ผู้ป่วยได้อ่านและยินยอมให้ รพ.สต. เก็บรวบรวม ใช้ และเปิดเผยข้อมูลส่วนบุคคล ได้แก่ ชื่อ-นามสกุล เลขบัตรประชาชน เบอร์โทรศัพท์ ที่อยู่ และข้อมูลสุขภาพจิต เพื่อการดูแลสุขภาพในชุมชน ตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
+            </div>
+            <div style="text-align:center;border-top:1px dashed #d1d5db;padding-top:8px">
+              <div style="font-size:10px;color:#6b7280;margin-bottom:4px">✍️ ลายเซ็นผู้ยินยอม${p.consent_date?' · '+thDate(p.consent_date):''}</div>
+              <img src="${p.consent_signature}" style="max-width:100%;max-height:90px;border-radius:4px;background:#fff;border:1px solid #e5e7eb">
+            </div>
+          </div>`:''}
         </div>
       </div>
     </div>
@@ -2728,7 +3128,10 @@ async function openModal(id){
       </div>
     </div>`:''}
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
-    ${p.file_url?`<a href="${esc(p.file_url)}" target="_blank" style="display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>`:''}
+    ${p.file_url?`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <a href="${safeUrl(p.file_url)}" target="_blank" style="flex:1;display:flex;align-items:center;gap:8px;background:var(--primary-lt);border:1px solid rgba(10,126,164,.2);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--primary);text-decoration:none;font-weight:600">📎 ดูไฟล์แนบ</a>
+      ${canDo('record')?`<button onclick="removePatientFile(${p.id})" style="padding:7px 10px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:8px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🗑 ลบ</button>`:''}
+    </div>`:''}
     ${(p.staff_responsible||p.aosomo_responsible)?`
     <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap">
       ${p.staff_responsible?`<div style="font-size:12px"><span style="color:var(--text3)">👨‍⚕️ เจ้าหน้าที่:</span> <strong>${esc(p.staff_responsible)}</strong></div>`:''}
@@ -2766,6 +3169,12 @@ async function removePatientPhoto(patientId,index){
   await sb.from('patients').update({photo_urls:urls}).eq('id',patientId)
   await openModal(patientId)
 }
+async function removePatientFile(patientId){
+  if(!confirm('ลบไฟล์แนบนี้ออก?'))return
+  const{error}=await sb.from('patients').update({file_url:null}).eq('id',patientId)
+  if(error){alert('❌ ลบไม่สำเร็จ: '+error.message);return}
+  await openModal(patientId)
+}
 
 function toggleEditRecord(id,date,interval,note){
   const wrap=document.getElementById('edit-rec-'+id)
@@ -2790,13 +3199,14 @@ async function saveEditRecord(id,patientId){
     const{data:rec}=await sb.from('injection_records').select('group_color,group_label,record_type').eq('id',id).single()
     const{error}=await sb.from('injection_records').update({injection_date:date,interval_str,interval_days,note}).eq('id',id)
     if(error)throw error
+    _markOwnWrite(id)
     if(nextDate&&nextDate>date){
       if(rec?.record_type==='visit'){
         await sb.from('patients').update({next_visit_date:nextDate}).eq('id',patientId)
       } else {
         const{data:exist}=await sb.from('injection_records').select('id').eq('patient_id',patientId).eq('injection_date',nextDate).maybeSingle()
         if(!exist){
-          await sb.from('injection_records').insert({patient_id:patientId,injection_date:nextDate,group_color:rec?.group_color,group_label:rec?.group_label,interval_str,interval_days,note:'',record_type:rec?.record_type||'injection'})
+          await sb.from('injection_records').insert({patient_id:patientId,injection_date:nextDate,group_color:rec?.group_color,group_label:rec?.group_label,interval_str,interval_days,note:'',record_type:rec?.record_type||'injection',recorded_by:currentDisplayName||null})
         }
         await sb.from('patients').update({next_inject_date:nextDate}).eq('id',patientId)
       }
@@ -2936,9 +3346,90 @@ async function deletePatient(id,name){
     if(location.hash==='#patients')navigate('patients')
   }catch(e){alert('❌ ลบไม่สำเร็จ: '+e.message)}
 }
-async function giveConsent(id){
-  const{error}=await sb.from('patients').update({consent_given:true,consent_date:todayISO()}).eq('id',id)
-  if(error){alert('❌ '+error.message);return}
+function giveConsent(id){
+  const p=allPatients.find(x=>x.id===id)||{}
+  const el=document.getElementById('consent-modal')
+  if(el)el.remove()
+  const m=document.createElement('div')
+  m.id='consent-modal'
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center'
+  m.innerHTML=`
+  <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:540px;max-height:92vh;display:flex;flex-direction:column">
+    <div style="padding:16px 18px 10px;border-bottom:1px solid #e5e7eb;flex-shrink:0">
+      <div style="font-size:15px;font-weight:800;color:#15803d">🔒 ใบยินยอมคุ้มครองข้อมูลส่วนบุคคล (PDPA)</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px">ผู้ป่วย: ${esc(p.name||'')}</div>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:14px 18px;font-size:12.5px;color:#374151;line-height:1.8">
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:11.5px;color:#166534">
+        โรงพยาบาลส่งเสริมสุขภาพตำบล ขอแจ้งให้ทราบว่าจะมีการเก็บรวบรวม ใช้ และเปิดเผยข้อมูลส่วนบุคคลของท่านตาม พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
+      </div>
+      <p><strong>1. ข้อมูลที่เก็บรวบรวม</strong><br>ชื่อ-นามสกุล, เลขบัตรประชาชน, เบอร์โทรศัพท์, ที่อยู่, ข้อมูลสุขภาพจิต, ประวัติการรับยา, วันนัดหมาย</p>
+      <p><strong>2. วัตถุประสงค์การใช้ข้อมูล</strong><br>เพื่อการดูแลสุขภาพจิตในชุมชน การติดตามการรับยา การนัดหมายแพทย์ และการรายงานทางสาธารณสุข</p>
+      <p><strong>3. ผู้ที่เข้าถึงข้อมูล</strong><br>บุคลากรสาธารณสุขที่ได้รับอนุญาต ได้แก่ เจ้าหน้าที่ รพ.สต. พยาบาล แพทย์ และ อสม. ประจำหมู่บ้าน</p>
+      <p><strong>4. ระยะเวลาการเก็บข้อมูล</strong><br>ตลอดระยะเวลาการรักษาและตามที่กฎหมายกำหนด</p>
+      <p><strong>5. สิทธิ์ของท่าน</strong><br>ท่านมีสิทธิ์ขอดู แก้ไข หรือลบข้อมูลส่วนบุคคลของท่าน โดยติดต่อเจ้าหน้าที่ รพ.สต.</p>
+      <p><strong>6. การถอนความยินยอม</strong><br>ท่านสามารถถอนความยินยอมได้ตลอดเวลา โดยไม่มีผลต่อการประมวลผลข้อมูลที่ดำเนินการไปแล้ว</p>
+      <div style="margin-top:10px;padding:10px 12px;background:#fefce8;border:1px solid #fde68a;border-radius:8px;font-size:11.5px;color:#92400e">
+        ข้าพเจ้าได้อ่านและเข้าใจรายละเอียดข้างต้นแล้ว และยินยอมให้เก็บและประมวลผลข้อมูลส่วนบุคคลของข้าพเจ้าตามวัตถุประสงค์ดังกล่าว
+      </div>
+      <div style="margin-top:16px;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">✍️ ลายเซ็นผู้ยินยอม</div>
+      <div style="position:relative;border:2px dashed #d1d5db;border-radius:10px;background:#f9fafb;touch-action:none">
+        <canvas id="consent-sig-canvas" style="display:block;width:100%;height:160px;border-radius:8px;cursor:crosshair"></canvas>
+        <div id="consent-sig-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#9ca3af;font-size:12px">เซ็นชื่อในกรอบนี้</div>
+      </div>
+      <button onclick="clearConsentSig()" style="margin-top:6px;padding:4px 12px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif">🗑 ล้างลายเซ็น</button>
+      <div style="margin-top:10px;font-size:11px;color:#6b7280">วันที่: ${thDate(todayISO())}</div>
+    </div>
+    <div style="padding:12px 18px 20px;border-top:1px solid #e5e7eb;flex-shrink:0;display:flex;gap:10px">
+      <button onclick="document.getElementById('consent-modal').remove()" style="flex:1;padding:10px;background:#f3f4f6;color:#374151;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">ยกเลิก</button>
+      <button onclick="saveConsent(${id})" style="flex:2;padding:10px;background:#16a34a;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ยืนยันยินยอม</button>
+    </div>
+  </div>`
+  document.body.appendChild(m)
+  m.addEventListener('click',e=>{if(e.target===m)m.remove()})
+  const canvas=document.getElementById('consent-sig-canvas')
+  const rect=canvas.getBoundingClientRect()
+  canvas.width=Math.round(rect.width*devicePixelRatio)||600
+  canvas.height=Math.round(rect.height*devicePixelRatio)||320
+  const ctx=canvas.getContext('2d')
+  ctx.scale(devicePixelRatio,devicePixelRatio)
+  ctx.strokeStyle='#111'
+  ctx.lineWidth=2.5
+  ctx.lineCap='round'
+  ctx.lineJoin='round'
+  let drawing=false
+  const getPos=e=>{const r=canvas.getBoundingClientRect();const src=e.touches?e.touches[0]:e;return{x:(src.clientX-r.left),y:(src.clientY-r.top)}}
+  canvas.addEventListener('pointerdown',e=>{drawing=true;const{x,y}=getPos(e);ctx.beginPath();ctx.moveTo(x,y);document.getElementById('consent-sig-hint').style.display='none'})
+  canvas.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();const{x,y}=getPos(e);ctx.lineTo(x,y);ctx.stroke()},{passive:false})
+  canvas.addEventListener('pointerup',()=>{drawing=false})
+  canvas.addEventListener('pointerleave',()=>{drawing=false})
+}
+function clearConsentSig(){
+  const canvas=document.getElementById('consent-sig-canvas')
+  if(!canvas)return
+  const ctx=canvas.getContext('2d')
+  ctx.clearRect(0,0,canvas.width,canvas.height)
+  const hint=document.getElementById('consent-sig-hint')
+  if(hint)hint.style.display='flex'
+}
+async function saveConsent(id){
+  const canvas=document.getElementById('consent-sig-canvas')
+  if(!canvas){alert('❌ ไม่พบกรอบลายเซ็น');return}
+  const blank=!canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some(v=>v!==0)
+  if(blank){alert('กรุณาลงลายเซ็นก่อนยืนยัน');return}
+  const btn=document.querySelector('#consent-modal button[onclick^="saveConsent"]')
+  if(btn){btn.disabled=true;btn.textContent='กำลังบันทึก...'}
+  const blob=await new Promise(res=>canvas.toBlob(res,'image/png'))
+  const filename=`signatures/${id}_${Date.now()}.png`
+  const{error:ue}=await sb.storage.from('patient-files').upload(filename,blob,{contentType:'image/png'})
+  if(ue){alert('❌ อัพโหลดลายเซ็นไม่สำเร็จ: '+ue.message);if(btn){btn.disabled=false;btn.textContent='✅ ยืนยันยินยอม'}return}
+  const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
+  const today=todayISO()
+  const{error}=await sb.from('patients').update({consent_given:true,consent_date:today,consent_signature:publicUrl}).eq('id',id)
+  if(error){alert('❌ '+error.message);if(btn){btn.disabled=false;btn.textContent='✅ ยืนยันยินยอม'}return}
+  const pt=allPatients.find(x=>x.id===id)
+  if(pt){pt.consent_given=true;pt.consent_date=today;pt.consent_signature=publicUrl}
+  document.getElementById('consent-modal')?.remove()
   openModal(id)
 }
 async function saveEditPatient(id){
@@ -2988,6 +3479,7 @@ async function saveEditPatient(id){
     }
     const{error}=await sb.from('patients').update(updates).eq('id',id)
     if(error)throw error
+    _markOwnWrite(id)
     auditLog('edit_patient','patient',id,{name:updates.name})
     allPatients=await getPatients()
     await openModal(id)
@@ -3034,8 +3526,10 @@ async function saveModalRecord(pid,gc){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const record_type=window._modalRecType||'injection'
-    const{error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type})
+    const{data:newRec2,error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type,recorded_by:currentDisplayName||null}).select('id').single()
     if(error)throw error
+    _markOwnWrite(pid)
+    if(newRec2)_markOwnWrite(newRec2.id)
     // ถ้ามีวันนัดถัดไป
     if(nextDate&&nextDate>date){
       if(record_type==='visit'){
@@ -3043,7 +3537,7 @@ async function saveModalRecord(pid,gc){
         await sb.from('patients').update({next_visit_date:nextDate}).eq('id',pid)
       } else {
         // ฉีดยา: สร้าง record นัดหมายล่วงหน้า + อัปเดต next_inject_date
-        await sb.from('injection_records').insert({patient_id:pid,injection_date:nextDate,group_color:gc,group_label:gl,interval_str,interval_days,note:'',record_type})
+        await sb.from('injection_records').insert({patient_id:pid,injection_date:nextDate,group_color:gc,group_label:gl,interval_str,interval_days,note:'',record_type,recorded_by:currentDisplayName||null})
         await sb.from('patients').update({next_inject_date:nextDate}).eq('id',pid)
       }
     }
@@ -3484,7 +3978,7 @@ function update2QScore(){
   const s=(q1||0)+(q2||0)
   const suicide=q3===1
   let txt,bg,color
-  if(suicide){txt='⚠️ ความเสี่ยงสูง — ต้องส่งต่อด่วน';bg='#fef2f2';color='#b91c1c'}
+  if(suicide){txt='⚠️ ความเสี่ยงสูง — ต้องส่งต่อด่วน';bg='#fef2f2';color='#b91c1c';const r=document.getElementById('v-refer');if(r)r.checked=true}
   else if(s===0){txt='ผลลัพธ์: ไม่พบภาวะซึมเศร้า';bg='#f0fdf4';color='#15803d'}
   else{txt=`ผลลัพธ์: คะแนน ${s}/2 — ควรประเมินเพิ่มเติม (PHQ-9)`;bg='#fefce8';color='#854d0e'}
   el.style.cssText=`display:block;margin-top:8px;padding:8px 12px;border-radius:8px;background:${bg};color:${color};font-size:12px;font-weight:700`
@@ -3739,8 +4233,9 @@ async function saveVisitRecord(){
   }
   try{
     const assessment_json=getMHAssessJSON()
-    const{error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer,photo_url:photoUrl,assessment_json})
+    const{data:savedVisit,error}=await sb.from('home_visits').insert({patient_id:found?.id||null,patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note:fullNote,refer,photo_url:photoUrl,assessment_json}).select('id').single()
     if(error)throw error
+    if(savedVisit)_markOwnWrite(savedVisit.id)
     auditLog('save_visit','visit',found?.id||null,{patient_name:name,visit_type:_visitType,refer})
     sendLineVisitReport({patient_name:name,village,visit_type:_visitType,visit_date:date,visitor,score:_visitChecks.length,refer})
     if(refer&&_visitType==='staff'){
@@ -3835,6 +4330,7 @@ function showAuthWall(mode='login'){
     </div>
     <div class="form-group"><label>ชื่อ-นามสกุล *</label><input type="text" id="rg-name" placeholder="เช่น นางสมศรี ใจดี" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>เบอร์โทรศัพท์ * (ใช้เป็นชื่อผู้ใช้)</label><input type="tel" id="rg-phone" placeholder="0812345678" maxlength="10" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
+    <div class="form-group"><label>รหัสผ่าน * (อย่างน้อย 8 ตัวอักษร)</label><input type="password" id="rg-password" placeholder="ตั้งรหัสผ่านที่จำได้ง่าย" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>เลขบัตรประชาชน (ไม่บังคับ)</label><input type="text" id="rg-nid" placeholder="1234567890123" maxlength="13" inputmode="numeric" style="width:100%;box-sizing:border-box"></div>
     <div class="form-group"><label>หมู่บ้าน</label><select id="rg-village" style="width:100%">${vOpts}</select></div>
     <div class="form-group"><label>ไฟล์แนบ เช่น สำเนาบัตร อสม. (ไม่บังคับ)</label><input type="file" id="rg-file" accept="image/*,.pdf" style="width:100%;box-sizing:border-box"></div>
@@ -3845,6 +4341,61 @@ function showAuthWall(mode='login'){
     <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
     <button class="btn btn-primary btn-block" id="auth-btn" onclick="registerAosomo()" style="background:#7c3aed;border-color:#7c3aed">🏡 ส่งคำขอสมัคร อสม.</button>
     <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)">มีบัญชีแล้ว? <a href="#" onclick="showAuthWall('login');return false" style="color:var(--primary);font-weight:700">เข้าสู่ระบบ</a></div>`
+  } else if(mode==='mfa_verify'){
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:40px;margin-bottom:6px">🔐</div>
+      <div style="font-size:20px;font-weight:800;color:var(--primary)">ยืนยันตัวตน 2FA</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">กรอกรหัส 6 หลักจากแอป Authenticator</div>
+    </div>
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#0369a1;line-height:1.6">
+      📱 เปิดแอป <strong>Google Authenticator</strong> หรือ <strong>Authy</strong><br>แล้วกรอกรหัส 6 หลักที่แสดงสำหรับ <strong>JitHome</strong>
+    </div>
+    <div class="form-group">
+      <label>รหัส OTP</label>
+      <input type="text" id="mfa-otp" inputmode="numeric" maxlength="6" placeholder="000000"
+        autocomplete="one-time-code"
+        onkeydown="if(event.key==='Enter')mfaVerify()"
+        style="font-size:28px;letter-spacing:10px;text-align:center;font-family:monospace;font-weight:700">
+    </div>
+    <div id="mfa-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="mfa-btn" onclick="mfaVerify()">ยืนยัน</button>
+    <div style="text-align:center;margin-top:12px;font-size:12px"><a href="#" onclick="logoutUser();return false" style="color:var(--text3)">← ยกเลิกและออกจากระบบ</a></div>`
+    setTimeout(()=>document.getElementById('mfa-otp')?.focus(),100)
+  } else if(mode==='mfa_enroll'){
+    const qr=_mfaEnrollData?.totp?.qr_code||''
+    const secret=_mfaEnrollData?.totp?.secret||''
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:36px;margin-bottom:6px">📱</div>
+      <div style="font-size:18px;font-weight:800;color:var(--primary)">ตั้งค่า 2-Factor Authentication</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">บัญชี admin ต้องการการยืนยันตัวตน 2 ชั้น</div>
+    </div>
+    <div style="background:#fefce8;border:1.5px solid #fde68a;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.6">
+      1️⃣ ติดตั้งแอป <strong>Google Authenticator</strong> หรือ <strong>Authy</strong><br>
+      2️⃣ กด <strong>"+"</strong> → <strong>สแกน QR code</strong> ด้านล่าง<br>
+      3️⃣ กรอกรหัส 6 หลักที่แสดงในแอปเพื่อยืนยัน
+    </div>
+    <div style="text-align:center;margin-bottom:12px">
+      <img id="mfa-qr-img" style="width:180px;height:180px;border:3px solid var(--border);border-radius:10px" alt="QR Code">
+    </div>
+    ${secret?`<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:12px">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:4px">รหัส Manual Entry (กรณีสแกนไม่ได้)</div>
+      <div style="font-family:monospace;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--text1);word-break:break-all">${secret}</div>
+    </div>`:''}
+    <div class="form-group">
+      <label>รหัส OTP จากแอป (6 หลัก)</label>
+      <input type="text" id="mfa-otp" inputmode="numeric" maxlength="6" placeholder="000000"
+        autocomplete="one-time-code"
+        onkeydown="if(event.key==='Enter')mfaEnrollConfirm()"
+        style="font-size:24px;letter-spacing:8px;text-align:center;font-family:monospace;font-weight:700">
+    </div>
+    <div id="mfa-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="mfa-enroll-btn" onclick="mfaEnrollConfirm()">ยืนยันและเปิดใช้ 2FA</button>
+    <div style="text-align:center;margin-top:12px;font-size:12px"><a href="#" onclick="logoutUser();return false" style="color:var(--text3)">← ยกเลิกและออกจากระบบ</a></div>`
+    const _qrImg=document.getElementById('mfa-qr-img')
+    if(_qrImg&&_mfaEnrollData?.totp?.qr_code)_qrImg.src=_mfaEnrollData.totp.qr_code
+    setTimeout(()=>document.getElementById('mfa-otp')?.focus(),100)
   } else if(mode==='submitted'){
     ct.innerHTML=`
     <div style="text-align:center;padding:16px 0">
@@ -3895,25 +4446,164 @@ function hideAuthWall(){
   if(wall)wall.style.display='none'
 }
 
+// Server-side login lockout (ISO 27001:2022 A.8.5) — stored in Supabase login_lockouts table
+async function _checkLoginLock(email){
+  const{data,error}=await sb.from('login_lockouts').select('*').eq('email',email.toLowerCase()).maybeSingle()
+  // fail-closed: ถ้า DB error ให้บล็อกการล็อกอินไว้ก่อน เพื่อป้องกัน bypass
+  if(error)return'ระบบตรวจสอบชั่วคราวไม่พร้อมใช้งาน กรุณาลองใหม่อีกครั้ง'
+  if(!data)return null
+  if(data.locked_until&&new Date(data.locked_until)>new Date()){
+    const mins=Math.ceil((new Date(data.locked_until)-new Date())/60000)
+    return`ล็อกบัญชีชั่วคราว กรุณารอ ${mins} นาที (พยายามผิด ${data.attempt_count} ครั้ง) — ติดต่อผู้ดูแลระบบเพื่อปลดล็อก`
+  }
+  return null
+}
+async function _recordFailedLogin(email){
+  // ใช้ atomic SQL function เพื่อป้องกัน TOCTOU race condition
+  const{data,error}=await sb.rpc('record_failed_login',{p_email:email.toLowerCase()})
+  if(error){console.error('_recordFailedLogin error:',error);return 1}
+  return data||1
+}
+async function _clearLoginLock(email){
+  try{await sb.from('login_lockouts').delete().eq('email',email.toLowerCase())}catch(e){}
+}
+async function adminUnlockAccount(email){
+  if(!canDo('admin')){alert('ไม่มีสิทธิ์');return}
+  if(!confirm(`ปลดล็อกบัญชี ${email}?`))return
+  const{error}=await sb.from('login_lockouts').update({
+    locked_until:null,
+    attempt_count:0,
+    unlocked_by:currentDisplayName||currentRole,
+    unlocked_at:new Date().toISOString()
+  }).eq('email',email.toLowerCase())
+  if(error){alert('❌ '+error.message);return}
+  auditLog('account_unlocked','login_lockouts',null,{email,by:currentDisplayName||currentRole})
+  showToast('✅ ปลดล็อกบัญชีสำเร็จ')
+  loadMembersList()
+}
 async function loginUser(){
   const email=(document.getElementById('auth-email')?.value||'').trim()
   const password=document.getElementById('auth-password')?.value||''
   const btn=document.getElementById('auth-btn')
   const err=document.getElementById('auth-error')
   if(!email||!password){err.textContent='กรุณากรอก Email และรหัสผ่าน';return}
-  btn.disabled=true;btn.textContent='กำลังเข้าสู่ระบบ...'
+  btn.disabled=true;btn.textContent='กำลังตรวจสอบ...'
+  const lockMsg=await _checkLoginLock(email)
+  if(lockMsg){err.textContent='🔒 '+lockMsg;btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return}
+  btn.textContent='กำลังเข้าสู่ระบบ...'
   const{data,error}=await sb.auth.signInWithPassword({email,password})
-  if(error){err.textContent='❌ '+(error.message==='Invalid login credentials'?'Email หรือรหัสผ่านไม่ถูกต้อง':error.message);btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return}
+  if(error){
+    const count=await _recordFailedLogin(email)
+    const remaining=Math.max(0,5-count)
+    const lockWarn=count>=5?' — บัญชีถูกล็อกชั่วคราว กรุณาติดต่อผู้ดูแลระบบ':remaining>0?` (เหลืออีก ${remaining} ครั้ง)`:''
+    err.textContent='❌ '+(error.message==='Invalid login credentials'?'Email หรือรหัสผ่านไม่ถูกต้อง'+lockWarn:error.message)
+    auditLog('login_failed','auth',null,{email,attempt:count})
+    btn.disabled=false;btn.textContent='เข้าสู่ระบบ';return
+  }
+  await _clearLoginLock(email)
   currentUser=data.user
   const prof=await loadProfile(data.user)
   await updateLastLogin(data.user.id)
   auditLog('login','auth',data.user.id,{email:data.user.email})
-  startSessionTimer()
   if(prof?.status==='pending'){hideAuthWall();showAuthWall('pending');return}
   if(prof?.status==='rejected'||prof?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
+  if(currentRole==='admin'||currentRole==='staff'){
+    _mfaEmail=email
+    const blocked=await _handleAdminMFA()
+    if(blocked)return
+  }
+  await _postLoginSuccess(email)
+}
+
+async function _postLoginSuccess(email=''){
+  _mfaEmail=''
+  startSessionTimer()
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
+  setupRealtime()
+  if(email.endsWith('@jithome.local')){
+    setTimeout(()=>{showToast('⚠️ กรุณาเปลี่ยนรหัสผ่านในเมนูบัญชีของคุณ เพื่อความปลอดภัย',5000)},1500)
+  }
+  checkPrivacyConsent()
+}
+
+function checkPrivacyConsent(){
+  if(localStorage.getItem('jithome_privacy_v1'))return
+  const el=document.getElementById('privacy-overlay')
+  if(el)el.style.display='flex'
+}
+
+async function acceptPrivacyConsent(){
+  localStorage.setItem('jithome_privacy_v1',Date.now().toString())
+  const el=document.getElementById('privacy-overlay')
+  if(el)el.style.display='none'
+  auditLog('privacy_accepted','consent',currentUser?.id,{version:'v1',role:currentRole})
+}
+
+async function _handleAdminMFA(){
+  const{data,error}=await sb.auth.mfa.listFactors()
+  if(error){
+    console.error('MFA listFactors:',error)
+    await sb.auth.signOut()
+    showAuthWall('login')
+    setTimeout(()=>{const e=document.getElementById('auth-error');if(e){e.textContent='❌ ระบบตรวจสอบ 2FA ไม่พร้อม กรุณาลองใหม่'}},100)
+    return true
+  }
+  const verified=(data?.totp||[]).filter(f=>f.status==='verified')
+  if(verified.length>0){
+    _mfaFactorId=verified[0].id
+    showAuthWall('mfa_verify')
+    return true
+  }
+  const unverified=(data?.totp||[]).filter(f=>f.status==='unverified')
+  for(const f of unverified){await sb.auth.mfa.unenroll({factorId:f.id})}
+  const{data:enroll,error:eErr}=await sb.auth.mfa.enroll({factorType:'totp',issuer:'JitHome',friendlyName:'JitHome'})
+  if(eErr){
+    console.error('MFA enroll:',eErr)
+    await sb.auth.signOut()
+    showAuthWall('login')
+    setTimeout(()=>{const e=document.getElementById('auth-error');if(e){e.textContent='❌ ไม่สามารถตั้งค่า 2FA กรุณาติดต่อผู้ดูแลระบบ'}},100)
+    return true
+  }
+  _mfaEnrollId=enroll.id
+  _mfaEnrollData=enroll
+  showAuthWall('mfa_enroll')
+  return true
+}
+
+async function mfaVerify(){
+  const code=(document.getElementById('mfa-otp')?.value||'').replace(/\s/g,'')
+  const err=document.getElementById('mfa-error')
+  const btn=document.getElementById('mfa-btn')
+  if(!code||code.length!==6){err.textContent='กรุณากรอกรหัส 6 หลัก';return}
+  btn.disabled=true;btn.textContent='กำลังตรวจสอบ...'
+  err.textContent=''
+  const{error}=await sb.auth.mfa.challengeAndVerify({factorId:_mfaFactorId,code})
+  if(error){
+    err.textContent='❌ รหัสไม่ถูกต้อง หรือหมดอายุแล้ว — กรุณาลองใหม่'
+    btn.disabled=false;btn.textContent='ยืนยัน'
+    document.getElementById('mfa-otp').value='';document.getElementById('mfa-otp').focus()
+    return
+  }
+  await _postLoginSuccess(_mfaEmail)
+}
+
+async function mfaEnrollConfirm(){
+  const code=(document.getElementById('mfa-otp')?.value||'').replace(/\s/g,'')
+  const err=document.getElementById('mfa-error')
+  const btn=document.getElementById('mfa-enroll-btn')
+  if(!code||code.length!==6){err.textContent='กรุณากรอกรหัส 6 หลักจากแอป';return}
+  btn.disabled=true;btn.textContent='กำลังยืนยัน...'
+  err.textContent=''
+  const{error}=await sb.auth.mfa.challengeAndVerify({factorId:_mfaEnrollId,code})
+  if(error){
+    err.textContent='❌ รหัสไม่ถูกต้อง — สแกน QR ใหม่แล้วลองอีกครั้ง'
+    btn.disabled=false;btn.textContent='ยืนยันและเปิดใช้ 2FA'
+    document.getElementById('mfa-otp').value='';document.getElementById('mfa-otp').focus()
+    return
+  }
+  await _postLoginSuccess(_mfaEmail)
 }
 
 async function registerUser(){
@@ -3924,7 +4614,8 @@ async function registerUser(){
   const err=document.getElementById('auth-error')
   const pdpaConsent=document.getElementById('auth-pdpa-consent')?.checked
   if(!email||!password){err.textContent='กรุณากรอก Email และรหัสผ่าน';return}
-  if(password.length<6){err.textContent='รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';return}
+  if(password.length<8){err.textContent='รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';return}
+  if(!/\d/.test(password)){err.textContent='รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว';return}
   if(password!==password2){err.textContent='รหัสผ่านไม่ตรงกัน';return}
   if(!pdpaConsent){err.textContent='กรุณายืนยันความยินยอม PDPA ก่อนสมัครสมาชิก';return}
   btn.disabled=true;btn.textContent='กำลังสมัคร...'
@@ -3944,6 +4635,7 @@ async function registerUser(){
 async function registerAosomo(){
   const name=(document.getElementById('rg-name')?.value||'').trim()
   const phone=(document.getElementById('rg-phone')?.value||'').replace(/\D/g,'')
+  const password=(document.getElementById('rg-password')?.value||'')
   const nid=(document.getElementById('rg-nid')?.value||'').replace(/\D/g,'')
   const village=document.getElementById('rg-village')?.value||''
   const file=document.getElementById('rg-file')?.files?.[0]||null
@@ -3952,10 +4644,10 @@ async function registerAosomo(){
   const err=document.getElementById('auth-error')
   if(!name){err.textContent='❌ กรุณากรอกชื่อ-นามสกุล';return}
   if(phone.length<9){err.textContent='❌ เบอร์โทรไม่ถูกต้อง (ต้องมีอย่างน้อย 9 หลัก)';return}
+  if(password.length<8){err.textContent='❌ รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';return}
   if(nid&&nid.length!==13){err.textContent='❌ เลขบัตรประชาชนต้องมี 13 หลัก';return}
   if(!consent){err.textContent='❌ กรุณายืนยันความยินยอม PDPA';return}
   const email=phone+'@jithome.local'
-  const password=phone
   btn.disabled=true;btn.textContent='กำลังส่งคำขอ...'
   err.textContent=''
   try{
@@ -3986,6 +4678,7 @@ async function registerAosomo(){
 async function logoutUser(){
   await auditLog('logout','auth',currentUser?.id)
   if(_sessionTimer){clearInterval(_sessionTimer);_sessionTimer=null}
+  teardownRealtime()
   document.getElementById('session-warn-toast')?.remove()
   await sb.auth.signOut()
   currentUser=null;currentRole='viewer'
@@ -4040,9 +4733,13 @@ function resetActivityTimer(){
   _lastActivity=Date.now()
   if(_warnShown){_warnShown=false;document.getElementById('session-warn-toast')?.remove()}
 }
+let _activityListenersAdded=false
 function startSessionTimer(){
   if(_sessionTimer)clearInterval(_sessionTimer)
-  ;['click','keydown','mousedown','touchstart'].forEach(ev=>document.addEventListener(ev,resetActivityTimer,true))
+  if(!_activityListenersAdded){
+    ;['click','keydown','mousedown','touchstart'].forEach(ev=>document.addEventListener(ev,resetActivityTimer,true))
+    _activityListenersAdded=true
+  }
   _sessionTimer=setInterval(()=>{
     const idle=Date.now()-_lastActivity
     if(idle>=SESSION_TIMEOUT_MS){
@@ -4077,7 +4774,8 @@ async function resetPassword(){
   const password2=document.getElementById('auth-password2')?.value||''
   const btn=document.getElementById('auth-btn')
   const err=document.getElementById('auth-error')
-  if(password.length<6){err.textContent='รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';return}
+  if(password.length<8){err.textContent='รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';return}
+  if(!/\d/.test(password)){err.textContent='รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว';return}
   if(password!==password2){err.textContent='รหัสผ่านไม่ตรงกัน';return}
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   const{error}=await sb.auth.updateUser({password})
@@ -4221,16 +4919,15 @@ async function saveNewPatient(){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const house_no=(document.getElementById('np-house-no')?.value||'').trim()
-    const{error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date})
+    const{data:newPt,error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date}).select('id').single()
     if(pe){
       if(pe.message?.includes('unique'))throw new Error(`ชื่อ "${name}" มีในระบบแล้ว กรุณาใช้ชื่ออื่น`)
       throw pe
     }
-    if(date){
-      const{data:found}=await sb.from('patients').select('id').eq('name',name).single()
-      if(found){
-        await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note})
-      }
+    if(newPt)_markOwnWrite(newPt.id)
+    if(date&&newPt){
+      const{data:newRec3}=await sb.from('injection_records').insert({patient_id:newPt.id,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note,recorded_by:currentDisplayName||null}).select('id').single()
+      if(newRec3)_markOwnWrite(newRec3.id)
     }
     btn.textContent='✅ บันทึกสำเร็จ'
     allPatients=await getPatients()
@@ -4239,6 +4936,47 @@ async function saveNewPatient(){
     const msg=e.message?.includes('duplicate')||e.message?.includes('unique')?'มีชื่อนี้ในระบบแล้ว':e.message
     btn.textContent='❌ '+msg;btn.disabled=false
   }
+}
+
+// ─── Realtime ────────────────────────────────────────────────────
+function setupRealtime(){
+  if(_realtimeChannel)return
+  _realtimeChannel=sb.channel('jithome-realtime')
+    .on('postgres_changes',{event:'*',schema:'public',table:'patients'},_onRealtimeChange)
+    .on('postgres_changes',{event:'*',schema:'public',table:'home_visits'},_onRealtimeChange)
+    .on('postgres_changes',{event:'*',schema:'public',table:'injection_records'},_onRealtimeChange)
+    .on('postgres_changes',{event:'*',schema:'public',table:'doctor_appointments'},_onRealtimeChange)
+    .subscribe()
+}
+
+function teardownRealtime(){
+  if(_realtimeChannel){sb.removeChannel(_realtimeChannel);_realtimeChannel=null}
+  if(_realtimeDebounce){clearTimeout(_realtimeDebounce);_realtimeDebounce=null}
+}
+
+function _markOwnWrite(id){
+  _ownWriteIds.add(String(id))
+  setTimeout(()=>_ownWriteIds.delete(String(id)),5000)
+}
+
+function _onRealtimeChange(payload){
+  const changedId=String(payload.new?.id||payload.old?.id||'')
+  if(changedId&&_ownWriteIds.has(changedId))return
+  clearTimeout(_realtimeDebounce)
+  _realtimeDebounce=setTimeout(async()=>{
+    try{
+      const page=(location.hash||'').slice(1)||'dashboard'
+      allPatients=await getPatients()
+      const el=document.getElementById('page-content')
+      if(!el)return
+      if(page==='dashboard')renderDashboard(el)
+      else if(page==='patients')renderPatients(el)
+      else if(page==='timeline')renderTimeline(el)
+      else if(page==='overview')renderOverview(el)
+      else if(page==='visit')renderVisit(el)
+      showToast('🔄 ข้อมูลอัปเดตแล้ว',2000)
+    }catch(e){console.error('Realtime update failed:',e)}
+  },800)
 }
 
 // ─── Init ────────────────────────────────────────────────────────
@@ -4283,11 +5021,19 @@ async function init(){
   currentUser=user
   const profile=await loadProfile(user)
   await updateLastLogin(user.id)
-  startSessionTimer()
   if(profile?.status==='pending'){showAuthWall('pending');return}
   if(profile?.status==='rejected'||profile?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
+  if(currentRole==='admin'||currentRole==='staff'){
+    const{data:aalData}=await sb.auth.mfa.getAuthenticatorAssuranceLevel()
+    if(aalData?.currentLevel!=='aal2'){
+      const blocked=await _handleAdminMFA()
+      if(blocked)return
+    }
+  }
+  startSessionTimer()
   updateUserUI()
   await loadAndNav()
+  setupRealtime()
 }
 
 window.addEventListener('hashchange',()=>{const p=(location.hash||'').slice(1);if(PAGES.includes(p))navigate(p)})
