@@ -28,7 +28,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 // ─── Constants ───────────────────────────────────────────────────
 const TH_MONTHS_S = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
 const TH_MONTHS_F = ['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
-const PAGES = ['dashboard','patients','timeline','overview','visit','admin','members','guide']
+const PAGES = ['dashboard','patients','timeline','overview','visit','admin','members','guide','audit']
 
 const STAFF_CHECKLIST = [
   ['s1','ประเมินอาการทางจิตเวช (สังเกต พูดคุย)'],
@@ -396,6 +396,7 @@ async function navigate(page) {
     else if (page==='admin')     renderAdmin(el)
     else if (page==='members')   renderMembers(el)
     else if (page==='guide')     renderGuide(el)
+    else if (page==='audit')     renderAuditPage(el)
   }catch(e){
     el.innerHTML=`<div style="text-align:center;padding:60px 20px;color:#ef4444">❌ โหลดไม่สำเร็จ: ${esc(e.message)}</div>`
     console.error('navigate error:',e)
@@ -4828,6 +4829,45 @@ async function loadAuditLog(){
     ${rows}
   </div>
   <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:right">แสดง ${data.length} รายการล่าสุด</div>`
+}
+
+function renderAuditPage(el){
+  if(!canDo('admin')){el.innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--text3)">🔒 เฉพาะผู้ดูแลระบบเท่านั้น</div>';return}
+  el.innerHTML=`<div class="page">
+  <div class="page-header"><h2>🔍 Audit Log</h2><p style="color:var(--text3);font-size:13px">บันทึกการใช้งานระบบทั้งหมด</p></div>
+  <div class="card" style="padding:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <select id="al-filter-action" onchange="loadAuditLog()" style="font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text1);font-family:'Sarabun',sans-serif;flex:1;min-width:160px">
+        <option value="">ทุกประเภท</option>
+        <option value="login">เข้าสู่ระบบ</option>
+        <option value="logout">ออกจากระบบ</option>
+        <option value="login_failed">เข้าสู่ระบบล้มเหลว</option>
+        <option value="create_patient">เพิ่มผู้ป่วย</option>
+        <option value="edit_patient">แก้ไขผู้ป่วย</option>
+        <option value="delete_patient">ลบผู้ป่วย</option>
+        <option value="view_patient">ดูผู้ป่วย</option>
+        <option value="save_visit">บันทึกเยี่ยมบ้าน</option>
+        <option value="edit_visit">แก้ไขเยี่ยม</option>
+        <option value="delete_visit">ลบเยี่ยม</option>
+        <option value="create_record">บันทึกฉีดยา/เยี่ยม</option>
+        <option value="create_appointment">นัดพบแพทย์</option>
+        <option value="delete_appointment">ลบนัด</option>
+        <option value="resolve_referral">รับเรื่องส่งต่อ</option>
+        <option value="reset_password">รีเซ็ตรหัสผ่าน</option>
+        <option value="create_aosomo_account">สร้างบัญชี อสม.</option>
+        <option value="delete_member">ลบสมาชิก</option>
+        <option value="member_approved">อนุมัติสมาชิก</option>
+        <option value="member_role_changed">เปลี่ยน role</option>
+        <option value="export_csv">ส่งออก CSV</option>
+        <option value="export_visits_excel">ส่งออก Excel</option>
+        <option value="import_aosomo_directory">นำเข้า อสม.</option>
+        <option value="print_monthly_report">พิมพ์รายงาน</option>
+      </select>
+      <button onclick="loadAuditLog()" style="padding:7px 16px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🔄 โหลด</button>
+    </div>
+    <div id="audit-log-container"><div style="color:var(--text3);font-size:13px;text-align:center;padding:40px">กด "โหลด" เพื่อดู Audit Log</div></div>
+  </div>
+  </div>`
 }
 
 // ─── Session Timeout (30 นาที) ────────────────────────────────────
