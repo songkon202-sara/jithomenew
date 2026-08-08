@@ -380,8 +380,9 @@ async function navigate(page) {
     admin:    ['แอดมิน','จัดการและตั้งค่า'],
     members:  ['จัดการสมาชิก','กำหนดสิทธิ์การเข้าถึง'],
     guide:    ['คู่มือการใช้งาน','ตัวอย่างสิทธิ์แต่ละประเภท'],
+    audit:    ['Audit Log','บันทึกการใช้งานระบบ'],
   }
-  const [t,s] = titles[page]
+  const [t,s] = titles[page]||['JitHome','']
   document.getElementById('header-title').textContent = t
   setSubtitle(document.getElementById('header-sub'), s)
   const el = document.getElementById('page-content')
