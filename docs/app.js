@@ -713,6 +713,7 @@ async function saveDoctorAppt(id){
   const payload={patient_id:pid,appoint_date:date,appoint_type:document.getElementById('da-type')?.value||'medicine',hospital:document.getElementById('da-hospital')?.value||'รพ.โพธิ์ไทร',doctor_name:document.getElementById('da-doctor')?.value||null,note:document.getElementById('da-note')?.value||null,status:document.getElementById('da-status')?.value||'scheduled',created_by:currentDisplayName||currentRole}
   const{data:savedAppt,error}=id?await sb.from('doctor_appointments').update(payload).eq('id',id).select('id').single():await sb.from('doctor_appointments').insert(payload).select('id').single()
   if(error){alert('❌ บันทึกไม่สำเร็จ: '+error.message);return}
+  auditLog(id?'edit_appointment':'create_appointment','doctor_appointment',savedAppt?.id||id,{appoint_date:payload.appoint_date,hospital:payload.hospital})
   _markOwnWrite(id||savedAppt?.id)
   closeDoctorApptModal()
   showToast('✅ บันทึกนัดพบแพทย์สำเร็จ')
@@ -728,6 +729,7 @@ async function deleteDoctorAppt(id){
   if(!confirm(`ลบนัดพบแพทย์?\nวันที่: ${thDate(a?.appoint_date||'')}\nผู้ป่วย: ${a?.patients?.name||''}`))return
   const{error}=await sb.from('doctor_appointments').delete().eq('id',id)
   if(error){alert('❌ '+error.message);return}
+  auditLog('delete_appointment','doctor_appointment',id,{patient:a?.patients?.name||''})
   window._doctorAppts=(window._doctorAppts||[]).filter(x=>x.id!==id)
   renderTimeline(document.getElementById('page-content'))
 }
@@ -1329,6 +1331,7 @@ async function submitVerify(id){
   const today=todayISO()
   const{error}=await sb.from('home_visits').update({verified_by:verifier,verified_at:today,verify_result:result,verify_note:note||null}).eq('id',id)
   if(error){alert('❌ '+error.message);return}
+  auditLog('verify_visit','visit',id,{result,verifier})
   const v=(window._allVisits||[]).find(x=>x.id===id)
   if(v){v.verified_by=verifier;v.verified_at=today;v.verify_result=result;v.verify_note=note}
   const el=document.getElementById('visit-list')
@@ -1408,6 +1411,7 @@ async function saveEditVisit(id){
   }
   const{error}=await sb.from('home_visits').update(updates).eq('id',id)
   if(error){btn.textContent='❌ '+error.message;btn.disabled=false;return}
+  auditLog('edit_visit','visit',id,{patient_name:name,visitor})
   _markOwnWrite(id)
   closeVisitModal()
   if(location.hash==='#visit')navigate('visit')
@@ -1964,6 +1968,32 @@ async function renderAdmin(el) {
     <h3>👥 จัดการสมาชิก</h3>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">กำหนดสิทธิ์การเข้าถึงของสมาชิกแต่ละคน</div>
     <div id="members-list"><div style="text-align:center;padding:20px;color:var(--text3)">⏳ กำลังโหลด...</div></div>
+  </div>
+  <div class="form-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 style="margin:0">🔍 Audit Log</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="al-filter-action" onchange="loadAuditLog()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text1);font-family:'Sarabun',sans-serif">
+          <option value="">ทุกประเภท</option>
+          <option value="login">login</option>
+          <option value="logout">logout</option>
+          <option value="create_patient">เพิ่มผู้ป่วย</option>
+          <option value="edit_patient">แก้ไขผู้ป่วย</option>
+          <option value="delete_patient">ลบผู้ป่วย</option>
+          <option value="save_visit">บันทึกเยี่ยม</option>
+          <option value="edit_visit">แก้ไขเยี่ยม</option>
+          <option value="delete_visit">ลบเยี่ยม</option>
+          <option value="create_record">บันทึกฉีดยา</option>
+          <option value="create_appointment">นัดพบแพทย์</option>
+          <option value="reset_password">รีเซ็ตรหัสผ่าน</option>
+          <option value="export_csv">export CSV</option>
+          <option value="export_json">export JSON</option>
+          <option value="export_visits_excel">export Excel</option>
+        </select>
+        <button onclick="loadAuditLog()" style="padding:5px 12px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🔄 โหลด</button>
+      </div>
+    </div>
+    <div id="audit-log-container"><div style="color:var(--text3);font-size:12px;text-align:center;padding:16px">กด "โหลด" เพื่อดู Audit Log</div></div>
   </div>`:''}
   </div>`
 
@@ -1998,6 +2028,7 @@ async function createAosomoAccount(){
       const prof={id:uid,email,display_name:name,role:'aosomo',village,last_login:new Date().toISOString()}
       if(nid)prof.national_id=nid
       await sb.from('user_profiles').upsert(prof,{onConflict:'id'})
+      auditLog('create_aosomo_account','user_profiles',uid,{name,village,by:currentDisplayName})
     }
     result.innerHTML=`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;margin-top:4px">
       <div style="font-weight:700;color:#166534;margin-bottom:6px">✅ สร้างบัญชีสำเร็จ! แจ้ง อสม. ดังนี้:</div>
@@ -2208,6 +2239,7 @@ async function adminResetAosomoPassword(userId, displayName){
     })
     const data=await res.json()
     if(!res.ok||data.error)throw new Error(data.error||'รีเซ็ตไม่สำเร็จ')
+    auditLog('reset_password','user_profiles',userId,{target_name:displayName})
     const overlay=document.createElement('div')
     overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px'
     overlay.innerHTML=`
@@ -2249,6 +2281,7 @@ async function importAosomoFile(input){
     if(!confirm(`นำเข้า ${records.length} รายชื่อ อสม. ใช่หรือไม่?`))return
     const{error}=await sb.from('aosomo_directory').insert(records)
     if(error)throw error
+    auditLog('import_aosomo_directory','aosomo_directory',null,{count:records.length})
     alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
     loadMembersList()
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
@@ -2279,6 +2312,7 @@ async function importStaffDirFile(input){
     if(!confirm(`นำเข้า ${records.length} รายชื่อเจ้าหน้าที่ ใช่หรือไม่?`))return
     const{error}=await sb.from('staff_directory').insert(records)
     if(error)throw error
+    auditLog('import_staff_directory','staff_directory',null,{count:records.length})
     alert(`✅ นำเข้าสำเร็จ ${records.length} รายชื่อ`)
     loadMembersList()
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
@@ -2411,6 +2445,7 @@ async function changeMemberRole(userId,role){
 async function changeMemberVillage(userId,village){
   const{error}=await sb.from('user_profiles').update({village}).eq('id',userId)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
+  auditLog('change_village','user_profiles',userId,{village,by:currentDisplayName||currentRole})
   await loadMembersList()
 }
 
@@ -2665,6 +2700,7 @@ async function generateMonthlyReport(){
   </body></html>`
   const w=window.open('','_blank','width=800,height=700')
   if(!w){showToast('❌ กรุณาอนุญาต Popup สำหรับไซต์นี้ แล้วลองใหม่',4000);return}
+  auditLog('print_monthly_report','report',null)
   w.document.write(html)
   w.document.close()
 }
@@ -2703,6 +2739,7 @@ async function showPatientTimeline(id,name){
     </div>`}).join('')
   const w=window.open('','_blank','width=480,height=700')
   if(!w){showToast('❌ กรุณาอนุญาต Popup สำหรับไซต์นี้ แล้วลองใหม่',4000);return}
+  auditLog('print_patient_timeline','patient',id,{name})
   w.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>Timeline — ${esc(name)}</title>
   <style>body{font-family:'Sarabun',sans-serif;margin:0;padding:20px;background:#f9fafb;color:#111}
   h2{font-size:16px;font-weight:800;margin:0 0 4px;color:#0a7ea4}
@@ -2776,6 +2813,7 @@ async function saveAdminRecord(){
     const record_type=document.querySelector('input[name="adm-type"]:checked')?.value||'injection'
     const{data:newRec,error}=await sb.from('injection_records').insert({patient_id:found.id,injection_date:date,group_color:gc2,group_label:gl2,interval_str,interval_days,note,record_type,recorded_by:currentDisplayName||null}).select('id').single()
     if(error)throw error
+    auditLog('create_record','injection_records',newRec?.id,{patient_name:name,record_type,injection_date:date})
     _markOwnWrite(found.id)
     if(newRec)_markOwnWrite(newRec.id)
     btn.textContent='✅ บันทึกสำเร็จ'
@@ -2884,6 +2922,7 @@ async function exportVisitExcel(){
     const wb=XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb,ws,'รายงานเยี่ยมบ้าน')
     XLSX.writeFile(wb,`visit_report_${todayISO()}.xlsx`)
+    auditLog('export_visits_excel','visit',null)
   }catch(e){alert('❌ '+e.message)}
 }
 
@@ -3204,6 +3243,7 @@ async function saveEditRecord(id,patientId){
     const{data:rec}=await sb.from('injection_records').select('group_color,group_label,record_type').eq('id',id).single()
     const{error}=await sb.from('injection_records').update({injection_date:date,interval_str,interval_days,note}).eq('id',id)
     if(error)throw error
+    auditLog('edit_record','injection_records',id,{injection_date:date})
     _markOwnWrite(id)
     if(nextDate&&nextDate>date){
       if(rec?.record_type==='visit'){
@@ -3226,6 +3266,7 @@ async function deleteRecord(id,patientId){
   if(!confirm(`ลบรายการ${recLabel}นี้ออกจากประวัติ?\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`))return
   const{error}=await sb.from('injection_records').delete().eq('id',id)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);return}
+  auditLog('delete_record','injection_records',id,{patient_id:patientId,record_type:rec?.record_type})
   // หาวันนัดที่เหลืออยู่ แล้วอัปเดต patients
   const today=todayISO()
   const{data:remaining}=await sb.from('injection_records')
@@ -3533,6 +3574,7 @@ async function saveModalRecord(pid,gc){
     const record_type=window._modalRecType||'injection'
     const{data:newRec2,error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type,recorded_by:currentDisplayName||null}).select('id').single()
     if(error)throw error
+    auditLog('create_record','injection_records',newRec2?.id,{patient_id:pid,record_type,injection_date:date})
     _markOwnWrite(pid)
     if(newRec2)_markOwnWrite(newRec2.id)
     // ถ้ามีวันนัดถัดไป
@@ -3864,6 +3906,7 @@ async function resolveReferral(id){
   if(btn){btn.textContent='⏳ กำลังบันทึก...';btn.disabled=true}
   const{error}=await sb.from('home_visits').update({refer_resolved:true}).eq('id',id)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);if(btn){btn.textContent='✅ รับเรื่องแล้ว';btn.disabled=false}return}
+  auditLog('resolve_referral','visit',id)
   renderPage('admin')
 }
 // ── GAF / BPRS / AIMS ─────────────────────────────────────────
@@ -4728,6 +4771,65 @@ async function auditLog(action,entityType,entityId,details){
   }catch(e){}
 }
 
+async function loadAuditLog(){
+  const container=document.getElementById('audit-log-container')
+  if(!container)return
+  container.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3)">⏳ กำลังโหลด...</div>'
+  auditLog('view_audit_log','audit_logs',null)
+  const actionFilter=document.getElementById('al-filter-action')?.value||''
+  let q=sb.from('audit_logs').select('created_at,user_name,user_email,action,entity_type,entity_id,details').order('created_at',{ascending:false}).limit(100)
+  if(actionFilter)q=q.eq('action',actionFilter)
+  const{data,error}=await q
+  if(error){container.innerHTML=`<div style="color:var(--red);font-size:12px;padding:8px">❌ ${esc(error.message)}</div>`;return}
+  if(!data?.length){container.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:16px">ยังไม่มีข้อมูล</div>';return}
+  const ACTION_LABEL={
+    login:'เข้าสู่ระบบ',logout:'ออกจากระบบ',login_failed:'เข้าสู่ระบบล้มเหลว',
+    create_patient:'เพิ่มผู้ป่วย',edit_patient:'แก้ไขผู้ป่วย',delete_patient:'ลบผู้ป่วย',
+    view_patient:'ดูผู้ป่วย',save_visit:'บันทึกเยี่ยมบ้าน',edit_visit:'แก้ไขเยี่ยม',
+    delete_visit:'ลบเยี่ยม',verify_visit:'ตรวจสอบเยี่ยม',resolve_referral:'รับเรื่องส่งต่อ',
+    create_record:'บันทึกฉีดยา/เยี่ยม',edit_record:'แก้ไขบันทึก',delete_record:'ลบบันทึก',
+    create_appointment:'นัดพบแพทย์',edit_appointment:'แก้ไขนัด',delete_appointment:'ลบนัด',
+    create_aosomo_account:'สร้างบัญชี อสม.',reset_password:'รีเซ็ตรหัสผ่าน',
+    delete_member:'ลบสมาชิก',member_approved:'อนุมัติสมาชิก',member_rejected:'ปฏิเสธสมาชิก',
+    member_role_changed:'เปลี่ยน role',change_village:'เปลี่ยนหมู่บ้าน',account_unlocked:'ปลดล็อคบัญชี',
+    import_aosomo_directory:'นำเข้ารายชื่อ อสม.',import_staff_directory:'นำเข้ารายชื่อเจ้าหน้าที่',
+    export_csv:'ส่งออก CSV',export_json:'ส่งออก JSON',export_visits_excel:'ส่งออก Excel เยี่ยม',
+    print_monthly_report:'พิมพ์รายงานเดือน',print_patient_timeline:'พิมพ์ Timeline ผู้ป่วย',
+    view_audit_log:'ดู Audit Log',privacy_accepted:'ยอมรับนโยบาย',
+  }
+  const ACTION_COLOR={
+    login:'#16a34a',logout:'#6b7280',login_failed:'#dc2626',
+    delete_patient:'#dc2626',delete_visit:'#dc2626',delete_record:'#dc2626',delete_member:'#dc2626',delete_appointment:'#dc2626',
+    reset_password:'#d97706',member_role_changed:'#d97706',account_unlocked:'#d97706',
+  }
+  const rows=data.map(r=>{
+    const dt=new Date(r.created_at)
+    const dtStr=dt.toLocaleString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})
+    const label=ACTION_LABEL[r.action]||r.action
+    const color=ACTION_COLOR[r.action]||'var(--primary)'
+    const phone=(r.user_email||'').replace('@jithome.local','')
+    const user=r.user_name||(phone?phone:'—')
+    const det=r.details?Object.entries(r.details).filter(([k,v])=>v!=null).map(([k,v])=>`${k}: ${v}`).join(' · '):''
+    return`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px">
+      <div style="width:90px;flex-shrink:0;color:var(--text3);font-size:11px;padding-top:1px">${dtStr}</div>
+      <div style="width:80px;flex-shrink:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(user)}</div>
+      <div style="min-width:0;flex:1">
+        <span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:700;background:${color}22;color:${color}">${esc(label)}</span>
+        ${det?`<span style="color:var(--text3);margin-left:6px">${esc(det.slice(0,80))}${det.length>80?'...':''}</span>`:''}
+      </div>
+    </div>`
+  }).join('')
+  container.innerHTML=`<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:480px;overflow-y:auto">
+    <div style="display:flex;gap:10px;padding:6px 10px;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--text3)">
+      <div style="width:90px">วันเวลา</div>
+      <div style="width:80px">ผู้ใช้</div>
+      <div style="flex:1">การกระทำ / รายละเอียด</div>
+    </div>
+    ${rows}
+  </div>
+  <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:right">แสดง ${data.length} รายการล่าสุด</div>`
+}
+
 // ─── Session Timeout (30 นาที) ────────────────────────────────────
 let _lastActivity=Date.now()
 let _sessionTimer=null
@@ -4929,6 +5031,7 @@ async function saveNewPatient(){
       if(pe.message?.includes('unique'))throw new Error(`ชื่อ "${name}" มีในระบบแล้ว กรุณาใช้ชื่ออื่น`)
       throw pe
     }
+    auditLog('create_patient','patient',newPt?.id,{name,village})
     if(newPt)_markOwnWrite(newPt.id)
     if(date&&newPt){
       const{data:newRec3}=await sb.from('injection_records').insert({patient_id:newPt.id,injection_date:date,group_color:gc,group_label:gl,interval_str:interval,interval_days:parseInterval(interval),note,recorded_by:currentDisplayName||null}).select('id').single()
