@@ -4865,9 +4865,10 @@ function renderAuditPage(el){
       </select>
       <button onclick="loadAuditLog()" style="padding:7px 16px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🔄 โหลด</button>
     </div>
-    <div id="audit-log-container"><div style="color:var(--text3);font-size:13px;text-align:center;padding:40px">กด "โหลด" เพื่อดู Audit Log</div></div>
+    <div id="audit-log-container"><div style="color:var(--text3);font-size:13px;text-align:center;padding:40px">⏳ กำลังโหลด...</div></div>
   </div>
   </div>`
+  setTimeout(loadAuditLog,0)
 }
 
 // ─── Session Timeout (30 นาที) ────────────────────────────────────
