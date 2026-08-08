@@ -1970,32 +1970,6 @@ async function renderAdmin(el) {
     <h3>👥 จัดการสมาชิก</h3>
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">กำหนดสิทธิ์การเข้าถึงของสมาชิกแต่ละคน</div>
     <div id="members-list"><div style="text-align:center;padding:20px;color:var(--text3)">⏳ กำลังโหลด...</div></div>
-  </div>
-  <div class="form-section">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <h3 style="margin:0">🔍 Audit Log</h3>
-      <div style="display:flex;gap:8px;align-items:center">
-        <select id="al-filter-action" onchange="loadAuditLog()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text1);font-family:'Sarabun',sans-serif">
-          <option value="">ทุกประเภท</option>
-          <option value="login">login</option>
-          <option value="logout">logout</option>
-          <option value="create_patient">เพิ่มผู้ป่วย</option>
-          <option value="edit_patient">แก้ไขผู้ป่วย</option>
-          <option value="delete_patient">ลบผู้ป่วย</option>
-          <option value="save_visit">บันทึกเยี่ยม</option>
-          <option value="edit_visit">แก้ไขเยี่ยม</option>
-          <option value="delete_visit">ลบเยี่ยม</option>
-          <option value="create_record">บันทึกฉีดยา</option>
-          <option value="create_appointment">นัดพบแพทย์</option>
-          <option value="reset_password">รีเซ็ตรหัสผ่าน</option>
-          <option value="export_csv">export CSV</option>
-          <option value="export_json">export JSON</option>
-          <option value="export_visits_excel">export Excel</option>
-        </select>
-        <button onclick="loadAuditLog()" style="padding:5px 12px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🔄 โหลด</button>
-      </div>
-    </div>
-    <div id="audit-log-container"><div style="color:var(--text3);font-size:12px;text-align:center;padding:16px">กด "โหลด" เพื่อดู Audit Log</div></div>
   </div>`:''}
   </div>`
 
