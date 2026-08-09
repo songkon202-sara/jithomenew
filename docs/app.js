@@ -1971,9 +1971,24 @@ async function renderAdmin(el) {
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">กำหนดสิทธิ์การเข้าถึงของสมาชิกแต่ละคน</div>
     <div id="members-list"><div style="text-align:center;padding:20px;color:var(--text3)">⏳ กำลังโหลด...</div></div>
   </div>`:''}
+  <div class="form-section">
+    <h3>🔒 ความปลอดภัย — ยืนยันตัวตน 2 ชั้น (2FA)</h3>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;margin-top:-4px">บังคับสำหรับ Admin และเจ้าหน้าที่ทุกคน — ต้องใช้ Authenticator App</div>
+    <div id="admin-mfa-section"><div style="text-align:center;padding:16px;color:var(--text3)">⏳ กำลังโหลด...</div></div>
+  </div>
+  <div class="form-section" style="border-color:#fca5a5">
+    <div style="display:flex;align-items:flex-start;gap:10px;background:#fef2f2;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      <span style="font-size:18px;flex-shrink:0">⚠️</span>
+      <div><div style="font-size:13px;font-weight:700;color:#b91c1c">โซนอันตราย — จัดการข้อมูล</div>
+      <div style="font-size:11px;color:#b91c1c;margin-top:2px">การลบข้อมูลเป็นการดำเนินการถาวร ไม่สามารถกู้คืนได้ กรุณาตรวจสอบก่อนดำเนินการ</div></div>
+    </div>
+    <div id="dz-visit"></div><div id="dz-care"></div><div id="dz-patient"></div><div id="dz-appt"></div>
+  </div>
   </div>`
 
   if(canDo('manage_users'))loadMembersList()
+  loadAdminMFAStatus()
+  initDangerZone()
 }
 
 async function createAosomoAccount(){
@@ -2022,6 +2037,158 @@ async function createAosomoAccount(){
     loadMembersList()
   }catch(e){result.style.color='var(--red)';result.textContent='❌ '+e.message}
   btn.disabled=false;btn.textContent='🏡 สร้างบัญชี อสม.'
+}
+
+// ─── 2FA Management ──────────────────────────────────────────────
+async function loadAdminMFAStatus(){
+  const el=document.getElementById('admin-mfa-section')
+  if(!el)return
+  const{data}=await sb.auth.mfa.listFactors()
+  const verified=(data?.totp||[]).find(f=>f.status==='verified')
+  if(verified){
+    el.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#dcfce7;border:1.5px solid #86efac;border-radius:10px;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;background:#16a34a;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px">✓</div>
+        <div><div style="font-size:13px;font-weight:700;color:var(--text1)">เปิดใช้งานแล้ว</div>
+        <div style="font-size:11px;color:var(--text3)">ต้องกรอก OTP จาก Authenticator App ทุกครั้งที่เข้าสู่ระบบ</div></div>
+      </div>
+      <button onclick="adminDisableMFA('${verified.id}')" style="padding:7px 12px;background:transparent;color:#b91c1c;border:1.5px solid #fca5a5;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap;flex-shrink:0">🔓 ปิดใช้งาน</button>
+    </div>`
+  }else{
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:12px 14px">
+      <span style="font-size:20px">ℹ️</span>
+      <div><div style="font-size:13px;font-weight:700;color:var(--text1)">ยังไม่ได้ตั้งค่า 2FA</div>
+      <div style="font-size:11px;color:var(--text3)">จะถูกบังคับตั้งค่าโดยอัตโนมัติเมื่อเข้าสู่ระบบครั้งถัดไป</div></div>
+    </div>`
+  }
+}
+async function adminDisableMFA(factorId){
+  if(!confirm('ปิดใช้งาน 2FA?\n\nจะถูกบังคับตั้งค่าใหม่เมื่อเข้าสู่ระบบครั้งถัดไป'))return
+  const{error}=await sb.auth.mfa.unenroll({factorId})
+  if(error){alert('❌ ไม่สำเร็จ: '+error.message);return}
+  auditLog('disable_mfa','user',currentUser?.id,{by:currentDisplayName})
+  loadAdminMFAStatus()
+}
+
+// ─── Danger Zone ──────────────────────────────────────────────────
+const DZ_CFG={
+  visit:  {label:'บันทึกการเยี่ยม (Check-in)',   icon:'📍',table:'home_visits',        cols:'id,patient_name,village,visit_date,visit_type',nameKey:'patient_name',dateKey:'visit_date',   hasVillage:true},
+  care:   {label:'บันทึกบริการดูแล (Care Log)', icon:'📋',table:'injection_records',   cols:'id,patient_id,injection_date,record_type',     nameKey:null,          dateKey:'injection_date',hasVillage:false},
+  patient:{label:'ผู้ป่วย',                       icon:'👤',table:'patients',            cols:'id,name,village,group_color',                  nameKey:'name',        dateKey:null,           hasVillage:true},
+  appt:   {label:'นัดพบแพทย์',                    icon:'🗓️',table:'doctor_appointments',cols:'id,patient_id,appoint_date,appoint_type,status',nameKey:null,         dateKey:'appoint_date', hasVillage:false},
+}
+function initDangerZone(){
+  Object.entries(DZ_CFG).forEach(([type,cfg])=>{
+    const el=document.getElementById('dz-'+type)
+    if(!el)return
+    el.innerHTML=`<div style="border:1.5px solid #fca5a5;border-radius:10px;overflow:hidden;margin-bottom:10px">
+      <button onclick="dzToggle('${type}')" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#fef2f2;border:none;cursor:pointer;font-family:'Sarabun',sans-serif;text-align:left;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:18px">${cfg.icon}</span>
+          <div><div style="font-size:13px;font-weight:700;color:var(--text1)">${cfg.label}</div>
+          <div style="font-size:11px;color:var(--text3)">เลือกและลบรายการ</div></div>
+        </div>
+        <span id="dz-arrow-${type}" style="color:var(--text3);font-size:12px;flex-shrink:0;transition:transform .2s">▼</span>
+      </button>
+      <div id="dz-panel-${type}" style="display:none;padding:12px 14px;border-top:1px solid #fecaca">
+        <div id="dz-body-${type}"></div>
+      </div>
+    </div>`
+  })
+}
+function dzToggle(type){
+  const panel=document.getElementById('dz-panel-'+type)
+  const arrow=document.getElementById('dz-arrow-'+type)
+  const open=panel.style.display==='none'
+  panel.style.display=open?'block':'none'
+  arrow.style.transform=open?'rotate(180deg)':''
+  if(open)dzRenderControls(type)
+}
+function dzRenderControls(type){
+  const cfg=DZ_CFG[type]
+  const body=document.getElementById('dz-body-'+type)
+  if(!body||body.dataset.init)return
+  body.dataset.init='1'
+  const vOpts=['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')
+  const villSel=cfg.hasVillage?`<select id="dz-village-${type}" style="flex:1;min-width:100px;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text1);font-family:'Sarabun',sans-serif"><option value="">ทุกหมู่บ้าน</option>${vOpts}</select>`:''
+  const dateSel=cfg.dateKey?`<select id="dz-period-${type}" style="flex:1;min-width:110px;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text1);font-family:'Sarabun',sans-serif"><option value="30">30 วันล่าสุด</option><option value="90">90 วัน</option><option value="180">180 วัน</option><option value="365">1 ปี</option><option value="0">ทั้งหมด</option></select>`:''
+  body.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${villSel}${dateSel}<button onclick="dzLoad('${type}')" style="padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🔍 โหลด</button></div><div id="dz-list-${type}"></div><div id="dz-confirm-${type}" style="display:none"></div>`
+}
+async function dzLoad(type){
+  const cfg=DZ_CFG[type]
+  const list=document.getElementById('dz-list-'+type)
+  const confirmEl=document.getElementById('dz-confirm-'+type)
+  if(!list)return
+  confirmEl.style.display='none'
+  list.innerHTML='<div style="text-align:center;padding:12px;color:var(--text3)">⏳ กำลังโหลด...</div>'
+  let q=sb.from(cfg.table).select(cfg.cols).limit(200)
+  if(cfg.dateKey)q=q.order(cfg.dateKey,{ascending:false})
+  const village=document.getElementById('dz-village-'+type)?.value
+  if(village)q=q.eq('village',village)
+  const period=document.getElementById('dz-period-'+type)?.value
+  if(period&&period!=='0'&&cfg.dateKey){
+    const cut=new Date();cut.setDate(cut.getDate()-parseInt(period))
+    q=q.gte(cfg.dateKey,cut.toISOString().slice(0,10))
+  }
+  const{data,error}=await q
+  if(error){list.innerHTML=`<div style="color:var(--red);font-size:12px;padding:8px">❌ ${esc(error.message)}</div>`;return}
+  if(!data?.length){list.innerHTML='<div style="color:var(--text3);font-size:12px;text-align:center;padding:16px">ไม่พบรายการ</div>';return}
+  let patMap={}
+  if(!cfg.nameKey){
+    const pids=[...new Set(data.map(r=>r.patient_id).filter(Boolean))]
+    if(pids.length){const{data:pts}=await sb.from('patients').select('id,name').in('id',pids);(pts||[]).forEach(p=>{patMap[p.id]=p.name})}
+  }
+  list.innerHTML=`<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:280px;overflow-y:auto;margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--border)">
+      <input type="checkbox" id="dz-all-${type}" onchange="dzSelectAll('${type}',this.checked)" style="width:15px;height:15px;cursor:pointer">
+      <span style="font-size:11px;font-weight:700;color:var(--text3)">เลือกทั้งหมด (${data.length} รายการ)</span>
+    </div>
+    ${data.map(r=>{
+      const nm=cfg.nameKey?esc(r[cfg.nameKey]||'—'):esc(patMap[r.patient_id]||'#'+r.id)
+      const sub=type==='visit'?esc(r.village||''):type==='care'?esc(r.record_type||''):type==='appt'?esc(r.appoint_type||r.status||''):esc(r.village||'')
+      const dt=cfg.dateKey?(r[cfg.dateKey]||''):''
+      return`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px"><input type="checkbox" class="dz-chk-${type}" value="${r.id}" style="width:15px;height:15px;cursor:pointer;accent-color:#dc2626" onchange="dzUpdateCount('${type}')"><span style="flex:1;font-weight:600;color:var(--text1)">${nm}</span>${sub?`<span style="color:var(--text3)">${sub}</span>`:''}<span style="color:var(--text3);white-space:nowrap">${dt}</span></div>`
+    }).join('')}
+  </div>
+  <button onclick="dzShowConfirm('${type}')" id="dz-del-btn-${type}" disabled style="padding:7px 14px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:not-allowed;font-family:'Sarabun',sans-serif;opacity:.4">🗑️ ลบที่เลือก (<span id="dz-count-${type}">0</span> รายการ)</button>`
+}
+function dzSelectAll(type,checked){
+  document.querySelectorAll('.dz-chk-'+type).forEach(cb=>cb.checked=checked)
+  dzUpdateCount(type)
+}
+function dzUpdateCount(type){
+  const n=document.querySelectorAll('.dz-chk-'+type+':checked').length
+  const cnt=document.getElementById('dz-count-'+type)
+  const btn=document.getElementById('dz-del-btn-'+type)
+  if(cnt)cnt.textContent=n
+  if(btn){btn.disabled=n===0;btn.style.opacity=n===0?'.4':'1';btn.style.cursor=n===0?'not-allowed':'pointer'}
+}
+function dzShowConfirm(type){
+  const n=document.querySelectorAll('.dz-chk-'+type+':checked').length
+  if(!n)return
+  const el=document.getElementById('dz-confirm-'+type)
+  el.style.display='block'
+  el.innerHTML=`<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:14px;margin-top:8px">
+    <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:4px">⚠️ ยืนยันลบ ${n} รายการ?</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:12px">การดำเนินการนี้ไม่สามารถย้อนกลับได้</div>
+    <div style="display:flex;gap:8px">
+      <button onclick="dzDelete('${type}')" id="dz-confirm-btn-${type}" style="padding:7px 16px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🗑️ ยืนยันลบ</button>
+      <button onclick="document.getElementById('dz-confirm-${type}').style.display='none'" style="padding:7px 16px;background:var(--border);color:var(--text2);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">ยกเลิก</button>
+    </div>
+  </div>`
+}
+async function dzDelete(type){
+  const cfg=DZ_CFG[type]
+  const ids=[...document.querySelectorAll('.dz-chk-'+type+':checked')].map(cb=>cb.value)
+  if(!ids.length)return
+  const btn=document.getElementById('dz-confirm-btn-'+type)
+  if(btn){btn.disabled=true;btn.textContent='⏳ กำลังลบ...'}
+  const{error}=await sb.from(cfg.table).delete().in('id',ids)
+  if(error){alert('❌ ลบไม่สำเร็จ: '+error.message);if(btn){btn.disabled=false;btn.textContent='🗑️ ยืนยันลบ'};return}
+  auditLog('bulk_delete',cfg.table,null,{count:ids.length,type,by:currentDisplayName})
+  const body=document.getElementById('dz-body-'+type)
+  if(body)body.dataset.init=''
+  await dzLoad(type)
 }
 
 function memberCard(p,showVillage=false){
