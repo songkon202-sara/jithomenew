@@ -3165,6 +3165,7 @@ async function openModal(id){
             </select>
           </div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">📅 วันนัดครั้งต่อไป <span style="color:var(--text3);font-weight:400">(เลือกเองได้)</span></label><input type="date" id="er-next-date-${h.id}" oninput="syncIntervalFromNextDate('er-date-${h.id}','er-next-date-${h.id}','er-interval-${h.id}')"></div>
+          <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">ยาที่ฉีด</label><input type="text" id="er-medication-${h.id}" value="${esc(h.medication_name||'')}" placeholder="เช่น Invega 100 mg"></div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">หมายเหตุ</label><input type="text" id="er-note-${h.id}" value="${esc(h.note||'')}"></div>
           <div style="display:flex;gap:6px">
             <button class="btn btn-primary" style="flex:1;font-size:12px;padding:6px" id="er-save-${h.id}" onclick="saveEditRecord(${h.id},${p.id})">บันทึก</button>
@@ -3336,6 +3337,7 @@ async function openModal(id){
       <div class="form-group"><label id="rec-date-label">วันที่ฉีดยา</label><input type="date" id="rec-date" value="${todayISO()}" oninput="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"></div>
       <div class="form-group"><label>รอบนัดต่อไป</label><select id="rec-interval" onchange="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
       <div class="form-group"><label>📅 วันนัดครั้งต่อไป <span style="font-size:11px;color:var(--text3);font-weight:400">(เลือกเองหรือปล่อยให้คำนวณ)</span></label><input type="date" id="rec-next-date" oninput="syncIntervalFromNextDate('rec-date','rec-next-date','rec-interval')"></div>
+      <div class="form-group" id="rec-medication-wrap"><label>ยาที่ฉีด</label><input type="text" id="rec-medication" placeholder="เช่น Invega 100 mg, FLUPENTIXOL 40MG/2ML" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="rec-note" placeholder="ผลการฉีดยา, อาการ..."></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" style="flex:1" id="rec-save-btn" onclick="saveModalRecord(${p.id},'${p.group_color}')">บันทึก</button>
@@ -3378,13 +3380,14 @@ async function saveEditRecord(id,patientId){
   const btn=document.getElementById('er-save-'+id)
   const date=dateEl?.value
   const note=noteEl?.value||''
+  const medication_name=document.getElementById('er-medication-'+id)?.value||null
   const nextDate=nextDateEl?.value||''
   if(!date){alert('กรุณาเลือกวันที่');return}
   const {interval_str,interval_days}=getIntervalAndDays('er-date-'+id,'er-interval-'+id,'er-next-date-'+id)
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const{data:rec}=await sb.from('injection_records').select('group_color,group_label,record_type').eq('id',id).single()
-    const{error}=await sb.from('injection_records').update({injection_date:date,interval_str,interval_days,note}).eq('id',id)
+    const{error}=await sb.from('injection_records').update({injection_date:date,interval_str,interval_days,note,medication_name:medication_name||null}).eq('id',id)
     if(error)throw error
     auditLog('edit_record','injection_records',id,{injection_date:date})
     _markOwnWrite(id)
@@ -3705,6 +3708,7 @@ function toggleRecType(type){
 async function saveModalRecord(pid,gc){
   const date=document.getElementById('rec-date')?.value
   const note=document.getElementById('rec-note')?.value||''
+  const medication_name=document.getElementById('rec-medication')?.value||null
   const btn=document.getElementById('rec-save-btn')
   if(!date){alert('กรุณาเลือกวันที่');return}
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
@@ -3715,7 +3719,7 @@ async function saveModalRecord(pid,gc){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const record_type=window._modalRecType||'injection'
-    const{data:newRec2,error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,record_type,recorded_by:currentDisplayName||null}).select('id').single()
+    const{data:newRec2,error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,medication_name:medication_name||null,record_type,recorded_by:currentDisplayName||null}).select('id').single()
     if(error)throw error
     auditLog('create_record','injection_records',newRec2?.id,{patient_id:pid,record_type,injection_date:date})
     _markOwnWrite(pid)
