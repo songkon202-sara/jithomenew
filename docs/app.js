@@ -343,7 +343,7 @@ async function getPatients() {
     const da=a.days_until!=null?parseInt(a.days_until):9999
     const db=b.days_until!=null?parseInt(b.days_until):9999
     return da-db
-  })
+  }).filter((p,i,arr)=>arr.findIndex(x=>x.id===p.id)===i)
 }
 async function getSettings() {
   const { data } = await sb.from('app_settings').select('setting_key,setting_value')
