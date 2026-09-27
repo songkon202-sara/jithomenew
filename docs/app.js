@@ -345,6 +345,13 @@ async function getPatients() {
     return da-db
   }).filter((p,i,arr)=>arr.findIndex(x=>x.id===p.id)===i)
 }
+// ค่าที่แสดงได้ก่อน login (ไม่มี token) — ตาราง app_settings อ่านได้เฉพาะผู้ที่ login แล้ว
+async function getPublicSettings() {
+  let { data, error } = await sb.rpc('get_public_settings')
+  if (error?.code === 'PGRST202') return getSettings() // ยังไม่ได้รัน 01_prepare.sql
+  const s = {}; for (const r of (data||[])) s[r.setting_key] = r.setting_value
+  return s
+}
 async function getSettings() {
   const { data } = await sb.from('app_settings').select('setting_key,setting_value')
   const s = {}; for (const r of (data||[])) s[r.setting_key] = r.setting_value
@@ -2596,7 +2603,20 @@ async function toggleSetting(key,val){
   await sb.from('app_settings').upsert({setting_key:key,setting_value:val?'1':'0'},{onConflict:'setting_key'})
 }
 
-const LINE_FUNC_URL = 'https://drwnsumijarzqezljare.supabase.co/functions/v1/smooth-endpoint'
+// แจ้งเตือน LINE / Telegram ผ่าน Edge Function "notify" — token อยู่ฝั่งเซิร์ฟเวอร์เท่านั้น
+const NOTIFY_FUNC_URL = `${SUPABASE_URL}/functions/v1/notify`
+async function callNotify(kind,message){
+  const{data:{session}}=await sb.auth.getSession()
+  if(!session)throw new Error('กรุณาเข้าสู่ระบบ')
+  const res=await fetchWithTimeout(NOTIFY_FUNC_URL,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${session.access_token}`},
+    body:JSON.stringify({kind,message})
+  })
+  const data=await res.json().catch(()=>({}))
+  if(!res.ok||data.error)throw new Error(data.error||'ส่งไม่สำเร็จ')
+  return data
+}
 
 async function saveLineSettings(){
   const token=(document.getElementById('line-token-input')?.value||'').trim()
@@ -2617,13 +2637,7 @@ async function testLine(){
   const status=document.getElementById('line-status')
   btn.disabled=true;btn.textContent='กำลังส่ง...'
   try{
-    const res=await fetchWithTimeout(LINE_FUNC_URL,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},
-      body:JSON.stringify({message:`🏥 JitHome ทดสอบแจ้งเตือน LINE\nระบบติดตามผู้ป่วยจิตเวช ${hospitalName}\nเวลา: ${new Date().toLocaleString('th-TH')}`})
-    })
-    const data=await res.json()
-    if(!res.ok||data.error)throw new Error(data.error||'ส่งไม่สำเร็จ')
+    await callNotify('test_line',`🏥 JitHome ทดสอบแจ้งเตือน LINE\nระบบติดตามผู้ป่วยจิตเวช ${hospitalName}\nเวลา: ${new Date().toLocaleString('th-TH')}`)
     status.style.color='var(--green)';status.textContent='✅ ส่งสำเร็จ! ตรวจสอบกลุ่ม LINE ได้เลย'
   }catch(e){status.style.color='var(--red)';status.textContent='❌ '+e.message}
   btn.disabled=false;btn.textContent='📨 ทดสอบส่ง'
@@ -2631,21 +2645,13 @@ async function testLine(){
 
 async function sendLineVisitReport(visitData){
   try{
-    const{data}=await sb.from('app_settings').select('setting_value').eq('setting_key','line_enabled').single()
-    if(data?.setting_value!=='1')return
     const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
-    await fetchWithTimeout(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify({message:msg})})
+    await callNotify('visit_report',msg) // เซิร์ฟเวอร์ข้ามให้เองถ้าปิด line_enabled
   }catch(e){console.warn('LINE notify error:',e)}
 }
 
 async function sendReferralToHospital(visitData){
   try{
-    const s=await getSettings()
-    const lineGroupId=s.refer_line_group_id||''
-    const lineToken=s.refer_line_token||''
-    const tgToken=s.refer_telegram_token||''
-    const tgChatId=s.refer_telegram_chatid||''
-    if(!lineGroupId&&(!tgToken||!tgChatId))return
     const d=visitData
     const colorIcon={'red':'🔴','yellow':'🟡','green':'🟢'}[d.group_color]||'⚪'
     const oasMax=Math.max(d.oasScores?.s1||0,d.oasScores?.s2||0,d.oasScores?.s3||0)
@@ -2672,14 +2678,7 @@ async function sendReferralToHospital(visitData){
       `⚠️ ต้องการส่งต่อ/รายงานเร่งด่วน`,
       `🏥 ${hospitalName}`,
     ].filter(Boolean).join('\n')
-    if(lineGroupId){
-      const body={message:msg,groupId:lineGroupId}
-      if(lineToken)body.token=lineToken
-      await fetchWithTimeout(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
-    }
-    if(tgToken&&tgChatId){
-      await fetchWithTimeout(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:msg})})
-    }
+    await callNotify('referral',msg) // เซิร์ฟเวอร์ส่งตามช่องทางที่ตั้งค่าไว้
   }catch(e){console.warn('Referral notify error:',e)}
 }
 
@@ -2702,30 +2701,13 @@ async function saveReferSettings(){
 }
 
 async function testReferNotify(){
-  const lineGroupId=(document.getElementById('refer-line-groupid-input')?.value||'').trim()
-  const lineToken=(document.getElementById('refer-line-token-input')?.value||'').trim()
-  const tgToken=(document.getElementById('refer-tg-token-input')?.value||'').trim()
-  const tgChatId=(document.getElementById('refer-tg-chatid-input')?.value||'').trim()
+  // ทดสอบด้วยค่าที่ "บันทึกแล้ว" — กดบันทึกก่อนทดสอบ
   const btn=document.getElementById('refer-test-btn')
   const status=document.getElementById('refer-status')
-  if(!lineGroupId&&(!tgToken||!tgChatId)){status.style.color='var(--red)';status.textContent='❌ กรุณากรอก LINE Group ID หรือ Telegram ก่อน';return}
   btn.disabled=true;btn.textContent='กำลังส่ง...'
   const testMsg=`🏥 ทดสอบ — ใบส่งต่อ รพ. แม่ข่าย\n👤 ผู้ป่วยทดสอบ (หมู่ 1)\n📅 ${todayISO()}  🏥 เจ้าหน้าที่: admin\n✅ รายการผ่าน: 6 ข้อ\n📊 OAS ระดับ 2\n📋 แบบ10ด้าน: 22/30 — ต้องติดตาม\n⚠️ ต้องการส่งต่อ/รายงานเร่งด่วน — ${hospitalName}`
   const errs=[]
-  if(lineGroupId){
-    try{
-      const body={message:testMsg,groupId:lineGroupId}
-      if(lineToken)body.token=lineToken
-      const res=await fetchWithTimeout(LINE_FUNC_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(body)})
-      const d=await res.json();if(d.error)errs.push('LINE: '+d.error)
-    }catch(e){errs.push('LINE: '+e.message)}
-  }
-  if(tgToken&&tgChatId){
-    try{
-      const res=await fetchWithTimeout(`https://api.telegram.org/bot${tgToken}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:tgChatId,text:testMsg})})
-      const d=await res.json();if(!d.ok)errs.push('Telegram: '+(d.description||'ส่งไม่สำเร็จ'))
-    }catch(e){errs.push('Telegram: '+e.message)}
-  }
+  try{await callNotify('test_referral',testMsg)}catch(e){errs.push(e.message)}
   btn.disabled=false;btn.textContent='📨 ทดสอบส่ง'
   if(errs.length){status.style.color='var(--red)';status.textContent='❌ '+errs.join(' | ')}
   else{status.style.color='var(--green)';status.textContent='✅ ส่งสำเร็จ! ตรวจสอบกลุ่ม รพ. แม่ข่าย'}
@@ -2752,21 +2734,14 @@ async function saveTelegramSettings(){
 }
 
 async function testTelegram(){
-  const chatid=(document.getElementById('telegram-chatid-input')?.value||'').trim()
-  const token=(document.getElementById('telegram-token-input')?.value||'').trim()
+  // ทดสอบด้วยค่าที่ "บันทึกแล้ว" — กดบันทึกก่อนทดสอบ
   const btn=document.getElementById('tg-test-btn')
   const status=document.getElementById('tg-status')
-  if(!chatid||!token){status.style.color='var(--red)';status.textContent='❌ กรุณากรอก Chat ID และ Bot Token ก่อน';return}
   btn.disabled=true;btn.textContent='กำลังส่ง...'
   status.style.color='var(--text3)';status.textContent='กำลังทดสอบ...'
   try{
-    const msg=`🏥 *JitHome ทดสอบการแจ้งเตือน*\n\nระบบติดตามผู้ป่วยจิตเวช\nโรงพยาบาล: ${hospitalName}\n\n✅ เชื่อมต่อสำเร็จ!`
-    const res=await fetchWithTimeout(`https://api.telegram.org/bot${token}/sendMessage`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({chat_id:chatid,text:msg,parse_mode:'Markdown'})
-    })
-    const data=await res.json()
+    const msg=`🏥 JitHome ทดสอบการแจ้งเตือน\n\nระบบติดตามผู้ป่วยจิตเวช\nโรงพยาบาล: ${hospitalName}\n\n✅ เชื่อมต่อสำเร็จ!`
+    const data=await callNotify('test_telegram',msg).then(()=>({ok:true}),e=>({ok:false,description:e.message}))
     if(data.ok){
       status.style.color='var(--green)';status.textContent='✅ ส่งสำเร็จ! ตรวจสอบกลุ่ม Telegram ได้เลย'
       btn.textContent='✅ สำเร็จ'
@@ -4643,7 +4618,10 @@ function hideAuthWall(){
 
 // Server-side login lockout (ISO 27001:2022 A.8.5) — stored in Supabase login_lockouts table
 async function _checkLoginLock(email){
-  const{data,error}=await sb.from('login_lockouts').select('*').eq('email',email.toLowerCase()).maybeSingle()
+  let{data,error}=await sb.rpc('check_login_lock',{p_email:email.toLowerCase()})
+  // ยังไม่ได้รัน sql/security/01_prepare.sql → ใช้วิธีเดิมไปก่อน
+  if(error?.code==='PGRST202')({data,error}=await sb.from('login_lockouts').select('*').eq('email',email.toLowerCase()).maybeSingle())
+  data=Array.isArray(data)?data[0]:data
   // fail-closed: ถ้า DB error ให้บล็อกการล็อกอินไว้ก่อน เพื่อป้องกัน bypass
   if(error)return'ระบบตรวจสอบชั่วคราวไม่พร้อมใช้งาน กรุณาลองใหม่อีกครั้ง'
   if(!data)return null
@@ -4823,7 +4801,8 @@ async function registerUser(){
     btn.disabled=false;btn.textContent='สมัครสมาชิก';return
   }
   currentUser=data.user
-  await loadProfile(data.user)
+  const prof=await loadProfile(data.user)
+  if(prof?.status==='pending'){showAuthWall('pending');return}
   hideAuthWall()
   updateUserUI()
   await loadAndNav()
@@ -4896,9 +4875,10 @@ async function loadProfile(user){
   const role=count===0?'admin':'viewer'
   const dn=user.email.split('@')[0]
   const profile={id:user.id,email:user.email,display_name:dn,role,village:'',last_login:new Date().toISOString()}
-  await sb.from('user_profiles').insert(profile)
-  currentRole=role;currentDisplayName=dn;currentVillage=''
-  return profile
+  const{data:saved}=await sb.from('user_profiles').insert(profile).select().single()
+  const row=saved||profile
+  currentRole=row.role;currentDisplayName=row.display_name||dn;currentVillage=row.village||''
+  return row
 }
 
 async function updateLastLogin(userId){
@@ -5308,7 +5288,7 @@ async function init(){
   const{data:{user}}=await sb.auth.getUser()
   if(!user){
     try{
-      const s=await getSettings()
+      const s=await getPublicSettings()
       if(s.app_subtitle){appSubtitle=s.app_subtitle;localStorage.setItem('jh_app_subtitle',s.app_subtitle)}
       else{const cached=localStorage.getItem('jh_app_subtitle');if(cached)appSubtitle=cached}
     }catch(e){const cached=localStorage.getItem('jh_app_subtitle');if(cached)appSubtitle=cached}
