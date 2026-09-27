@@ -4751,14 +4751,16 @@ async function _handleAdminMFA(){
     showAuthWall('mfa_verify')
     return true
   }
-  const unverified=(data?.totp||[]).filter(f=>f.status==='unverified')
+  // data.totp มีเฉพาะ factor ที่ verified แล้ว — factor ค้าง (unverified) อยู่ใน data.all
+  // ถ้าไม่ลบออก enroll ซ้ำจะชน friendly name เดิมแล้วล้มเหลว
+  const unverified=(data?.all||[]).filter(f=>f.factor_type==='totp'&&f.status==='unverified')
   for(const f of unverified){await sb.auth.mfa.unenroll({factorId:f.id})}
-  const{data:enroll,error:eErr}=await sb.auth.mfa.enroll({factorType:'totp',issuer:'JitHome',friendlyName:'JitHome'})
+  const{data:enroll,error:eErr}=await sb.auth.mfa.enroll({factorType:'totp',issuer:'JitHome',friendlyName:'JitHome-'+Date.now()})
   if(eErr){
     console.error('MFA enroll:',eErr)
     await sb.auth.signOut()
     showAuthWall('login')
-    setTimeout(()=>{const e=document.getElementById('auth-error');if(e){e.textContent='❌ ไม่สามารถตั้งค่า 2FA กรุณาติดต่อผู้ดูแลระบบ'}},100)
+    setTimeout(()=>{const e=document.getElementById('auth-error');if(e){e.textContent='❌ ไม่สามารถตั้งค่า 2FA กรุณาติดต่อผู้ดูแลระบบ'+(eErr.message?' ('+eErr.message+')':'')}},100)
     return true
   }
   _mfaEnrollId=enroll.id
