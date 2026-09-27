@@ -1716,6 +1716,10 @@ function updatePreviewHeader(){
   }
 }
 
+// token ไม่แสดงบนหน้าจอ — ช่องว่างไว้ กรอกเฉพาะเมื่อต้องการเปลี่ยน (ฟังก์ชันบันทึกข้ามช่องว่าง)
+function tokenPlaceholder(v,empty){
+  return v?`•••••••• บันทึกไว้แล้ว (ลงท้าย ${esc(String(v).slice(-4))}) — กรอกเฉพาะเมื่อต้องการเปลี่ยน`:esc(empty)
+}
 async function renderAdmin(el) {
   if(!canDo('admin')){el.innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--text3)">🔒 เฉพาะผู้ดูแลระบบเท่านั้น</div>';return}
   const settings=await getSettings()
@@ -1897,7 +1901,7 @@ async function renderAdmin(el) {
         </div>
         <label class="toggle"><input type="checkbox" ${settings.line_enabled==='1'?'checked':''} onchange="toggleSetting('line_enabled',this.checked)"><span class="toggle-slider"></span></label>
       </div>
-      <input id="line-token-input" type="text" value="${esc(settings.line_token||'')}" placeholder="LINE Channel Access Token" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
+      <input id="line-token-input" type="password" autocomplete="new-password" value="" placeholder="${tokenPlaceholder(settings.line_token,'LINE Channel Access Token')}" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px">LINE Group ID</div>
       <input id="line-groupid-input" type="text" value="${esc(settings.line_group_id||'')}" placeholder="Cxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
       <div style="display:flex;gap:8px">
@@ -1917,7 +1921,7 @@ async function renderAdmin(el) {
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Chat ID</div>
       <input id="telegram-chatid-input" type="text" value="${esc(settings.telegram_chatid||'')}" placeholder="-1001234567890" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Bot Token <span style="color:var(--red)">*</span> <a href="https://t.me/BotFather" target="_blank" style="color:var(--primary);font-size:10px">สร้าง Bot ที่ @BotFather</a></div>
-      <input id="telegram-token-input" type="text" value="${esc(settings.telegram_token||'')}" placeholder="123456789:AABBCCDDaabbccddeeff" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
+      <input id="telegram-token-input" type="password" autocomplete="new-password" value="" placeholder="${tokenPlaceholder(settings.telegram_token,'123456789:AABBCCDDaabbccddeeff')}" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
       <div style="display:flex;gap:8px">
         <button onclick="saveTelegramSettings()" id="tg-save-btn" style="flex:1;padding:7px;background:#0088cc;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก</button>
         <button onclick="testTelegram()" id="tg-test-btn" style="flex:1;padding:7px;background:#fff;color:#0088cc;border:1.5px solid #0088cc;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📨 ทดสอบส่ง</button>
@@ -1946,11 +1950,11 @@ async function renderAdmin(el) {
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">LINE Group ID (กลุ่ม รพ. แม่ข่าย) <span style="color:var(--red)">*</span></div>
       <input id="refer-line-groupid-input" type="text" value="${esc(settings.refer_line_group_id||'')}" placeholder="C... หรือ G... (Group ID ของกลุ่ม LINE รพ.)" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">LINE Token <span style="font-weight:400;color:var(--text3)">(ถ้าใช้ LINE OA คนละอัน — ไม่จำเป็นหากใช้ OA เดิม)</span></div>
-      <input id="refer-line-token-input" type="text" value="${esc(settings.refer_line_token||'')}" placeholder="เว้นว่างหากใช้ LINE OA เดิม" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
+      <input id="refer-line-token-input" type="password" autocomplete="new-password" value="" placeholder="${tokenPlaceholder(settings.refer_line_token,'เว้นว่างหากใช้ LINE OA เดิม')}" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">Telegram Chat ID (กลุ่ม รพ. แม่ข่าย)</div>
       <input id="refer-tg-chatid-input" type="text" value="${esc(settings.refer_telegram_chatid||'')}" placeholder="-1001234567890" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:6px">
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">Telegram Bot Token</div>
-      <input id="refer-tg-token-input" type="text" value="${esc(settings.refer_telegram_token||'')}" placeholder="123456789:AABBCCDDaabbccddeeff" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
+      <input id="refer-tg-token-input" type="password" autocomplete="new-password" value="" placeholder="${tokenPlaceholder(settings.refer_telegram_token,'123456789:AABBCCDDaabbccddeeff')}" style="width:100%;padding:7px 10px;font-size:11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text2);font-family:monospace;margin-bottom:8px">
       <div style="display:flex;gap:8px">
         <button onclick="saveReferSettings()" id="refer-save-btn" style="flex:1;padding:7px;background:#ea580c;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">💾 บันทึก</button>
         <button onclick="testReferNotify()" id="refer-test-btn" style="flex:1;padding:7px;background:#fff;color:#ea580c;border:1.5px solid #ea580c;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📨 ทดสอบส่ง</button>
