@@ -87,3 +87,14 @@ SQL Editor → วางเนื้อหา `03_rollback.sql` → **Run**
 - **เลขบัตรประชาชน** ใน `patients` และ `user_profiles` ยังเก็บเป็นข้อความธรรมดา
 - **RPC เดิมในฐานข้อมูล** (`record_failed_login`, `send_overdue_notification`) ไม่มีใน repo จึงยังไม่ได้ตรวจ
 - ไฟล์ `app.js` และ `index.html` ที่ root ของ repo ดูเหมือนเป็นสำเนาเก่า (`docs/` มี manifest และ service worker ครบ จึงน่าจะเป็นตัวที่ใช้งานจริง) รอบนี้จึงแก้เฉพาะ `docs/` — ถ้า GitHub Pages ใช้ root อยู่ ต้องแจ้งก่อนรันขั้นที่ 4
+
+## ขั้นที่ 6 — สิทธิ์ไฟล์ผู้ป่วย (Storage `patient-files`)
+
+SQL Editor → วางเนื้อหา `04_storage.sql` → **Run** (หน้าต่างเตือน → **Run without RLS**)
+
+- ปิดการอัปโหลดโดยคนที่ไม่ได้ login (policy เดิม `allow_upload_patient_files` เปิดให้ `public`)
+- บัญชีที่รออนุมัติหรือถูกลบจะเปิดไฟล์ไม่ได้อีก แต่ผู้สมัคร อสม. ยังอัปโหลดสำเนาบัตรในโฟลเดอร์ `members/` ได้
+
+ทดสอบ: admin เปิดรูปผู้ป่วยได้ · อสม. บันทึกเยี่ยมบ้านพร้อมรูปได้ · สมัคร อสม. ใหม่พร้อมแนบไฟล์ได้
+
+ถ้ามีปัญหา → รัน `04_storage_rollback.sql`
