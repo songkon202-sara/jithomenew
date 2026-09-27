@@ -17,15 +17,17 @@ Supabase Dashboard → **SQL Editor** → วางเนื้อหา `01_pre
 
 หลังขั้นนี้ ผู้ใช้จะตั้งตัวเองเป็น admin ไม่ได้อีก และผู้ที่สมัครเองด้วย Email จะอยู่ในสถานะ **รออนุมัติ** (เดิมเข้าใช้ได้ทันที)
 
-## ขั้นที่ 2 — Deploy Edge Function `notify`
+## ขั้นที่ 2 — Deploy Edge Function (ชื่อ `bright-api`)
+
+> โค้ดอยู่ใน `supabase/functions/notify/` แต่ deploy ใน Dashboard ด้วยชื่อ **`bright-api`** — แอปเรียกชื่อนี้ (`NOTIFY_FUNC_URL` ใน `docs/app.js`)
 
 Supabase Dashboard → **Edge Functions** → **Deploy a new function** → **Via Editor**
 
-1. ตั้งชื่อ `notify`
+1. ตั้งชื่อ `bright-api`
 2. วางเนื้อหา `supabase/functions/notify/index.ts`
 3. เปิด **Verify JWT** ไว้ (ค่าเริ่มต้น) → **Deploy**
 
-หรือใช้ CLI: `supabase functions deploy notify`
+หรือใช้ CLI: คัดลอกโฟลเดอร์ `notify` เป็น `bright-api` แล้ว `supabase functions deploy bright-api`
 
 ถ้าใช้ `extract-medications` อยู่ ให้ deploy เวอร์ชันใหม่ด้วย (เพิ่มการตรวจ login)
 

@@ -2603,8 +2603,9 @@ async function toggleSetting(key,val){
   await sb.from('app_settings').upsert({setting_key:key,setting_value:val?'1':'0'},{onConflict:'setting_key'})
 }
 
-// แจ้งเตือน LINE / Telegram ผ่าน Edge Function "notify" — token อยู่ฝั่งเซิร์ฟเวอร์เท่านั้น
-const NOTIFY_FUNC_URL = `${SUPABASE_URL}/functions/v1/notify`
+// แจ้งเตือน LINE / Telegram ผ่าน Edge Function (โค้ดใน supabase/functions/notify — deploy ชื่อ bright-api)
+// token อยู่ฝั่งเซิร์ฟเวอร์เท่านั้น
+const NOTIFY_FUNC_URL = `${SUPABASE_URL}/functions/v1/bright-api`
 async function callNotify(kind,message){
   const{data:{session}}=await sb.auth.getSession()
   if(!session)throw new Error('กรุณาเข้าสู่ระบบ')
