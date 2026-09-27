@@ -112,6 +112,18 @@ $$;
 REVOKE ALL ON FUNCTION public.get_public_settings() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_public_settings() TO anon, authenticated;
 
+-- record_failed_login (มีอยู่แล้วในฐานข้อมูล ไม่ได้อยู่ใน repo) ถูกเรียกก่อน login
+-- ต้องเป็น SECURITY DEFINER ไม่อย่างนั้นหลังขั้นที่ 2 (anon ไม่มีสิทธิ์ login_lockouts)
+-- จะนับการใส่รหัสผิดไม่ได้ และระบบล็อกบัญชีจะหยุดทำงาน
+DO $$
+DECLARE f REGPROCEDURE;
+BEGIN
+  FOR f IN SELECT oid::regprocedure FROM pg_proc
+           WHERE pronamespace = 'public'::regnamespace AND proname = 'record_failed_login' LOOP
+    EXECUTE format('ALTER FUNCTION %s SECURITY DEFINER SET search_path = public', f);
+  END LOOP;
+END $$;
+
 -- ─── ตรวจผล ───────────────────────────────────────────────────────
 -- ควรเห็น role ของบัญชีที่ใช้ทดสอบ (รันใน SQL Editor จะได้ NULL เพราะไม่ได้ login ผ่านแอป)
 SELECT 'ขั้นที่ 1 เสร็จ' AS status,
