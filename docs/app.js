@@ -1688,7 +1688,8 @@ function updatePreviewHeader(){
     const rightEl = document.querySelector('.header-right')
     if(sub){
       sub.style.color='rgba(255,255,255,.8)'
-      sub.textContent=`👁️ โหมดดูตัวอย่าง: ${roleIcon[currentRole]} ${roleLabel[currentRole]}${currentVillage?' ('+currentVillage+')':''}`
+      // เปลี่ยนแค่หน้าจอ — ฐานข้อมูลยังใช้สิทธิ์ admin จริง (RLS ตรวจจากบัญชีที่ login)
+      sub.textContent=`👁️ โหมดดูตัวอย่าง: ${roleIcon[currentRole]} ${roleLabel[currentRole]}${currentVillage?' ('+currentVillage+')':''} · ⚠️ ดูอย่างเดียว — ถ้ากดบันทึก/ลบ จะทำจริงด้วยสิทธิ์ admin`
     }
     if(rightEl){
       rightEl.innerHTML=`<button onclick="exitPreview()" style="background:rgba(255,255,255,.25);border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✕ ออกจากโหมดนี้</button>`
