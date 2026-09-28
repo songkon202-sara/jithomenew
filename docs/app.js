@@ -2510,10 +2510,13 @@ async function mergeAndSavePatients(records, confirmMsg){
     const{error}=await sb.from('patients').insert(toInsert.slice(i,i+batchSize))
     if(error)throw error
   }
-  for(const u of toUpdate){
-    const{id,...fields}=u
-    const{error}=await sb.from('patients').update(fields).eq('id',id)
-    if(error)throw error
+  // อัปเดตพร้อมกันครั้งละ 10 แถว (เดิมทีละแถว — 200 แถว = 200 รอบ)
+  const concurrency=10
+  for(let i=0;i<toUpdate.length;i+=concurrency){
+    const results=await Promise.all(toUpdate.slice(i,i+concurrency).map(({id,...fields})=>
+      sb.from('patients').update(fields).eq('id',id)))
+    const failed=results.find(r=>r.error)
+    if(failed)throw failed.error
   }
   alert(`✅ นำเข้าสำเร็จ\nใหม่: ${toInsert.length} ราย | อัปเดต: ${toUpdate.length} ราย`)
   await loadPatients()
@@ -4381,7 +4384,10 @@ async function saveVisitRecord(){
   const refer=document.getElementById('v-refer')?.checked||false
   const btn=document.getElementById('v-save-btn')
   if(!name||!date){alert('กรุณากรอกชื่อและวันที่');return}
-  const found=allPatients.find(p=>p.name===name)
+  // จับคู่ชื่อแบบไม่สนช่องว่างซ้ำ — ถ้าไม่พบ ต้องยืนยันก่อน (เดิมบันทึก patient_id เป็น null เงียบๆ)
+  const normName=v=>String(v||'').replace(/\s+/g,' ').trim()
+  const found=allPatients.find(p=>normName(p.name)===normName(name))
+  if(!found&&!confirm(`⚠️ ไม่พบ "${name}" ในทะเบียนผู้ป่วย\n\nบันทึกนี้จะไม่ผูกกับประวัติผู้ป่วย (ไม่ขึ้นในหน้าประวัติของผู้ป่วยคนใด)\n\nกด "ตกลง" เพื่อบันทึกต่อ หรือ "ยกเลิก" เพื่อกลับไปเลือกชื่อจากรายการ`))return
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   // รวม OAS ลงใน note ถ้าเป็น staff
   const oasMax=Math.max(_oasScores.s1,_oasScores.s2,_oasScores.s3)
