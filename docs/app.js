@@ -314,8 +314,10 @@ async function getPatients() {
   if (currentRole === 'aosomo' && currentVillage) q = q.eq('village', currentVillage)
   let pq = sb.from('patients').select('id,next_inject_date,next_visit_date')
   if (currentRole === 'aosomo' && currentVillage) pq = pq.eq('village', currentVillage)
-  const [{ data, error }, { data: pDates }] = await Promise.all([q, pq])
-  if (error) { console.error(error); return [] }
+  const [{ data, error }, { data: pDates, error: pErr }] = await Promise.all([q, pq])
+  // แจ้งให้เห็นชัด — ถ้าเงียบ หน้าจอจะดูเหมือน "ไม่มีผู้ป่วย" ทั้งที่จริงโหลดไม่สำเร็จ
+  if (error) { console.error('getPatients:', error); showToast('❌ โหลดรายชื่อผู้ป่วยไม่สำเร็จ: '+error.message, 6000); return [] }
+  if (pErr) console.error('getPatients (dates):', pErr)
   // ดึง next_inject_date / next_visit_date ตรงจากตาราง patients (ไม่ผ่าน view)
   const dateMap = {}
   for (const p of (pDates||[])) dateMap[p.id] = p
@@ -1214,12 +1216,10 @@ async function renderVisit(el) {
   </div>`
 }
 function openVisitFormFor(name,village){
-  openVisitForm('staff')
-  setTimeout(()=>{
-    const n=document.getElementById('v-name');if(n)n.value=name
-    const sel=document.getElementById('v-village')
-    if(sel)for(const o of sel.options)if(o.value===village){o.selected=true;break}
-  },50)
+  openVisitForm('staff') // สร้างฟอร์มแบบ synchronous — เติมค่าได้ทันที ไม่ต้องรอ setTimeout
+  const n=document.getElementById('v-name');if(n)n.value=name
+  const sel=document.getElementById('v-village')
+  if(sel)for(const o of sel.options)if(o.value===village){o.selected=true;break}
 }
 function renderMHAssessResult(a,detail=false){
   if(!a)return''
@@ -4894,7 +4894,7 @@ async function updateLastLogin(userId){
 // ─── Audit Log ───────────────────────────────────────────────────
 async function auditLog(action,entityType,entityId,details){
   try{
-    await sb.from('audit_logs').insert({
+    const{error}=await sb.from('audit_logs').insert({
       user_id:currentUser?.id||null,
       user_email:currentUser?.email||null,
       user_name:currentDisplayName||null,
@@ -4903,7 +4903,8 @@ async function auditLog(action,entityType,entityId,details){
       entity_id:entityId!=null?String(entityId):null,
       details:details||null
     })
-  }catch(e){}
+    if(error)console.error('auditLog:',action,error.message)
+  }catch(e){console.error('auditLog:',action,e)}
 }
 
 async function loadAuditLog(){
