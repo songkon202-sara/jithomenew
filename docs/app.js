@@ -2209,8 +2209,9 @@ function memberCard(p,showVillage=false){
   const lockInfo=window._activeLockouts&&window._activeLockouts[p.email]
   const isLocked=!!lockInfo
   const lockMins=isLocked?Math.ceil((new Date(lockInfo.locked_until)-new Date())/60000):0
+  const isSuspended=p.status==='suspended'
   return `
-  <div data-member-id="${p.id}" style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid ${isLocked?'#fca5a5':'var(--border)'}">
+  <div data-member-id="${p.id}" style="background:${isSuspended?'#f3f4f6':'var(--bg)'};border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px ${isSuspended?'dashed #9ca3af':`solid ${isLocked?'#fca5a5':'var(--border)'}`}">
     ${isLocked?`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
       <div style="font-size:12px;color:#dc2626;font-weight:700">🔒 บัญชีถูกล็อก — เหลือ ${lockMins} นาที (ผิด ${lockInfo.attempt_count} ครั้ง)</div>
       ${canDo('admin')?`<button onclick="adminUnlockAccount('${jsStr(p.email)}')" style="padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🔓 ปลดล็อก</button>`:''}
@@ -2219,8 +2220,9 @@ function memberCard(p,showVillage=false){
       <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
         <div style="width:34px;height:34px;border-radius:50%;background:${isLocked?'#ef4444':ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${isLocked?'🔒':(p.email||'?').slice(0,2).toUpperCase()}</div>
         <div style="min-width:0;flex:1">
-          <div style="display:flex;align-items:center;gap:6px">
-            <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div style="font-size:13px;font-weight:700${isSuspended?';color:var(--text3);text-decoration:line-through':''}">${esc(p.display_name||p.email)}</div>
+            ${isSuspended?`<span style="font-size:10px;font-weight:700;color:#4b5563;background:#e5e7eb;border-radius:20px;padding:2px 8px">⏸️ ระงับการใช้งาน</span>`:''}
             ${canEdit?`<button onclick="editMemberName('${p.id}','${jsStr(p.display_name||'')}')" aria-label="แก้ไขชื่อ" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
           </div>
           <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
@@ -2233,6 +2235,9 @@ function memberCard(p,showVillage=false){
         ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
       </select>
       ${p.role==='aosomo'&&p.email?.endsWith('@jithome.local')?`<button onclick="adminResetAosomoPassword('${p.id}','${jsStr(p.display_name||p.email)}')" aria-label="รีเซ็ตรหัสผ่าน" style="background:none;border:none;cursor:pointer;color:#d97706;padding:4px;font-size:16px;line-height:1" title="รีเซ็ตรหัสผ่าน">🔑</button>`:''}
+      ${isSuspended
+        ?`<button onclick="setMemberSuspended('${p.id}','${jsStr(p.display_name||p.email)}','${p.role}',false)" aria-label="เปิดใช้งานอีกครั้ง" title="เปิดใช้งานอีกครั้ง" style="padding:4px 10px;background:#166534;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">▶️ เปิดใช้งาน</button>`
+        :`<button onclick="setMemberSuspended('${p.id}','${jsStr(p.display_name||p.email)}','${p.role}',true)" aria-label="ระงับการใช้งาน" title="ระงับการใช้งานชั่วคราว" style="padding:4px 10px;background:#fff;color:#b45309;border:1px solid #f59e0b;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">⏸️ ระงับ</button>`}
       <button onclick="deleteMember('${p.id}','${jsStr(p.display_name||p.email)}')" aria-label="ลบสมาชิก" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:`
       <span style="font-size:11px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">${ROLE_LABEL[p.role]||p.role}</span>`}
       </div>
@@ -2364,6 +2369,25 @@ async function rejectPendingMember(userId){
   const{error}=await sb.from('user_profiles').update({status:'rejected'}).eq('id',userId)
   if(error){alert('❌ '+error.message);return}
   auditLog('member_rejected','user_profile',userId,{by:currentDisplayName||currentRole})
+  loadMembersList()
+}
+
+// ระงับ = เข้าระบบและเห็นข้อมูลไม่ได้ทันที (RLS ใช้ jh_role() ซึ่งนับเฉพาะ status active) แต่เก็บบัญชีไว้ เปิดคืนได้
+async function setMemberSuspended(userId, displayName, role, suspend){
+  if(!canDo('admin')){alert('ไม่มีสิทธิ์');return}
+  if(userId===currentUser?.id){alert('ระงับบัญชีของตัวเองไม่ได้');return}
+  if(suspend&&role==='admin'){
+    const{count}=await sb.from('user_profiles').select('id',{count:'exact',head:true}).eq('role','admin').or('status.is.null,status.eq.active')
+    if((count||0)<=1){alert('ระงับไม่ได้ — ต้องมีผู้ดูแลระบบที่ใช้งานได้อย่างน้อย 1 คน');return}
+  }
+  const msg=suspend
+    ?`ระงับการใช้งาน "${displayName}"?\n\n• เข้าระบบและดูข้อมูลไม่ได้ทันที (รวมถึงเครื่องที่เปิดค้างไว้)\n• ข้อมูลที่เคยบันทึกยังอยู่ครบ\n• เปิดใช้งานคืนได้ทุกเมื่อ`
+    :`เปิดใช้งาน "${displayName}" อีกครั้ง?`
+  if(!confirm(msg))return
+  const{error}=await sb.from('user_profiles').update({status:suspend?'suspended':'active'}).eq('id',userId)
+  if(error){alert('❌ ไม่สำเร็จ: '+error.message);return}
+  auditLog(suspend?'member_suspended':'member_unsuspended','user_profile',userId,{name:displayName,by:currentDisplayName||currentRole})
+  showToast(suspend?`⏸️ ระงับ "${displayName}" แล้ว`:`▶️ เปิดใช้งาน "${displayName}" แล้ว`)
   loadMembersList()
 }
 
@@ -4589,6 +4613,17 @@ function showAuthWall(mode='login'){
       </div>
       <button class="btn btn-outline btn-block" onclick="showAuthWall('login')">← กลับหน้าเข้าสู่ระบบ</button>
     </div>`
+  } else if(mode==='suspended'||mode==='rejected'){
+    const sus=mode==='suspended'
+    ct.innerHTML=`
+    <div style="text-align:center;padding:16px 0">
+      <div style="font-size:48px;margin-bottom:12px">${sus?'⏸️':'⛔'}</div>
+      <div style="font-size:20px;font-weight:800;color:#4b5563;margin-bottom:8px">${sus?'บัญชีถูกระงับการใช้งาน':'ไม่สามารถเข้าใช้งานได้'}</div>
+      <div style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--text3);line-height:1.6">
+        ${sus?'ผู้ดูแลระบบระงับบัญชีนี้ไว้ชั่วคราว':'บัญชีนี้ไม่ได้รับอนุมัติหรือถูกลบออกจากระบบ'}<br>หากเห็นว่าไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบของหน่วยงาน
+      </div>
+      <button class="btn btn-outline btn-block" onclick="showAuthWall('login')">← กลับหน้าเข้าสู่ระบบ</button>
+    </div>`
   } else if(mode==='pending'){
     ct.innerHTML=`
     <div style="text-align:center;padding:16px 0">
@@ -4691,6 +4726,7 @@ async function loginUser(){
   await updateLastLogin(data.user.id)
   auditLog('login','auth',data.user.id,{email:data.user.email})
   if(prof?.status==='pending'){hideAuthWall();showAuthWall('pending');return}
+  if(prof?.status==='suspended'){await sb.auth.signOut();showAuthWall('suspended');return}
   if(prof?.status==='rejected'||prof?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
   if(currentRole==='admin'||currentRole==='staff'){
     _mfaEmail=email
@@ -5312,6 +5348,7 @@ async function init(){
   const profile=await loadProfile(user)
   await updateLastLogin(user.id)
   if(profile?.status==='pending'){showAuthWall('pending');return}
+  if(profile?.status==='suspended'){await sb.auth.signOut();showAuthWall('suspended');return}
   if(profile?.status==='rejected'||profile?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
   if(currentRole==='admin'||currentRole==='staff'){
     const{data:aalData}=await sb.auth.mfa.getAuthenticatorAssuranceLevel()
