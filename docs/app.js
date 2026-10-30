@@ -2227,6 +2227,9 @@ function memberCard(p,showVillage=false){
           </div>
           <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
           ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace;margin-top:1px">🪪 ${maskNationalId(p.national_id)}</div>`:''}
+          ${canDo('admin')?(p.confidentiality_version===CONF_VERSION
+            ?`<div style="font-size:11px;color:#166534;margin-top:1px">✍️ ยอมรับข้อตกลงรักษาความลับ ${thDate(String(p.confidentiality_accepted_at||'').slice(0,10))}</div>`
+            :`<div style="font-size:11px;color:#b45309;margin-top:1px">⚠️ ยังไม่ได้ยอมรับข้อตกลงรักษาความลับ</div>`):''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
@@ -4613,6 +4616,26 @@ function showAuthWall(mode='login'){
       </div>
       <button class="btn btn-outline btn-block" onclick="showAuthWall('login')">← กลับหน้าเข้าสู่ระบบ</button>
     </div>`
+  } else if(mode==='confidentiality'){
+    const terms=confidentialityTerms()
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="font-size:36px;margin-bottom:4px">🔐</div>
+      <div style="font-size:17px;font-weight:800;color:var(--primary);line-height:1.4">ข้อตกลงรักษาความลับ<br>และคุ้มครองข้อมูลส่วนบุคคล</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">อ่านและยอมรับก่อนเข้าดูข้อมูลผู้ป่วย</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;max-height:46vh;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--text1)">
+      <p style="margin:0 0 8px">ข้าพเจ้า <b>${esc(currentDisplayName||'')}</b> ในฐานะผู้ใช้งานระบบ JitHome ของ <b>${esc(hospitalName)}</b> ซึ่งจำเป็นต้องเข้าถึงข้อมูลส่วนบุคคลและข้อมูลสุขภาพของผู้ป่วย ตกลงดังต่อไปนี้</p>
+      <ol style="margin:0;padding-left:20px">${terms.map(t=>`<li style="margin-bottom:6px">${esc(t)}</li>`).join('')}</ol>
+      <p style="margin:8px 0 0;font-size:11.5px;color:var(--text3)">ระบบจะบันทึกชื่อผู้ใช้ วันและเวลาที่ยอมรับไว้เป็นหลักฐาน</p>
+    </div>
+    <label style="display:flex;align-items:flex-start;gap:8px;margin:14px 0 8px;font-size:13px;cursor:pointer;line-height:1.5">
+      <input type="checkbox" id="conf-check" style="margin-top:3px;flex-shrink:0;width:18px;height:18px" onchange="document.getElementById('conf-accept-btn').disabled=!this.checked">
+      <span>ข้าพเจ้าได้อ่านและเข้าใจข้อตกลงทั้งหมดแล้ว และ<b>ยินยอมปฏิบัติตาม</b></span>
+    </label>
+    <div id="conf-error" style="color:var(--red);font-size:12px;margin-bottom:8px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="conf-accept-btn" disabled onclick="acceptConfidentiality()">ยอมรับและเข้าใช้งาน</button>
+    <button class="btn btn-outline btn-block" style="margin-top:8px" onclick="declineConfidentiality()">ไม่ยอมรับ (ออกจากระบบ)</button>`
   } else if(mode==='suspended'||mode==='rejected'){
     const sus=mode==='suspended'
     ct.innerHTML=`
@@ -4736,7 +4759,44 @@ async function loginUser(){
   await _postLoginSuccess(email)
 }
 
+// ─── ข้อตกลงรักษาความลับข้อมูลผู้ป่วย ─────────────────────────────
+// ต้องยอมรับก่อนเห็นข้อมูลผู้ป่วย · บันทึกผู้ยอมรับ + เวลา ใน user_profiles (หลักฐาน)
+// แก้ข้อความเมื่อใด ให้เปลี่ยน CONF_VERSION → ทุกคนต้องยอมรับใหม่
+const CONF_VERSION='v1-2569-10'
+let _myProfile=null, _confNext=null
+function confidentialityTerms(){
+  return [
+    'ใช้ข้อมูลผู้ป่วยเฉพาะเพื่อการดูแลและติดตามผู้ป่วยตามหน้าที่ที่ได้รับมอบหมายเท่านั้น',
+    'รักษาข้อมูลผู้ป่วยไว้เป็นความลับ ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 จะไม่เปิดเผย เล่าต่อ หรือนำข้อมูลไปใช้เพื่อประโยชน์ของตนเองหรือผู้อื่นโดยมิชอบ',
+    'จะไม่ถ่ายภาพหน้าจอ คัดลอก ดาวน์โหลด หรือส่งต่อข้อมูลผู้ป่วยทางแอปแชท โซเชียลมีเดีย หรือช่องทางอื่นใด เว้นแต่ได้รับอนุญาตจากเจ้าหน้าที่ '+hospitalName,
+    'จะเก็บรหัสผ่านไว้เป็นความลับ ไม่ให้ผู้อื่นใช้บัญชีของข้าพเจ้า และออกจากระบบเมื่อใช้งานเสร็จ',
+    'จะแจ้งเจ้าหน้าที่ '+hospitalName+' ทันที เมื่อพบหรือสงสัยว่าข้อมูลรั่วไหล หรือโทรศัพท์ที่ใช้เข้าระบบสูญหาย',
+    'เมื่อพ้นจากหน้าที่ จะลบข้อมูลผู้ป่วยที่อาจอยู่ในเครื่องของข้าพเจ้า และจะไม่เข้าใช้ระบบอีก',
+    'หากข้าพเจ้าฝ่าฝืนข้อตกลงนี้ ยินยอมให้ระงับการใช้งานระบบ และรับผิดชอบตามที่กฎหมายกำหนด',
+  ]
+}
+function _needsConfidentiality(){return _myProfile?.confidentiality_version!==CONF_VERSION}
+function _showConfidentiality(next){_confNext=next;showAuthWall('confidentiality')}
+async function acceptConfidentiality(){
+  const btn=document.getElementById('conf-accept-btn'),err=document.getElementById('conf-error')
+  if(!document.getElementById('conf-check')?.checked){err.textContent='กรุณาติ๊กยืนยันว่าได้อ่านและยอมรับข้อตกลง';return}
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  const at=new Date().toISOString()
+  const{error}=await sb.from('user_profiles').update({confidentiality_version:CONF_VERSION,confidentiality_accepted_at:at}).eq('id',currentUser.id)
+  if(error){err.textContent='❌ บันทึกไม่สำเร็จ: '+error.message+' — กรุณาติดต่อผู้ดูแลระบบ';btn.disabled=false;btn.textContent='ยอมรับและเข้าใช้งาน';return}
+  _myProfile={..._myProfile,confidentiality_version:CONF_VERSION,confidentiality_accepted_at:at}
+  await auditLog('confidentiality_accepted','user_profile',currentUser.id,{version:CONF_VERSION})
+  const next=_confNext;_confNext=null
+  if(next)await next()
+}
+async function declineConfidentiality(){
+  if(!confirm('ไม่ยอมรับข้อตกลง?\n\nระบบจะออกจากระบบ และจะเข้าดูข้อมูลผู้ป่วยไม่ได้จนกว่าจะยอมรับ'))return
+  await auditLog('confidentiality_declined','user_profile',currentUser?.id,{version:CONF_VERSION})
+  await logoutUser()
+}
+
 async function _postLoginSuccess(email=''){
+  if(_needsConfidentiality()){_showConfidentiality(()=>_postLoginSuccess(email));return}
   _mfaEmail=''
   startSessionTimer()
   hideAuthWall()
@@ -4912,6 +4972,7 @@ async function logoutUser(){
 // ─── Profile / Role ──────────────────────────────────────────────
 async function loadProfile(user){
   const{data}=await sb.from('user_profiles').select('*').eq('id',user.id).single()
+  _myProfile=data||null
   if(data){
     currentRole=data.role
     currentDisplayName=data.display_name||user.email.split('@')[0]
@@ -5357,6 +5418,7 @@ async function init(){
       if(blocked)return
     }
   }
+  if(_needsConfidentiality()){_showConfidentiality(()=>_postLoginSuccess(''));return}
   startSessionTimer()
   updateUserUI()
   await loadAndNav()
