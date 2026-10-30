@@ -1837,6 +1837,7 @@ async function renderAdmin(el) {
   <div class="form-section">
     <h3>⚙️ ตั้งค่า</h3>
     <div class="form-group"><label>ชื่อโรงพยาบาล / หน่วยงาน</label><input id="s-hospital" value="${esc(settings.hospital_name||hospitalName)}"></div>
+    <div class="form-group"><label>ผู้รับแจ้งเหตุข้อมูลรั่วไหล (แสดงในข้อตกลงรักษาความลับ)</label><input id="s-privacy-contact" placeholder="เช่น ผอ.รพ.สต. โทร 08x-xxx-xxxx" value="${esc(settings.privacy_contact||'')}"></div>
     <div class="form-group"><label>ข้อความใต้ชื่อแอป — บรรทัด 1</label><input id="s-subtitle-1" value="${esc((settings.app_subtitle||appSubtitle).split('\n')[0]||'')}"></div>
     <div class="form-group"><label>ข้อความใต้ชื่อแอป — บรรทัด 2 (ไม่บังคับ)</label><input id="s-subtitle-2" value="${esc((settings.app_subtitle||appSubtitle).split('\n')[1]||'')}"></div>
     <button class="btn btn-primary" style="width:auto;padding:9px 20px" id="settings-btn" onclick="saveSettings()">บันทึกการตั้งค่า</button>
@@ -2681,7 +2682,7 @@ async function testLine(){
 
 async function sendLineVisitReport(visitData){
   try{
-    const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
+    const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${maskPersonName(visitData.patient_name)} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
     await callNotify('visit_report',msg) // เซิร์ฟเวอร์ข้ามให้เองถ้าปิด line_enabled
   }catch(e){console.warn('LINE notify error:',e)}
 }
@@ -2988,7 +2989,8 @@ async function saveSettings(){
   try{
     const upserts=[
       {setting_key:'hospital_name',setting_value:val},
-      {setting_key:'app_subtitle',setting_value:sub||appSubtitle}
+      {setting_key:'app_subtitle',setting_value:sub||appSubtitle},
+      {setting_key:'privacy_contact',setting_value:(document.getElementById('s-privacy-contact')?.value||'').trim()}
     ]
     const{error}=await sb.from('app_settings').upsert(upserts,{onConflict:'setting_key'})
     if(error)throw error
@@ -4625,9 +4627,9 @@ function showAuthWall(mode='login'){
       <div style="font-size:12px;color:var(--text3);margin-top:4px">อ่านและยอมรับก่อนเข้าดูข้อมูลผู้ป่วย</div>
     </div>
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;max-height:46vh;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--text1)">
-      <p style="margin:0 0 8px">ข้าพเจ้า <b>${esc(currentDisplayName||'')}</b> ในฐานะผู้ใช้งานระบบ JitHome ของ <b>${esc(hospitalName)}</b> ซึ่งจำเป็นต้องเข้าถึงข้อมูลส่วนบุคคลและข้อมูลสุขภาพของผู้ป่วย ตกลงดังต่อไปนี้</p>
+      <p style="margin:0 0 8px">ข้าพเจ้า <b>${esc(currentDisplayName||'')}</b> ผู้ใช้งานระบบ JitHome ของ <b>${esc(hospitalName)}</b> ซึ่งเป็นผู้ควบคุมข้อมูลส่วนบุคคล รับทราบว่าข้อมูลในระบบเป็น<b>ข้อมูลสุขภาพซึ่งเป็นข้อมูลส่วนบุคคลที่อ่อนไหว</b> และการที่บุคคลใดเป็นผู้ป่วยจิตเวชถือเป็นความลับ จึงตกลงดังนี้</p>
       <ol style="margin:0;padding-left:20px">${terms.map(t=>`<li style="margin-bottom:6px">${esc(t)}</li>`).join('')}</ol>
-      <p style="margin:8px 0 0;font-size:11.5px;color:var(--text3)">ระบบจะบันทึกชื่อผู้ใช้ วันและเวลาที่ยอมรับไว้เป็นหลักฐาน</p>
+      <p style="margin:8px 0 0;font-size:11.5px;color:var(--text3)">ระบบบันทึกการเข้าใช้งานและการแก้ไขข้อมูลของข้าพเจ้าไว้เพื่อความปลอดภัย รวมถึงชื่อ วัน และเวลาที่ยอมรับข้อตกลงนี้</p>
     </div>
     <label style="display:flex;align-items:flex-start;gap:8px;margin:14px 0 8px;font-size:13px;cursor:pointer;line-height:1.5">
       <input type="checkbox" id="conf-check" style="margin-top:3px;flex-shrink:0;width:18px;height:18px" onchange="document.getElementById('conf-accept-btn').disabled=!this.checked">
@@ -4763,24 +4765,37 @@ async function loginUser(){
 // ต้องยอมรับทุกครั้งที่เข้าใช้งาน (เปิดแอป / login) ก่อนเห็นข้อมูลผู้ป่วย
 // จำการยอมรับไว้ใน sessionStorage ของแท็บนั้น: รีเฟรชไม่ถามซ้ำ ปิดแอป/แท็บ หรือออกจากระบบ แล้วถามใหม่
 // บันทึกเวลายอมรับล่าสุดใน user_profiles + audit_logs ทุกครั้ง (หลักฐาน)
-const CONF_VERSION='v1-2569-10'
-let _myProfile=null, _confNext=null
+const CONF_VERSION='v2-2569-10'
+let _myProfile=null, _confNext=null, privacyContact=''
+// ชื่อแบบปิดบางส่วนสำหรับข้อความแจ้งเตือนในกลุ่มแชท เช่น "นาง สมหมาย แสงหิน" → "ส*** แส***"
+// (ตัดคำนำหน้า · สระหน้า เ แ โ ใ ไ เก็บไว้ 2 ตัวอักษร) — ตรงกับฟังก์ชัน jh_mask_name() ในฐานข้อมูล
+function maskPersonName(n){
+  const t=String(n||'').replace(/^(นางสาว|นาง|นาย|น\.?\s*ส\.?|ด\.?\s*ช\.?|ด\.?\s*ญ\.?)[\s.]*/,'').replace(/\./g,' ').trim()
+  return t.split(/\s+/).filter(Boolean).map(w=>w.slice(0,/^[เแโใไ]/.test(w)?2:1)+'***').join(' ')||'ผู้ป่วย'
+}
 function confidentialityTerms(){
+  const who=privacyContact||('เจ้าหน้าที่ '+hospitalName+' ที่รับผิดชอบระบบ')
   return [
-    'ใช้ข้อมูลผู้ป่วยเฉพาะเพื่อการดูแลและติดตามผู้ป่วยตามหน้าที่ที่ได้รับมอบหมายเท่านั้น',
-    'รักษาข้อมูลผู้ป่วยไว้เป็นความลับ ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 จะไม่เปิดเผย เล่าต่อ หรือนำข้อมูลไปใช้เพื่อประโยชน์ของตนเองหรือผู้อื่นโดยมิชอบ',
-    'จะไม่ถ่ายภาพหน้าจอ คัดลอก ดาวน์โหลด หรือส่งต่อข้อมูลผู้ป่วยทางแอปแชท โซเชียลมีเดีย หรือช่องทางอื่นใด เว้นแต่ได้รับอนุญาตจากเจ้าหน้าที่ '+hospitalName,
-    'จะเก็บรหัสผ่านไว้เป็นความลับ ไม่ให้ผู้อื่นใช้บัญชีของข้าพเจ้า และออกจากระบบเมื่อใช้งานเสร็จ',
-    'จะแจ้งเจ้าหน้าที่ '+hospitalName+' ทันที เมื่อพบหรือสงสัยว่าข้อมูลรั่วไหล หรือโทรศัพท์ที่ใช้เข้าระบบสูญหาย',
-    'เมื่อพ้นจากหน้าที่ จะลบข้อมูลผู้ป่วยที่อาจอยู่ในเครื่องของข้าพเจ้า และจะไม่เข้าใช้ระบบอีก',
-    'หากข้าพเจ้าฝ่าฝืนข้อตกลงนี้ ยินยอมให้ระงับการใช้งานระบบ และรับผิดชอบตามที่กฎหมายกำหนด',
+    'ใช้ข้อมูลเฉพาะเพื่อดูแล ติดตาม และส่งต่อผู้ป่วยตามหน้าที่ที่ได้รับมอบหมาย และเข้าดูเฉพาะผู้ป่วยที่อยู่ในความรับผิดชอบของข้าพเจ้า',
+    'รักษาข้อมูลเป็นความลับ ไม่เปิดเผย ไม่เล่าต่อ และไม่พูดคุยเรื่องผู้ป่วยกับผู้ที่ไม่เกี่ยวข้อง รวมถึงครอบครัว เพื่อนบ้าน หรือคนในชุมชน',
+    'ไม่ถ่ายภาพหน้าจอ ไม่จดหรือคัดลอกข้อมูลออกนอกระบบ และไม่ส่งต่อทาง LINE, Facebook หรือช่องทางอื่น เว้นแต่เป็นการส่งต่อเพื่อการรักษาตามที่เจ้าหน้าที่ '+hospitalName+' กำหนด',
+    'ดูแลบัญชีและโทรศัพท์ให้ปลอดภัย: ไม่บอกรหัสผ่าน ไม่ให้ผู้อื่นใช้บัญชี ตั้งรหัสล็อกหน้าจอโทรศัพท์ ไม่เข้าระบบจากเครื่องของผู้อื่น และออกจากระบบเมื่อใช้เสร็จ',
+    'แจ้ง '+who+' ทันที เมื่อโทรศัพท์หาย รหัสผ่านรั่ว หรือสงสัยว่าข้อมูลรั่วไหล',
+    'เมื่อพ้นจากหน้าที่ จะลบข้อมูลผู้ป่วยที่อาจอยู่ในเครื่อง คืนเอกสารที่เกี่ยวข้อง และไม่เข้าใช้ระบบอีก ทั้งนี้หน้าที่รักษาความลับยังมีผลต่อไปแม้พ้นจากหน้าที่แล้ว',
+    'หากฝ่าฝืน ยินยอมให้ระงับการใช้งานทันที และอาจต้องรับผิดทางแพ่งและทางอาญาตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 พระราชบัญญัติสุขภาพแห่งชาติ พ.ศ. 2550 พระราชบัญญัติสุขภาพจิต พ.ศ. 2551 และกฎหมายที่เกี่ยวข้อง',
   ]
 }
-const _confKey=()=>'jh_conf_'+(currentUser?.id||'')
 function _needsConfidentiality(){
   try{return sessionStorage.getItem(_confKey())!==CONF_VERSION}catch(e){return true}
 }
-function _showConfidentiality(next){_confNext=next;showAuthWall('confidentiality')}
+async function _showConfidentiality(next){
+  _confNext=next
+  try{
+    const{data}=await sb.from('app_settings').select('setting_key,setting_value').in('setting_key',['hospital_name','privacy_contact'])
+    for(const r of (data||[])){if(r.setting_key==='hospital_name'&&r.setting_value)hospitalName=r.setting_value;if(r.setting_key==='privacy_contact')privacyContact=r.setting_value||''}
+  }catch(e){}
+  showAuthWall('confidentiality')
+}
 async function acceptConfidentiality(){
   const btn=document.getElementById('conf-accept-btn'),err=document.getElementById('conf-error')
   if(!document.getElementById('conf-check')?.checked){err.textContent='กรุณาติ๊กยืนยันว่าได้อ่านและยอมรับข้อตกลง';return}
