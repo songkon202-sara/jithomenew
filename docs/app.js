@@ -4766,6 +4766,7 @@ async function loginUser(){
 // จำการยอมรับไว้ใน sessionStorage ของแท็บนั้น: รีเฟรชไม่ถามซ้ำ ปิดแอป/แท็บ หรือออกจากระบบ แล้วถามใหม่
 // บันทึกเวลายอมรับล่าสุดใน user_profiles + audit_logs ทุกครั้ง (หลักฐาน)
 const CONF_VERSION='v2-2569-10'
+const _confKey=()=>'jh_conf_'+(currentUser?.id||'')
 let _myProfile=null, _confNext=null, privacyContact=''
 function confidentialityTerms(){
   const who=privacyContact||('เจ้าหน้าที่ '+hospitalName+' ที่รับผิดชอบระบบ')
