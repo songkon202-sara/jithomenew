@@ -2682,7 +2682,7 @@ async function testLine(){
 
 async function sendLineVisitReport(visitData){
   try{
-    const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${maskPersonName(visitData.patient_name)} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
+    const msg=`🏡 รายงานเยี่ยมบ้าน — ${visitData.visit_type==='staff'?'เจ้าหน้าที่':'อสม.'}\n👤 ${visitData.patient_name} (${visitData.village})\n📅 ${visitData.visit_date}\n👩‍⚕️ ผู้เยี่ยม: ${visitData.visitor||'-'}\n✅ ผ่าน: ${visitData.score} รายการ${visitData.refer?'\n⚠️ ส่งต่อ/รายงานเร่งด่วน':''}`
     await callNotify('visit_report',msg) // เซิร์ฟเวอร์ข้ามให้เองถ้าปิด line_enabled
   }catch(e){console.warn('LINE notify error:',e)}
 }
@@ -4767,12 +4767,6 @@ async function loginUser(){
 // บันทึกเวลายอมรับล่าสุดใน user_profiles + audit_logs ทุกครั้ง (หลักฐาน)
 const CONF_VERSION='v2-2569-10'
 let _myProfile=null, _confNext=null, privacyContact=''
-// ชื่อแบบปิดบางส่วนสำหรับข้อความแจ้งเตือนในกลุ่มแชท เช่น "นาง สมหมาย แสงหิน" → "ส*** แส***"
-// (ตัดคำนำหน้า · สระหน้า เ แ โ ใ ไ เก็บไว้ 2 ตัวอักษร) — ตรงกับฟังก์ชัน jh_mask_name() ในฐานข้อมูล
-function maskPersonName(n){
-  const t=String(n||'').replace(/^(นางสาว|นาง|นาย|น\.?\s*ส\.?|ด\.?\s*ช\.?|ด\.?\s*ญ\.?)[\s.]*/,'').replace(/\./g,' ').trim()
-  return t.split(/\s+/).filter(Boolean).map(w=>w.slice(0,/^[เแโใไ]/.test(w)?2:1)+'***').join(' ')||'ผู้ป่วย'
-}
 function confidentialityTerms(){
   const who=privacyContact||('เจ้าหน้าที่ '+hospitalName+' ที่รับผิดชอบระบบ')
   return [
