@@ -10,6 +10,11 @@
 --     อสม. ที่ยังไม่ได้กำหนดหมู่บ้าน ยังเห็นทั้งหมดเหมือนเดิม จนกว่าแอดมินจะกำหนด
 -- ═══════════════════════════════════════════════════════════════════
 
+-- ─── 0. ผู้รับแจ้งเหตุข้อมูลรั่วไหล (แสดงในข้อตกลงรักษาความลับ · แก้ได้ในหน้าแอดมิน) ───
+INSERT INTO public.app_settings (setting_key, setting_value)
+VALUES ('privacy_contact', 'นายทวัชชัย สาระภี พยาบาลวิชาชีพ โทร 084-431-2401')
+ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value;
+
 -- ─── 1. งานตั้งเวลา 07:00 น. (00:00 UTC) เรียกฟังก์ชันโดยตรง ───────
 -- เดิมเรียก Edge Function send-telegram พร้อม Service Role Key ที่เก็บไว้ในตาราง cron
 DO $$
