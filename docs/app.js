@@ -1837,6 +1837,7 @@ async function renderAdmin(el) {
   <div class="form-section">
     <h3>⚙️ ตั้งค่า</h3>
     <div class="form-group"><label>ชื่อโรงพยาบาล / หน่วยงาน</label><input id="s-hospital" value="${esc(settings.hospital_name||hospitalName)}"></div>
+    <div class="form-group"><label>ผู้รับแจ้งเหตุข้อมูลรั่วไหล (แสดงในข้อตกลงรักษาความลับ)</label><input id="s-privacy-contact" placeholder="เช่น ผอ.รพ.สต. โทร 08x-xxx-xxxx" value="${esc(settings.privacy_contact||'')}"></div>
     <div class="form-group"><label>ข้อความใต้ชื่อแอป — บรรทัด 1</label><input id="s-subtitle-1" value="${esc((settings.app_subtitle||appSubtitle).split('\n')[0]||'')}"></div>
     <div class="form-group"><label>ข้อความใต้ชื่อแอป — บรรทัด 2 (ไม่บังคับ)</label><input id="s-subtitle-2" value="${esc((settings.app_subtitle||appSubtitle).split('\n')[1]||'')}"></div>
     <button class="btn btn-primary" style="width:auto;padding:9px 20px" id="settings-btn" onclick="saveSettings()">บันทึกการตั้งค่า</button>
@@ -2209,8 +2210,9 @@ function memberCard(p,showVillage=false){
   const lockInfo=window._activeLockouts&&window._activeLockouts[p.email]
   const isLocked=!!lockInfo
   const lockMins=isLocked?Math.ceil((new Date(lockInfo.locked_until)-new Date())/60000):0
+  const isSuspended=p.status==='suspended'
   return `
-  <div data-member-id="${p.id}" style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px solid ${isLocked?'#fca5a5':'var(--border)'}">
+  <div data-member-id="${p.id}" style="background:${isSuspended?'#f3f4f6':'var(--bg)'};border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1px ${isSuspended?'dashed #9ca3af':`solid ${isLocked?'#fca5a5':'var(--border)'}`}">
     ${isLocked?`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
       <div style="font-size:12px;color:#dc2626;font-weight:700">🔒 บัญชีถูกล็อก — เหลือ ${lockMins} นาที (ผิด ${lockInfo.attempt_count} ครั้ง)</div>
       ${canDo('admin')?`<button onclick="adminUnlockAccount('${jsStr(p.email)}')" style="padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">🔓 ปลดล็อก</button>`:''}
@@ -2219,12 +2221,16 @@ function memberCard(p,showVillage=false){
       <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
         <div style="width:34px;height:34px;border-radius:50%;background:${isLocked?'#ef4444':ROLE_COLOR[p.role]||'var(--primary)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${isLocked?'🔒':(p.email||'?').slice(0,2).toUpperCase()}</div>
         <div style="min-width:0;flex:1">
-          <div style="display:flex;align-items:center;gap:6px">
-            <div style="font-size:13px;font-weight:700">${esc(p.display_name||p.email)}</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div style="font-size:13px;font-weight:700${isSuspended?';color:var(--text3);text-decoration:line-through':''}">${esc(p.display_name||p.email)}</div>
+            ${isSuspended?`<span style="font-size:10px;font-weight:700;color:#4b5563;background:#e5e7eb;border-radius:20px;padding:2px 8px">⏸️ ระงับการใช้งาน</span>`:''}
             ${canEdit?`<button onclick="editMemberName('${p.id}','${jsStr(p.display_name||'')}')" aria-label="แก้ไขชื่อ" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 4px;font-size:12px" title="แก้ไขชื่อ">✏️</button>`:''}
           </div>
           <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
           ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace;margin-top:1px">🪪 ${maskNationalId(p.national_id)}</div>`:''}
+          ${canDo('admin')?(p.confidentiality_accepted_at
+            ?`<div style="font-size:11px;color:#166534;margin-top:1px">✍️ ยอมรับข้อตกลงล่าสุด ${thDate(String(p.confidentiality_accepted_at).slice(0,10))} ${new Date(p.confidentiality_accepted_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} น.</div>`
+            :`<div style="font-size:11px;color:#b45309;margin-top:1px">⚠️ ยังไม่เคยยอมรับข้อตกลงรักษาความลับ</div>`):''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
@@ -2233,6 +2239,9 @@ function memberCard(p,showVillage=false){
         ${['admin','staff','aosomo','viewer'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${ROLE_LABEL[r]}</option>`).join('')}
       </select>
       ${p.role==='aosomo'&&p.email?.endsWith('@jithome.local')?`<button onclick="adminResetAosomoPassword('${p.id}','${jsStr(p.display_name||p.email)}')" aria-label="รีเซ็ตรหัสผ่าน" style="background:none;border:none;cursor:pointer;color:#d97706;padding:4px;font-size:16px;line-height:1" title="รีเซ็ตรหัสผ่าน">🔑</button>`:''}
+      ${isSuspended
+        ?`<button onclick="setMemberSuspended('${p.id}','${jsStr(p.display_name||p.email)}','${p.role}',false)" aria-label="เปิดใช้งานอีกครั้ง" title="เปิดใช้งานอีกครั้ง" style="padding:4px 10px;background:#166534;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">▶️ เปิดใช้งาน</button>`
+        :`<button onclick="setMemberSuspended('${p.id}','${jsStr(p.display_name||p.email)}','${p.role}',true)" aria-label="ระงับการใช้งาน" title="ระงับการใช้งานชั่วคราว" style="padding:4px 10px;background:#fff;color:#b45309;border:1px solid #f59e0b;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap">⏸️ ระงับ</button>`}
       <button onclick="deleteMember('${p.id}','${jsStr(p.display_name||p.email)}')" aria-label="ลบสมาชิก" style="background:none;border:none;cursor:pointer;color:#fca5a5;padding:4px;font-size:16px;line-height:1" title="ลบสมาชิก">🗑️</button>`:`
       <span style="font-size:11px;color:var(--text3);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">${ROLE_LABEL[p.role]||p.role}</span>`}
       </div>
@@ -2364,6 +2373,25 @@ async function rejectPendingMember(userId){
   const{error}=await sb.from('user_profiles').update({status:'rejected'}).eq('id',userId)
   if(error){alert('❌ '+error.message);return}
   auditLog('member_rejected','user_profile',userId,{by:currentDisplayName||currentRole})
+  loadMembersList()
+}
+
+// ระงับ = เข้าระบบและเห็นข้อมูลไม่ได้ทันที (RLS ใช้ jh_role() ซึ่งนับเฉพาะ status active) แต่เก็บบัญชีไว้ เปิดคืนได้
+async function setMemberSuspended(userId, displayName, role, suspend){
+  if(!canDo('admin')){alert('ไม่มีสิทธิ์');return}
+  if(userId===currentUser?.id){alert('ระงับบัญชีของตัวเองไม่ได้');return}
+  if(suspend&&role==='admin'){
+    const{count}=await sb.from('user_profiles').select('id',{count:'exact',head:true}).eq('role','admin').or('status.is.null,status.eq.active')
+    if((count||0)<=1){alert('ระงับไม่ได้ — ต้องมีผู้ดูแลระบบที่ใช้งานได้อย่างน้อย 1 คน');return}
+  }
+  const msg=suspend
+    ?`ระงับการใช้งาน "${displayName}"?\n\n• เข้าระบบและดูข้อมูลไม่ได้ทันที (รวมถึงเครื่องที่เปิดค้างไว้)\n• ข้อมูลที่เคยบันทึกยังอยู่ครบ\n• เปิดใช้งานคืนได้ทุกเมื่อ`
+    :`เปิดใช้งาน "${displayName}" อีกครั้ง?`
+  if(!confirm(msg))return
+  const{error}=await sb.from('user_profiles').update({status:suspend?'suspended':'active'}).eq('id',userId)
+  if(error){alert('❌ ไม่สำเร็จ: '+error.message);return}
+  auditLog(suspend?'member_suspended':'member_unsuspended','user_profile',userId,{name:displayName,by:currentDisplayName||currentRole})
+  showToast(suspend?`⏸️ ระงับ "${displayName}" แล้ว`:`▶️ เปิดใช้งาน "${displayName}" แล้ว`)
   loadMembersList()
 }
 
@@ -2510,10 +2538,13 @@ async function mergeAndSavePatients(records, confirmMsg){
     const{error}=await sb.from('patients').insert(toInsert.slice(i,i+batchSize))
     if(error)throw error
   }
-  for(const u of toUpdate){
-    const{id,...fields}=u
-    const{error}=await sb.from('patients').update(fields).eq('id',id)
-    if(error)throw error
+  // อัปเดตพร้อมกันครั้งละ 10 แถว (เดิมทีละแถว — 200 แถว = 200 รอบ)
+  const concurrency=10
+  for(let i=0;i<toUpdate.length;i+=concurrency){
+    const results=await Promise.all(toUpdate.slice(i,i+concurrency).map(({id,...fields})=>
+      sb.from('patients').update(fields).eq('id',id)))
+    const failed=results.find(r=>r.error)
+    if(failed)throw failed.error
   }
   alert(`✅ นำเข้าสำเร็จ\nใหม่: ${toInsert.length} ราย | อัปเดต: ${toUpdate.length} ราย`)
   await loadPatients()
@@ -2958,7 +2989,8 @@ async function saveSettings(){
   try{
     const upserts=[
       {setting_key:'hospital_name',setting_value:val},
-      {setting_key:'app_subtitle',setting_value:sub||appSubtitle}
+      {setting_key:'app_subtitle',setting_value:sub||appSubtitle},
+      {setting_key:'privacy_contact',setting_value:(document.getElementById('s-privacy-contact')?.value||'').trim()}
     ]
     const{error}=await sb.from('app_settings').upsert(upserts,{onConflict:'setting_key'})
     if(error)throw error
@@ -4381,7 +4413,10 @@ async function saveVisitRecord(){
   const refer=document.getElementById('v-refer')?.checked||false
   const btn=document.getElementById('v-save-btn')
   if(!name||!date){alert('กรุณากรอกชื่อและวันที่');return}
-  const found=allPatients.find(p=>p.name===name)
+  // จับคู่ชื่อแบบไม่สนช่องว่างซ้ำ — ถ้าไม่พบ ต้องยืนยันก่อน (เดิมบันทึก patient_id เป็น null เงียบๆ)
+  const normName=v=>String(v||'').replace(/\s+/g,' ').trim()
+  const found=allPatients.find(p=>normName(p.name)===normName(name))
+  if(!found&&!confirm(`⚠️ ไม่พบ "${name}" ในทะเบียนผู้ป่วย\n\nบันทึกนี้จะไม่ผูกกับประวัติผู้ป่วย (ไม่ขึ้นในหน้าประวัติของผู้ป่วยคนใด)\n\nกด "ตกลง" เพื่อบันทึกต่อ หรือ "ยกเลิก" เพื่อกลับไปเลือกชื่อจากรายการ`))return
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   // รวม OAS ลงใน note ถ้าเป็น staff
   const oasMax=Math.max(_oasScores.s1,_oasScores.s2,_oasScores.s3)
@@ -4583,6 +4618,37 @@ function showAuthWall(mode='login'){
       </div>
       <button class="btn btn-outline btn-block" onclick="showAuthWall('login')">← กลับหน้าเข้าสู่ระบบ</button>
     </div>`
+  } else if(mode==='confidentiality'){
+    const terms=confidentialityTerms()
+    ct.innerHTML=`
+    <div style="text-align:center;margin-bottom:14px">
+      <div style="font-size:36px;margin-bottom:4px">🔐</div>
+      <div style="font-size:17px;font-weight:800;color:var(--primary);line-height:1.4">ข้อตกลงรักษาความลับ<br>และคุ้มครองข้อมูลส่วนบุคคล</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">อ่านและยอมรับก่อนเข้าดูข้อมูลผู้ป่วย</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;max-height:46vh;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--text1)">
+      <p style="margin:0 0 8px">ข้าพเจ้า <b>${esc(currentDisplayName||'')}</b> ผู้ใช้งานระบบ JitHome ของ <b>${esc(hospitalName)}</b> ซึ่งเป็นผู้ควบคุมข้อมูลส่วนบุคคล รับทราบว่าข้อมูลในระบบเป็น<b>ข้อมูลสุขภาพซึ่งเป็นข้อมูลส่วนบุคคลที่อ่อนไหว</b> และการที่บุคคลใดเป็นผู้ป่วยจิตเวชถือเป็นความลับ จึงตกลงดังนี้</p>
+      <ol style="margin:0;padding-left:20px">${terms.map(t=>`<li style="margin-bottom:6px">${esc(t)}</li>`).join('')}</ol>
+      <p style="margin:8px 0 0;font-size:11.5px;color:var(--text3)">ระบบบันทึกการเข้าใช้งานและการแก้ไขข้อมูลของข้าพเจ้าไว้เพื่อความปลอดภัย รวมถึงชื่อ วัน และเวลาที่ยอมรับข้อตกลงนี้</p>
+    </div>
+    <label style="display:flex;align-items:flex-start;gap:8px;margin:14px 0 8px;font-size:13px;cursor:pointer;line-height:1.5">
+      <input type="checkbox" id="conf-check" style="margin-top:3px;flex-shrink:0;width:18px;height:18px" onchange="document.getElementById('conf-accept-btn').disabled=!this.checked">
+      <span>ข้าพเจ้าได้อ่านและเข้าใจข้อตกลงทั้งหมดแล้ว และ<b>ยินยอมปฏิบัติตาม</b></span>
+    </label>
+    <div id="conf-error" style="color:var(--red);font-size:12px;margin-bottom:8px;min-height:16px"></div>
+    <button class="btn btn-primary btn-block" id="conf-accept-btn" disabled onclick="acceptConfidentiality()">ยอมรับและเข้าใช้งาน</button>
+    <button class="btn btn-outline btn-block" style="margin-top:8px" onclick="declineConfidentiality()">ไม่ยอมรับ (ออกจากระบบ)</button>`
+  } else if(mode==='suspended'||mode==='rejected'){
+    const sus=mode==='suspended'
+    ct.innerHTML=`
+    <div style="text-align:center;padding:16px 0">
+      <div style="font-size:48px;margin-bottom:12px">${sus?'⏸️':'⛔'}</div>
+      <div style="font-size:20px;font-weight:800;color:#4b5563;margin-bottom:8px">${sus?'บัญชีถูกระงับการใช้งาน':'ไม่สามารถเข้าใช้งานได้'}</div>
+      <div style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--text3);line-height:1.6">
+        ${sus?'ผู้ดูแลระบบระงับบัญชีนี้ไว้ชั่วคราว':'บัญชีนี้ไม่ได้รับอนุมัติหรือถูกลบออกจากระบบ'}<br>หากเห็นว่าไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบของหน่วยงาน
+      </div>
+      <button class="btn btn-outline btn-block" onclick="showAuthWall('login')">← กลับหน้าเข้าสู่ระบบ</button>
+    </div>`
   } else if(mode==='pending'){
     ct.innerHTML=`
     <div style="text-align:center;padding:16px 0">
@@ -4685,6 +4751,7 @@ async function loginUser(){
   await updateLastLogin(data.user.id)
   auditLog('login','auth',data.user.id,{email:data.user.email})
   if(prof?.status==='pending'){hideAuthWall();showAuthWall('pending');return}
+  if(prof?.status==='suspended'){await sb.auth.signOut();showAuthWall('suspended');return}
   if(prof?.status==='rejected'||prof?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
   if(currentRole==='admin'||currentRole==='staff'){
     _mfaEmail=email
@@ -4694,7 +4761,56 @@ async function loginUser(){
   await _postLoginSuccess(email)
 }
 
+// ─── ข้อตกลงรักษาความลับข้อมูลผู้ป่วย ─────────────────────────────
+// ต้องยอมรับทุกครั้งที่เข้าใช้งาน (เปิดแอป / login) ก่อนเห็นข้อมูลผู้ป่วย
+// จำการยอมรับไว้ใน sessionStorage ของแท็บนั้น: รีเฟรชไม่ถามซ้ำ ปิดแอป/แท็บ หรือออกจากระบบ แล้วถามใหม่
+// บันทึกเวลายอมรับล่าสุดใน user_profiles + audit_logs ทุกครั้ง (หลักฐาน)
+const CONF_VERSION='v2-2569-10'
+let _myProfile=null, _confNext=null, privacyContact=''
+function confidentialityTerms(){
+  const who=privacyContact||('เจ้าหน้าที่ '+hospitalName+' ที่รับผิดชอบระบบ')
+  return [
+    'ใช้ข้อมูลเฉพาะเพื่อดูแล ติดตาม และส่งต่อผู้ป่วยตามหน้าที่ที่ได้รับมอบหมาย และเข้าดูเฉพาะผู้ป่วยที่อยู่ในความรับผิดชอบของข้าพเจ้า',
+    'รักษาข้อมูลเป็นความลับ ไม่เปิดเผย ไม่เล่าต่อ และไม่พูดคุยเรื่องผู้ป่วยกับผู้ที่ไม่เกี่ยวข้อง รวมถึงครอบครัว เพื่อนบ้าน หรือคนในชุมชน',
+    'ไม่ถ่ายภาพหน้าจอ ไม่จดหรือคัดลอกข้อมูลออกนอกระบบ และไม่ส่งต่อทาง LINE, Facebook หรือช่องทางอื่น เว้นแต่เป็นการส่งต่อเพื่อการรักษาตามที่เจ้าหน้าที่ '+hospitalName+' กำหนด',
+    'ดูแลบัญชีและโทรศัพท์ให้ปลอดภัย: ไม่บอกรหัสผ่าน ไม่ให้ผู้อื่นใช้บัญชี ตั้งรหัสล็อกหน้าจอโทรศัพท์ ไม่เข้าระบบจากเครื่องของผู้อื่น และออกจากระบบเมื่อใช้เสร็จ',
+    'แจ้ง '+who+' ทันที เมื่อโทรศัพท์หาย รหัสผ่านรั่ว หรือสงสัยว่าข้อมูลรั่วไหล',
+    'เมื่อพ้นจากหน้าที่ จะลบข้อมูลผู้ป่วยที่อาจอยู่ในเครื่อง คืนเอกสารที่เกี่ยวข้อง และไม่เข้าใช้ระบบอีก ทั้งนี้หน้าที่รักษาความลับยังมีผลต่อไปแม้พ้นจากหน้าที่แล้ว',
+    'หากฝ่าฝืน ยินยอมให้ระงับการใช้งานทันที และอาจต้องรับผิดทางแพ่งและทางอาญาตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 พระราชบัญญัติสุขภาพแห่งชาติ พ.ศ. 2550 พระราชบัญญัติสุขภาพจิต พ.ศ. 2551 และกฎหมายที่เกี่ยวข้อง',
+  ]
+}
+function _needsConfidentiality(){
+  try{return sessionStorage.getItem(_confKey())!==CONF_VERSION}catch(e){return true}
+}
+async function _showConfidentiality(next){
+  _confNext=next
+  try{
+    const{data}=await sb.from('app_settings').select('setting_key,setting_value').in('setting_key',['hospital_name','privacy_contact'])
+    for(const r of (data||[])){if(r.setting_key==='hospital_name'&&r.setting_value)hospitalName=r.setting_value;if(r.setting_key==='privacy_contact')privacyContact=r.setting_value||''}
+  }catch(e){}
+  showAuthWall('confidentiality')
+}
+async function acceptConfidentiality(){
+  const btn=document.getElementById('conf-accept-btn'),err=document.getElementById('conf-error')
+  if(!document.getElementById('conf-check')?.checked){err.textContent='กรุณาติ๊กยืนยันว่าได้อ่านและยอมรับข้อตกลง';return}
+  btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  const at=new Date().toISOString()
+  const{error}=await sb.from('user_profiles').update({confidentiality_version:CONF_VERSION,confidentiality_accepted_at:at}).eq('id',currentUser.id)
+  if(error){err.textContent='❌ บันทึกไม่สำเร็จ: '+error.message+' — กรุณาติดต่อผู้ดูแลระบบ';btn.disabled=false;btn.textContent='ยอมรับและเข้าใช้งาน';return}
+  _myProfile={..._myProfile,confidentiality_version:CONF_VERSION,confidentiality_accepted_at:at}
+  try{sessionStorage.setItem(_confKey(),CONF_VERSION)}catch(e){}
+  await auditLog('confidentiality_accepted','user_profile',currentUser.id,{version:CONF_VERSION})
+  const next=_confNext;_confNext=null
+  if(next)await next()
+}
+async function declineConfidentiality(){
+  if(!confirm('ไม่ยอมรับข้อตกลง?\n\nระบบจะออกจากระบบ และจะเข้าดูข้อมูลผู้ป่วยไม่ได้จนกว่าจะยอมรับ'))return
+  await auditLog('confidentiality_declined','user_profile',currentUser?.id,{version:CONF_VERSION})
+  await logoutUser()
+}
+
 async function _postLoginSuccess(email=''){
+  if(_needsConfidentiality()){_showConfidentiality(()=>_postLoginSuccess(email));return}
   _mfaEmail=''
   startSessionTimer()
   hideAuthWall()
@@ -4858,6 +4974,7 @@ async function registerAosomo(){
 }
 
 async function logoutUser(){
+  try{sessionStorage.removeItem(_confKey())}catch(e){}
   await auditLog('logout','auth',currentUser?.id)
   if(_sessionTimer){clearInterval(_sessionTimer);_sessionTimer=null}
   teardownRealtime()
@@ -4870,6 +4987,7 @@ async function logoutUser(){
 // ─── Profile / Role ──────────────────────────────────────────────
 async function loadProfile(user){
   const{data}=await sb.from('user_profiles').select('*').eq('id',user.id).single()
+  _myProfile=data||null
   if(data){
     currentRole=data.role
     currentDisplayName=data.display_name||user.email.split('@')[0]
@@ -5306,6 +5424,7 @@ async function init(){
   const profile=await loadProfile(user)
   await updateLastLogin(user.id)
   if(profile?.status==='pending'){showAuthWall('pending');return}
+  if(profile?.status==='suspended'){await sb.auth.signOut();showAuthWall('suspended');return}
   if(profile?.status==='rejected'||profile?.status==='deleted'){await sb.auth.signOut();showAuthWall('rejected');return}
   if(currentRole==='admin'||currentRole==='staff'){
     const{data:aalData}=await sb.auth.mfa.getAuthenticatorAssuranceLevel()
@@ -5314,6 +5433,7 @@ async function init(){
       if(blocked)return
     }
   }
+  if(_needsConfidentiality()){_showConfidentiality(()=>_postLoginSuccess(''));return}
   startSessionTimer()
   updateUserUI()
   await loadAndNav()
