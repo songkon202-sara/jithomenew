@@ -2227,9 +2227,9 @@ function memberCard(p,showVillage=false){
           </div>
           <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.email)}${p.last_login?` · เข้าล่าสุด ${thDate(p.last_login?.slice(0,10))}`:''}</div>
           ${p.national_id?`<div style="font-size:11px;color:#78350f;font-family:monospace;margin-top:1px">🪪 ${maskNationalId(p.national_id)}</div>`:''}
-          ${canDo('admin')?(p.confidentiality_version===CONF_VERSION
-            ?`<div style="font-size:11px;color:#166534;margin-top:1px">✍️ ยอมรับข้อตกลงรักษาความลับ ${thDate(String(p.confidentiality_accepted_at||'').slice(0,10))}</div>`
-            :`<div style="font-size:11px;color:#b45309;margin-top:1px">⚠️ ยังไม่ได้ยอมรับข้อตกลงรักษาความลับ</div>`):''}
+          ${canDo('admin')?(p.confidentiality_accepted_at
+            ?`<div style="font-size:11px;color:#166534;margin-top:1px">✍️ ยอมรับข้อตกลงล่าสุด ${thDate(String(p.confidentiality_accepted_at).slice(0,10))} ${new Date(p.confidentiality_accepted_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} น.</div>`
+            :`<div style="font-size:11px;color:#b45309;margin-top:1px">⚠️ ยังไม่เคยยอมรับข้อตกลงรักษาความลับ</div>`):''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
@@ -4760,8 +4760,9 @@ async function loginUser(){
 }
 
 // ─── ข้อตกลงรักษาความลับข้อมูลผู้ป่วย ─────────────────────────────
-// ต้องยอมรับก่อนเห็นข้อมูลผู้ป่วย · บันทึกผู้ยอมรับ + เวลา ใน user_profiles (หลักฐาน)
-// แก้ข้อความเมื่อใด ให้เปลี่ยน CONF_VERSION → ทุกคนต้องยอมรับใหม่
+// ต้องยอมรับทุกครั้งที่เข้าใช้งาน (เปิดแอป / login) ก่อนเห็นข้อมูลผู้ป่วย
+// จำการยอมรับไว้ใน sessionStorage ของแท็บนั้น: รีเฟรชไม่ถามซ้ำ ปิดแอป/แท็บ หรือออกจากระบบ แล้วถามใหม่
+// บันทึกเวลายอมรับล่าสุดใน user_profiles + audit_logs ทุกครั้ง (หลักฐาน)
 const CONF_VERSION='v1-2569-10'
 let _myProfile=null, _confNext=null
 function confidentialityTerms(){
@@ -4775,7 +4776,10 @@ function confidentialityTerms(){
     'หากข้าพเจ้าฝ่าฝืนข้อตกลงนี้ ยินยอมให้ระงับการใช้งานระบบ และรับผิดชอบตามที่กฎหมายกำหนด',
   ]
 }
-function _needsConfidentiality(){return _myProfile?.confidentiality_version!==CONF_VERSION}
+const _confKey=()=>'jh_conf_'+(currentUser?.id||'')
+function _needsConfidentiality(){
+  try{return sessionStorage.getItem(_confKey())!==CONF_VERSION}catch(e){return true}
+}
 function _showConfidentiality(next){_confNext=next;showAuthWall('confidentiality')}
 async function acceptConfidentiality(){
   const btn=document.getElementById('conf-accept-btn'),err=document.getElementById('conf-error')
@@ -4785,6 +4789,7 @@ async function acceptConfidentiality(){
   const{error}=await sb.from('user_profiles').update({confidentiality_version:CONF_VERSION,confidentiality_accepted_at:at}).eq('id',currentUser.id)
   if(error){err.textContent='❌ บันทึกไม่สำเร็จ: '+error.message+' — กรุณาติดต่อผู้ดูแลระบบ';btn.disabled=false;btn.textContent='ยอมรับและเข้าใช้งาน';return}
   _myProfile={..._myProfile,confidentiality_version:CONF_VERSION,confidentiality_accepted_at:at}
+  try{sessionStorage.setItem(_confKey(),CONF_VERSION)}catch(e){}
   await auditLog('confidentiality_accepted','user_profile',currentUser.id,{version:CONF_VERSION})
   const next=_confNext;_confNext=null
   if(next)await next()
@@ -4960,6 +4965,7 @@ async function registerAosomo(){
 }
 
 async function logoutUser(){
+  try{sessionStorage.removeItem(_confKey())}catch(e){}
   await auditLog('logout','auth',currentUser?.id)
   if(_sessionTimer){clearInterval(_sessionTimer);_sessionTimer=null}
   teardownRealtime()
