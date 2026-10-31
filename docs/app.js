@@ -4529,6 +4529,7 @@ function showAuthWall(mode='login'){
     <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--text1)">ตั้งรหัสผ่านใหม่</div>
     <div class="form-group"><label>รหัสผ่านใหม่</label><input type="password" id="auth-password" placeholder="อย่างน้อย 6 ตัวอักษร"></div>
     <div class="form-group"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" id="auth-password2" placeholder="พิมพ์รหัสผ่านอีกครั้ง" onkeydown="if(event.key==='Enter')resetPassword()"></div>
+    <div class="form-group" id="reset-mfa-group" style="display:none"><label>รหัส 6 หลักจากแอป Authenticator</label><input type="text" id="reset-mfa-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" onkeydown="if(event.key==='Enter')resetPassword()"></div>
     <div id="auth-error" style="color:var(--red);font-size:12px;margin-bottom:10px;min-height:16px"></div>
     <button class="btn btn-primary btn-block" id="auth-btn" onclick="resetPassword()">บันทึกรหัสผ่านใหม่</button>`
   } else if(mode==='register_aosomo'){
@@ -5180,10 +5181,26 @@ async function resetPassword(){
   if(!/\d/.test(password)){err.textContent='รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว';return}
   if(password!==password2){err.textContent='รหัสผ่านไม่ตรงกัน';return}
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
+  const fail=m=>{err.textContent=m;btn.disabled=false;btn.textContent='บันทึกรหัสผ่านใหม่'}
+  // บัญชีที่เปิด 2FA: Supabase ให้เปลี่ยนรหัสผ่านได้เมื่อยืนยันรหัส 6 หลักแล้ว (AAL2)
+  const{data:aal}=await sb.auth.mfa.getAuthenticatorAssuranceLevel()
+  if(aal?.nextLevel==='aal2'&&aal?.currentLevel!=='aal2'){
+    const grp=document.getElementById('reset-mfa-group'),code=(document.getElementById('reset-mfa-code')?.value||'').trim()
+    if(grp.style.display==='none'||!/^\d{6}$/.test(code)){
+      grp.style.display='';document.getElementById('reset-mfa-code').focus()
+      return fail('บัญชีนี้เปิด 2FA — กรอกรหัส 6 หลักจากแอป Authenticator แล้วกดบันทึกอีกครั้ง')
+    }
+    const{data:f}=await sb.auth.mfa.listFactors()
+    const totp=(f?.totp||[]).find(x=>x.status==='verified')
+    if(!totp)return fail('❌ ไม่พบการตั้งค่า 2FA ของบัญชีนี้ — ติดต่อผู้ดูแลระบบ')
+    const{error:mfaErr}=await sb.auth.mfa.challengeAndVerify({factorId:totp.id,code})
+    if(mfaErr)return fail('❌ รหัส 6 หลักไม่ถูกต้องหรือหมดเวลา ลองรหัสใหม่')
+  }
   const{error}=await sb.auth.updateUser({password})
-  if(error){err.textContent='❌ '+error.message;btn.disabled=false;btn.textContent='บันทึกรหัสผ่านใหม่';return}
+  if(error)return fail('❌ '+error.message)
   err.style.color='var(--green)';err.textContent='✅ เปลี่ยนรหัสผ่านสำเร็จ!'
-  setTimeout(async()=>{hideAuthWall();await loadAndNav()},1500)
+  // โหลดหน้าใหม่ให้ผ่านขั้นตอนเข้าระบบตามปกติ (ตรวจสถานะบัญชี 2FA และข้อตกลงรักษาความลับ)
+  setTimeout(()=>location.replace(location.pathname),1500)
 }
 
 function updateUserUI(){
