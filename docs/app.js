@@ -3178,7 +3178,7 @@ async function openModal(id){
             </select>
           </div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">📅 วันนัดครั้งต่อไป <span style="color:var(--text3);font-weight:400">(เลือกเองได้)</span></label><input type="date" id="er-next-date-${h.id}" oninput="syncIntervalFromNextDate('er-date-${h.id}','er-next-date-${h.id}','er-interval-${h.id}')"></div>
-          <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">ยาที่ฉีด</label><input type="text" id="er-medication-${h.id}" value="${esc(h.medication_name||'')}" placeholder="เช่น Invega 100 mg"></div>
+          <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">ยาที่ฉีด</label><input type="text" id="er-medication-${h.id}" list="med-list" autocomplete="off" value="${esc(h.medication_name||'')}" placeholder="เช่น Invega 100 mg"></div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">หมายเหตุ</label><input type="text" id="er-note-${h.id}" value="${esc(h.note||'')}"></div>
           <div style="display:flex;gap:6px">
             <button class="btn btn-primary" style="flex:1;font-size:12px;padding:6px" id="er-save-${h.id}" onclick="saveEditRecord(${h.id},${p.id})">บันทึก</button>
@@ -3227,7 +3227,7 @@ async function openModal(id){
         <div class="form-group"><label>🏡 วันนัดเยี่ยมบ้านครั้งต่อไป</label><input type="date" id="edit-pt-next-visit-date" style="width:100%;box-sizing:border-box"></div>
       </div>
       <div class="form-group"><label>💊 ยาทานปัจจุบัน</label><input type="text" id="edit-pt-oral-medication" placeholder="เช่น Risperidone 2mg, Haloperidol 5mg" style="width:100%;box-sizing:border-box"></div>
-      <div class="form-group"><label>💉 ยาฉีด</label><input type="text" id="edit-pt-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
+      <div class="form-group"><label>💉 ยาฉีด</label><input type="text" id="edit-pt-medication" list="med-list" autocomplete="off" placeholder="แตะเพื่อเลือกยา หรือพิมพ์ชื่อยา"></div>
       <div class="form-group">
         <label>📷 ภาพถ่ายบริบท <span style="font-size:11px;font-weight:400;color:var(--text3)">เช่น บ้าน สภาพแวดล้อม สถานที่อยู่อาศัย</span></label>
         ${(p.photo_urls&&p.photo_urls.length>0)?`<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:6px">${p.photo_urls.map((url,i)=>`<div style="border-radius:8px;overflow:hidden;border:1px solid var(--border);position:relative"><img src="${esc(url)}" style="max-width:100%;max-height:120px;object-fit:cover;display:block"><button onclick="removePatientPhoto(${p.id},${i})" style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,0.85);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;font-family:'Sarabun',sans-serif">×</button></div>`).join('')}</div>`:''}
@@ -3350,7 +3350,7 @@ async function openModal(id){
       <div class="form-group"><label id="rec-date-label">วันที่ฉีดยา</label><input type="date" id="rec-date" value="${todayISO()}" oninput="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"></div>
       <div class="form-group"><label>รอบนัดต่อไป</label><select id="rec-interval" onchange="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
       <div class="form-group"><label>📅 วันนัดครั้งต่อไป <span style="font-size:11px;color:var(--text3);font-weight:400">(เลือกเองหรือปล่อยให้คำนวณ)</span></label><input type="date" id="rec-next-date" oninput="syncIntervalFromNextDate('rec-date','rec-next-date','rec-interval')"></div>
-      <div class="form-group" id="rec-medication-wrap"><label>ยาที่ฉีด</label><input type="text" id="rec-medication" placeholder="เช่น Invega 100 mg, FLUPENTIXOL 40MG/2ML" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group" id="rec-medication-wrap"><label>ยาที่ฉีด</label><input type="text" id="rec-medication" list="med-list" autocomplete="off" value="${esc(p.medication_name||'')}" placeholder="แตะเพื่อเลือกยา หรือพิมพ์ชื่อยา" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="rec-note" placeholder="ผลการฉีดยา, อาการ..."></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" style="flex:1" id="rec-save-btn" onclick="saveModalRecord(${p.id},'${p.group_color}')">บันทึก</button>
@@ -3709,10 +3709,12 @@ function toggleRecType(type){
     inj.style.cssText='flex:1;padding:6px;border-radius:8px;border:2px solid var(--primary);background:var(--primary-lt);color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;font-family:\'Sarabun\',sans-serif'
     vis.style.cssText='flex:1;padding:6px;border-radius:8px;border:2px solid var(--border);background:#fff;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer;font-family:\'Sarabun\',sans-serif'
     if(lbl)lbl.textContent='วันที่ฉีดยา'
+    const mw=document.getElementById('rec-medication-wrap');if(mw)mw.style.display=''
   }else{
     vis.style.cssText='flex:1;padding:6px;border-radius:8px;border:2px solid #ea580c;background:#fff7ed;color:#ea580c;font-size:12px;font-weight:700;cursor:pointer;font-family:\'Sarabun\',sans-serif'
     inj.style.cssText='flex:1;padding:6px;border-radius:8px;border:2px solid var(--border);background:#fff;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer;font-family:\'Sarabun\',sans-serif'
     if(lbl)lbl.textContent='วันที่เยี่ยมบ้าน'
+    const mw=document.getElementById('rec-medication-wrap');if(mw)mw.style.display='none'
   }
   const intLbl=document.querySelector('label[for="rec-interval"]')||document.getElementById('rec-interval')?.previousElementSibling
   if(intLbl)intLbl.textContent=type==='visit'?'รอบเยี่ยมถัดไป':'รอบนัดต่อไป'
@@ -3721,7 +3723,8 @@ function toggleRecType(type){
 async function saveModalRecord(pid,gc){
   const date=document.getElementById('rec-date')?.value
   const note=document.getElementById('rec-note')?.value||''
-  const medication_name=document.getElementById('rec-medication')?.value||null
+  // ยาที่ฉีด บันทึกเฉพาะการฉีดยา (ช่องนี้เติมยาประจำของผู้ป่วยไว้ให้ล่วงหน้า)
+  const medication_name=window._modalRecType==='visit'?null:((document.getElementById('rec-medication')?.value||'').trim()||null)
   const btn=document.getElementById('rec-save-btn')
   if(!date){alert('กรุณาเลือกวันที่');return}
   const gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
@@ -3735,6 +3738,7 @@ async function saveModalRecord(pid,gc){
     const{data:newRec2,error}=await sb.from('injection_records').insert({patient_id:pid,injection_date:date,group_color:gc,group_label:gl,interval_str,interval_days,note,medication_name:medication_name||null,record_type,recorded_by:currentDisplayName||null}).select('id').single()
     if(error)throw error
     auditLog('create_record','injection_records',newRec2?.id,{patient_id:pid,record_type,injection_date:date})
+    if(medication_name)refreshMedList(true)
     _markOwnWrite(pid)
     if(newRec2)_markOwnWrite(newRec2.id)
     // ถ้ามีวันนัดถัดไป
@@ -5288,7 +5292,7 @@ function openAddPatient(){
       ${[1,2,3,6].map(n=>`<option value="${n}">${n} เดือน</option>`).join('')}
     </select></div>
   </div>
-  <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="np-medication" placeholder="เช่น Invega 100mg, DEPO-A, Flupentixol 40mg"></div>
+  <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="np-medication" list="med-list" autocomplete="off" placeholder="แตะเพื่อเลือกยา หรือพิมพ์ชื่อยา"></div>
   <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;margin-bottom:12px">
     <div style="font-size:12px;font-weight:700;color:#0369a1;margin-bottom:8px">🔒 ความยินยอมตาม PDPA</div>
     <div style="display:flex;align-items:flex-start;gap:8px">
@@ -5400,6 +5404,33 @@ function _onRealtimeChange(payload){
 }
 
 // ─── Init ────────────────────────────────────────────────────────
+// ─── รายการยาฉีดให้เลือก (datalist "med-list") ─────────────────────
+// ยาที่เคยบันทึกในระบบ (ใช้บ่อยขึ้นก่อน) + ยาฉีดจิตเวชออกฤทธิ์นานที่ใช้บ่อย · พิมพ์ชื่อยาใหม่ได้เสมอ
+const DEFAULT_MEDS=['Invega Sustenna 50 mg','Invega Sustenna 75 mg','Invega Sustenna 100 mg','Invega Sustenna 150 mg',
+  'Invega Trinza 350 mg','Haloperidol decanoate 50 mg/mL','Fluphenazine decanoate 25 mg/mL',
+  'Flupentixol decanoate 20 mg/mL','Flupentixol decanoate 40 mg/2 mL','Zuclopenthixol decanoate 200 mg/mL',
+  'Risperdal Consta 25 mg','Abilify Maintena 400 mg']
+let _medListAt=0
+async function refreshMedList(force=false){
+  if(!force&&Date.now()-_medListAt<5*60*1000)return
+  _medListAt=Date.now()
+  const count=new Map(),label=new Map()
+  const add=(n,w)=>{const t=String(n||'').trim().replace(/\s+/g,' ');if(!t)return;const k=t.toLowerCase();count.set(k,(count.get(k)||0)+w);if(!label.has(k))label.set(k,t)}
+  try{
+    const[{data:recs},{data:pts}]=await Promise.all([
+      sb.from('injection_records').select('medication_name').not('medication_name','is',null).order('injection_date',{ascending:false}).limit(2000),
+      sb.from('patients').select('medication_name').not('medication_name','is',null)
+    ])
+    ;(recs||[]).forEach(r=>add(r.medication_name,1))
+    ;(pts||[]).forEach(r=>add(r.medication_name,1))
+  }catch(e){console.warn('refreshMedList:',e)}
+  DEFAULT_MEDS.forEach(n=>add(n,0))
+  const names=[...count.keys()].sort((a,b)=>count.get(b)-count.get(a)||a.localeCompare(b)).map(k=>label.get(k))
+  let dl=document.getElementById('med-list')
+  if(!dl){dl=document.createElement('datalist');dl.id='med-list';document.body.appendChild(dl)}
+  dl.innerHTML=names.map(n=>`<option value="${esc(n)}"></option>`).join('')
+}
+
 async function loadAndNav(){
   try{
     const s=await getSettings()
@@ -5408,6 +5439,7 @@ async function loadAndNav(){
     const{count}=await sb.from('patient_status').select('*',{count:'exact',head:true}).lt('days_until',0)
     if(count){const b=document.getElementById('notif-badge');if(b){b.textContent=count;b.style.display='flex'}}
   }catch(e){console.warn('loadAndNav:',e)}
+  refreshMedList()
   const hash=(location.hash||'').slice(1)
   const startPage = currentRole==='viewer' ? 'overview' : (PAGES.includes(hash)?hash:'dashboard')
   await navigate(startPage)
