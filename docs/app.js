@@ -954,7 +954,10 @@ async function renderOverview(el) {
       <div class="page-title" style="margin-bottom:2px">ภาพรวมผู้ป่วย</div>
       <div class="page-sub">${esc(hospitalName)} · ผู้ป่วยทั้งหมด ${total} ราย · ${thMonthName} ${yy+543}</div>
     </div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+    ${canDo('visit')?`<button onclick="generateColorReport()" style="padding:8px 14px;background:#fff;color:var(--text1);border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;gap:6px;flex-shrink:0">🚦 รายงานแยกกลุ่มสี</button>`:''}
     <button onclick="window.print()" style="padding:8px 14px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;gap:6px;flex-shrink:0">🖨️ พิมพ์/Export</button>
+    </div>
   </div>
 
   ${urgent.length>0?`
@@ -1803,6 +1806,9 @@ async function renderAdmin(el) {
     </div>
     <button onclick="generateMonthlyReport()" style="width:100%;margin-top:12px;padding:10px;background:linear-gradient(135deg,#0a7ea4,#0369a1);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px">
       <span>📄</span><span>พิมพ์รายงานสรุปรายเดือน</span>
+    </button>
+    <button onclick="generateColorReport()" style="width:100%;margin-top:8px;padding:10px;background:linear-gradient(135deg,#dc2626,#ca8a04,#16a34a);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px">
+      <span>🚦</span><span>รายงานผู้ป่วยแยกกลุ่มสี (แดง / เหลือง / เขียว)</span>
     </button>
   </div>
   <div class="form-section">
@@ -2791,6 +2797,91 @@ async function testTelegram(){
     btn.textContent='📨 ทดสอบส่ง'
   }
   btn.disabled=false
+}
+
+// ─── รายงานสรุปผู้ป่วยแยกกลุ่มสี (แดง / เหลือง / เขียว) ───────────────
+// กลุ่มสีมาจากบันทึกการฉีดยาครั้งล่าสุดของผู้ป่วย · อสม. เห็นเฉพาะหมู่บ้านตัวเอง (RLS)
+async function generateColorReport(){
+  const pts=await getPatientsCached()
+  const GROUPS=[
+    {key:'red',   label:'กลุ่มสีแดง',     shape:'▲',color:'#b91c1c',bg:'#fef2f2'},
+    {key:'yellow',label:'กลุ่มสีเหลือง',   shape:'◆',color:'#a16207',bg:'#fefce8'},
+    {key:'green', label:'กลุ่มสีเขียว',    shape:'●',color:'#15803d',bg:'#f0fdf4'},
+    {key:'none',  label:'ยังไม่ได้จัดกลุ่ม',shape:'○',color:'#6b7280',bg:'#f9fafb'},
+  ]
+  const keyOf=p=>['red','yellow','green'].includes(p.group_color)?p.group_color:'none'
+  const by={red:[],yellow:[],green:[],none:[]}
+  pts.forEach(p=>by[keyOf(p)].push(p))
+  const total=pts.length
+  const pct=n=>total?Math.round(n/total*100):0
+  const thDate=d=>{if(!d)return'—';const[y,m,dd]=String(d).slice(0,10).split('-');return `${parseInt(dd)} ${TH_MONTHS_S[parseInt(m)]} ${parseInt(y)+543}`}
+  const vSort=(a,b)=>String(a).localeCompare(String(b),'th',{numeric:true})
+  // ตารางหมู่บ้าน × กลุ่มสี
+  const villages=[...new Set(pts.map(p=>p.village||'ไม่ระบุ'))].sort(vSort)
+  const vRows=villages.map(v=>{
+    const inV=pts.filter(p=>(p.village||'ไม่ระบุ')===v)
+    const c=k=>inV.filter(p=>keyOf(p)===k).length
+    return `<tr><td>${esc(v)}</td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}">${c(g.key)||'–'}</td>`).join('')}<td class="n"><b>${inV.length}</b></td></tr>`
+  }).join('')
+  const status=p=>{
+    const d=parseInt(p.days_until)
+    if(isNaN(d))return '<span style="color:#6b7280">—</span>'
+    if(d<0)return `<span style="color:#b91c1c;font-weight:700">เกินนัด ${-d} วัน</span>`
+    if(d===0)return '<span style="color:#0d9488;font-weight:700">นัดวันนี้</span>'
+    if(d<=7)return `<span style="color:#a16207">อีก ${d} วัน</span>`
+    return `<span style="color:#15803d">อีก ${d} วัน</span>`
+  }
+  const section=g=>{
+    const list=by[g.key].slice().sort((a,b)=>vSort(a.village||'',b.village||'')||String(a.name).localeCompare(String(b.name),'th'))
+    if(!list.length)return ''
+    const over=list.filter(p=>parseInt(p.days_until)<0).length
+    return `<h2 style="color:${g.color};border-color:${g.color}">${g.shape} ${g.label} · ${list.length} ราย${over?` <span class="sub">(เกินนัด ${over} ราย)</span>`:''}</h2>
+    <table><thead><tr><th style="width:26px">#</th><th>ชื่อ-นามสกุล</th><th>หมู่บ้าน</th><th>โรค</th><th>ยาฉีด</th><th>ฉีดล่าสุด</th><th>นัดครั้งต่อไป</th><th>สถานะ</th><th>อสม.</th></tr></thead><tbody>
+    ${list.map((p,i)=>`<tr><td class="n">${i+1}</td><td><b>${esc(p.name)}</b></td><td>${esc(p.village||'')}${p.house_no?` <span class="sub">${esc(p.house_no)}</span>`:''}</td><td>${esc(p.disease_code||'')}${p.disease_name?` <span class="sub">${esc(p.disease_name)}</span>`:''}</td><td>${esc(p.medication_name||'')}</td><td>${thDate(p.last_date)}</td><td>${thDate(p.next_inject_date||p.next_date)}</td><td>${status(p)}</td><td>${esc(p.aosomo_responsible||'')}</td></tr>`).join('')}
+    </tbody></table>`
+  }
+  const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
+  <title>รายงานผู้ป่วยแยกกลุ่มสี ${thDate(todayISO())}</title>
+  <style>
+    @page{size:A4 landscape;margin:12mm}
+    body{font-family:'Sarabun',sans-serif;margin:0;padding:20px;color:#111;font-size:12px}
+    h1{font-size:20px;font-weight:800;color:#0a7ea4;margin:0 0 2px}
+    h2{font-size:14px;font-weight:800;margin:18px 0 6px;border-bottom:2px solid;padding-bottom:3px}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px}
+    th{background:#f3f4f6;font-weight:700;padding:5px 6px;text-align:left;font-size:11px;border:1px solid #e5e7eb}
+    td{padding:4px 6px;border:1px solid #e5e7eb;font-size:11px;vertical-align:top}
+    tr{break-inside:avoid}
+    .n{text-align:center}
+    .sub{color:#6b7280;font-weight:400;font-size:10px}
+    .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:10px 0}
+    .card{border-radius:8px;padding:8px;text-align:center;border:1px solid #e5e7eb}
+    .card .v{font-size:24px;font-weight:800;line-height:1.2}
+    .card .l{font-size:11px;color:#374151}
+    .bar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:4px 0 2px;background:#f3f4f6}
+    .note{font-size:10px;color:#6b7280;margin-top:4px}
+    @media print{body{padding:0}button{display:none}}
+  </style></head><body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+    <div><h1>รายงานสรุปผู้ป่วยแยกกลุ่มสี</h1><div style="color:#6b7280">${esc(hospitalName)} · ข้อมูล ณ วันที่ ${thDate(todayISO())}${currentRole==='aosomo'&&currentVillage?` · ${esc(currentVillage)}`:''}</div></div>
+    <button onclick="window.print()" style="padding:8px 18px;background:#0a7ea4;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🖨️ พิมพ์ / บันทึก PDF</button>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="v" style="color:#0a7ea4">${total}</div><div class="l">ผู้ป่วยทั้งหมด</div></div>
+    ${GROUPS.map(g=>`<div class="card" style="background:${g.bg};border-color:${g.color}33"><div class="v" style="color:${g.color}">${by[g.key].length}</div><div class="l">${g.shape} ${g.label} · ${pct(by[g.key].length)}%</div></div>`).join('')}
+  </div>
+  <div class="bar">${GROUPS.filter(g=>by[g.key].length).map(g=>`<div style="width:${by[g.key].length/total*100}%;background:${g.color}"></div>`).join('')}</div>
+  <div class="note">กลุ่มสีตามบันทึกการฉีดยาครั้งล่าสุดของผู้ป่วยแต่ละราย</div>
+  <h2 style="color:#374151;border-color:#d1d5db">🏘️ จำนวนผู้ป่วยแยกหมู่บ้าน</h2>
+  <table><thead><tr><th>หมู่บ้าน</th>${GROUPS.map(g=>`<th class="n" style="color:${g.color}">${g.shape} ${g.label.replace('กลุ่ม','')}</th>`).join('')}<th class="n">รวม</th></tr></thead>
+  <tbody>${vRows}<tr style="background:#f9fafb"><td><b>รวม</b></td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}"><b>${by[g.key].length}</b></td>`).join('')}<td class="n"><b>${total}</b></td></tr></tbody></table>
+  ${GROUPS.map(section).join('')}
+  <div style="margin-top:16px;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:6px">🔒 เอกสารนี้มีข้อมูลสุขภาพของผู้ป่วย เป็นความลับตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล ห้ามเผยแพร่ · พิมพ์โดย: ${esc(currentDisplayName)} · ${new Date().toLocaleString('th-TH')} · JitHome</div>
+  </body></html>`
+  const w=window.open('','_blank','width=1000,height=750')
+  if(!w){showToast('❌ กรุณาอนุญาต Popup สำหรับไซต์นี้ แล้วลองใหม่',4000);return}
+  auditLog('print_color_report','report',null,{total,red:by.red.length,yellow:by.yellow.length,green:by.green.length})
+  w.document.write(html)
+  w.document.close()
 }
 
 async function generateMonthlyReport(){
@@ -5054,7 +5145,7 @@ async function loadAuditLog(){
     member_role_changed:'เปลี่ยน role',change_village:'เปลี่ยนหมู่บ้าน',account_unlocked:'ปลดล็อคบัญชี',
     import_aosomo_directory:'นำเข้ารายชื่อ อสม.',import_staff_directory:'นำเข้ารายชื่อเจ้าหน้าที่',
     export_csv:'ส่งออก CSV',export_json:'ส่งออก JSON',export_visits_excel:'ส่งออก Excel เยี่ยม',
-    print_monthly_report:'พิมพ์รายงานเดือน',print_patient_timeline:'พิมพ์ Timeline ผู้ป่วย',
+    print_monthly_report:'พิมพ์รายงานเดือน',print_color_report:'พิมพ์รายงานแยกกลุ่มสี',print_patient_timeline:'พิมพ์ Timeline ผู้ป่วย',
     view_audit_log:'ดู Audit Log',privacy_accepted:'ยอมรับนโยบาย',
   }
   const ACTION_COLOR={
