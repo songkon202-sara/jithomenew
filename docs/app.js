@@ -331,6 +331,9 @@ function riskGroupsOf(p){
   RISK_FLAGS.forEach(f=>{if(flags.includes(f.k))out.push(f)})
   return out
 }
+function hasDiseaseCode(p){return !!String(p.disease_code||'').trim()}
+// กรอกกลุ่มเสี่ยงแล้ว = มีวันเกิด หรือ ADL หรือติ๊กอย่างน้อย 1 ข้อ
+function riskFilled(p){return !!(p.birth_date||p.adl_group||(Array.isArray(p.risk_flags)&&p.risk_flags.length))}
 function riskBadgesHtml(p){
   const g=riskGroupsOf(p)
   if(!g.length)return ''
@@ -534,7 +537,9 @@ let _ptShown = 0
 function renderPatients(el) {
   const pts = allPatients
   const villages=[...new Set(pts.map(p=>p.village).filter(Boolean))].sort()
-  window._gf='all'; window._vf='all'
+  window._gf='all'; window._vf='all'; window._df='all'; window._rf=false
+  const noCode=pts.filter(p=>!hasDiseaseCode(p)).length
+  const noRisk=pts.filter(p=>!riskFilled(p)).length
   el.innerHTML=`<div class="page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
     <div><div class="page-title" style="margin-bottom:2px">ผู้ป่วยทั้งหมด</div><div class="page-sub">${pts.length} ราย · ${esc(hospitalName)}</div></div>
@@ -554,20 +559,32 @@ function renderPatients(el) {
     <button class="filter-chip active" data-vf="all" onclick="setVF('all')">ทุกหมู่บ้าน</button>
     ${villages.map(v=>`<button class="filter-chip" data-vf="${esc(v)}" onclick="setVF('${jsStr(v)}')">${esc(v)}</button>`).join('')}
   </div>
+  <div class="filter-row">
+    <button class="filter-chip active" data-df="all" onclick="setDF('all')">ทุกคน</button>
+    <button class="filter-chip" data-df="has" onclick="setDF('has')">🩺 มีรหัสโรค (${pts.length-noCode})</button>
+    <button class="filter-chip" data-df="none" onclick="setDF('none')">❓ ไม่มีรหัสโรค (${noCode})</button>
+    ${_riskReady?`<button class="filter-chip" id="rf-chip" onclick="toggleRF()">🚩 ยังไม่กรอกกลุ่มเสี่ยง (${noRisk})</button>`:''}
+  </div>
+  <div id="pt-count" style="font-size:12px;color:var(--text3);margin:-4px 0 8px"></div>
   <div id="pt-list"></div>
   </div>`
   filterPts()
 }
 function filterPts() {
   const q=(document.getElementById('pt-search')?.value||'').toLowerCase()
-  const gf=window._gf||'all', vf=window._vf||'all'
+  const gf=window._gf||'all', vf=window._vf||'all', df=window._df||'all'
   _ptFiltered=allPatients.filter(p=>{
     if(gf!=='all'&&p.group_color!==gf)return false
     if(vf!=='all'&&p.village!==vf)return false
+    if(df==='has'&&!hasDiseaseCode(p))return false
+    if(df==='none'&&hasDiseaseCode(p))return false
+    if(window._rf&&riskFilled(p))return false
     if(q&&!(p.name||'').toLowerCase().includes(q))return false
     return true
   })
   _ptShown=0
+  const cnt=document.getElementById('pt-count')
+  if(cnt)cnt.textContent=(df!=='all'||window._rf||gf!=='all'||vf!=='all'||q)?`พบ ${_ptFiltered.length} ราย`:''
   renderPtPage()
 }
 function renderPtPage(){
@@ -581,6 +598,8 @@ function renderPtPage(){
     (hasMore?`<div style="text-align:center;padding:16px"><button onclick="renderPtPage()" style="padding:10px 28px;border-radius:10px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">โหลดเพิ่ม (${_ptFiltered.length-_ptShown} รายการ)</button></div>`:'')
 }
 function setGF(gf){window._gf=gf;document.querySelectorAll('[data-gf]').forEach(e=>e.classList.toggle('active',e.dataset.gf===gf));filterPts()}
+function setDF(df){window._df=df;document.querySelectorAll('[data-df]').forEach(e=>e.classList.toggle('active',e.dataset.df===df));filterPts()}
+function toggleRF(){window._rf=!window._rf;document.getElementById('rf-chip')?.classList.toggle('active',window._rf);filterPts()}
 function setVF(vf){window._vf=vf;document.querySelectorAll('[data-vf]').forEach(e=>e.classList.toggle('active',e.dataset.vf===vf));filterPts()}
 
 // ─── Timeline ────────────────────────────────────────────────────
@@ -2944,7 +2963,7 @@ async function generateColorReport(){
     ${GROUPS.map(g=>`<div class="card" style="background:${g.bg};border-color:${g.color}33"><div class="v" style="color:${g.color}">${by[g.key].length}</div><div class="l">${g.shape} ${g.label} · ${pct(by[g.key].length)}%</div></div>`).join('')}
   </div>
   <div class="bar">${GROUPS.filter(g=>by[g.key].length).map(g=>`<div style="width:${by[g.key].length/total*100}%;background:${g.color}"></div>`).join('')}</div>
-  <div class="note">กลุ่มสีตามบันทึกการฉีดยาครั้งล่าสุดของผู้ป่วยแต่ละราย</div>
+  <div class="note">กลุ่มสีตามบันทึกการฉีดยาครั้งล่าสุดของผู้ป่วยแต่ละราย · มีรหัสโรค ${pts.filter(hasDiseaseCode).length} ราย · ไม่มีรหัสโรค ${pts.filter(p=>!hasDiseaseCode(p)).length} ราย${_riskReady?` · กรอกกลุ่มเสี่ยงแล้ว ${pts.filter(riskFilled).length} ราย`:''}</div>
   <h2 style="color:#374151;border-color:#d1d5db">🏘️ จำนวนผู้ป่วยแยกหมู่บ้าน</h2>
   <table><thead><tr><th>หมู่บ้าน</th>${GROUPS.map(g=>`<th class="n" style="color:${g.color}">${g.shape} ${g.label.replace('กลุ่ม','')}</th>`).join('')}<th class="n">รวม</th></tr></thead>
   <tbody>${vRows}<tr style="background:#f9fafb"><td><b>รวม</b></td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}"><b>${by[g.key].length}</b></td>`).join('')}<td class="n"><b>${total}</b></td></tr></tbody></table>
