@@ -304,7 +304,7 @@ function patientCard(p) {
         ${p.next_visit_date?`<span style="color:#ea580c">🏡 ${thDate(p.next_visit_date)}</span>`:''}
       </span>
     </div>
-    ${riskBadgesHtml(p)}${disease}${nid}${note}
+    ${!hasDiseaseCode(p)?'<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc">🛡️ กลุ่มเสี่ยง · ยังไม่ป่วย</span></div>':''}${riskBadgesHtml(p)}${disease}${nid}${note}
   </div>`
 }
 
@@ -331,7 +331,31 @@ function riskGroupsOf(p){
   RISK_FLAGS.forEach(f=>{if(flags.includes(f.k))out.push(f)})
   return out
 }
+// กลุ่มป่วย = มีรหัสโรค (วินิจฉัยแล้ว) · กลุ่มเสี่ยง = ยังไม่มีรหัสโรค (ยังไม่ป่วย เช่น สูงอายุ ติดบ้าน)
 function hasDiseaseCode(p){return !!String(p.disease_code||'').trim()}
+const DX_LIST=[['F20','Schizophrenia (โรคจิตเภท)'],['F25','Schizoaffective disorder'],['F29','Unspecified psychosis (โรคจิต)'],
+  ['F31','Bipolar disorder (โรคอารมณ์สองขั้ว)'],['F32','Depressive episode (โรคซึมเศร้า)'],['F33','Recurrent depressive disorder'],
+  ['F10','Alcohol use disorder (สุรา)'],['F15','Stimulant use disorder (ยาบ้า/แอมเฟตามีน)'],['F19','Multiple drug use (สารเสพติดหลายชนิด)'],
+  ['F41','Anxiety disorder (โรควิตกกังวล)'],['F03','Dementia (สมองเสื่อม)'],['F06','Mental disorder due to brain damage'],['F70','Intellectual disability (บกพร่องทางสติปัญญา)']]
+function dxFieldsHtml(pre,p){
+  if(!canDo('record'))return ''
+  if(!document.getElementById('dx-list')){const dl=document.createElement('datalist');dl.id='dx-list';dl.innerHTML=DX_LIST.map(([c,n])=>`<option value="${c}">${esc(n)}</option>`).join('');document.body.appendChild(dl)}
+  return `<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px">
+    <div class="form-group" style="margin-bottom:4px"><label>🩺 รหัสโรค</label><input type="text" id="${pre}-dx-code" list="dx-list" autocomplete="off" value="${esc(p?.disease_code||'')}" placeholder="เช่น F20" oninput="dxFill('${pre}')" style="width:100%;box-sizing:border-box;text-transform:uppercase"></div>
+    <div class="form-group" style="margin-bottom:4px"><label>ชื่อโรค</label><input type="text" id="${pre}-dx-name" value="${esc(p?.disease_name||'')}" placeholder="เติมให้เมื่อเลือกรหัส" style="width:100%;box-sizing:border-box"></div>
+  </div>
+  <div style="font-size:11px;color:var(--text3);margin:0 0 12px">มีรหัสโรค = <b>กลุ่มป่วย</b> · เว้นว่าง = <b>กลุ่มเสี่ยง</b> (ยังไม่ป่วย เช่น สูงอายุ ติดบ้าน)</div>`
+}
+function dxFill(pre){
+  const c=document.getElementById(pre+'-dx-code'),n=document.getElementById(pre+'-dx-name')
+  const hit=DX_LIST.find(([k])=>k===String(c?.value||'').trim().toUpperCase())
+  if(hit&&n&&!n.value.trim())n.value=hit[1]
+}
+function readDxFields(pre){
+  const c=document.getElementById(pre+'-dx-code')
+  if(!c)return {}
+  return {disease_code:c.value.trim().toUpperCase()||null,disease_name:(document.getElementById(pre+'-dx-name')?.value||'').trim()||null}
+}
 // กรอกกลุ่มเสี่ยงแล้ว = มีวันเกิด หรือ ADL หรือติ๊กอย่างน้อย 1 ข้อ
 function riskFilled(p){return !!(p.birth_date||p.adl_group||(Array.isArray(p.risk_flags)&&p.risk_flags.length))}
 function riskBadgesHtml(p){
@@ -342,7 +366,7 @@ function riskBadgesHtml(p){
 function riskFieldsHtml(pre){
   if(!_riskReady)return ''
   return `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:12px">
-    <div style="font-size:12px;font-weight:700;color:#c2410c;margin-bottom:8px">🚩 กลุ่มเสี่ยง</div>
+    <div style="font-size:12px;font-weight:700;color:#c2410c;margin-bottom:8px">🚩 ปัจจัยเสี่ยง</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group" style="margin-bottom:8px"><label>🎂 วันเกิด <span id="${pre}-age" style="font-weight:400;color:var(--text3)"></span></label><input type="date" id="${pre}-birth-date" max="${todayISO()}" oninput="const a=ageOf(this.value);document.getElementById('${pre}-age').textContent=a!=null?'อายุ '+a+' ปี'+(a>=60?' · สูงอายุ':''):''" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group" style="margin-bottom:8px"><label>🧓 ความสามารถ (ADL)</label><select id="${pre}-adl"><option value="">— ไม่ระบุ —</option>${ADL_GROUPS.map(g=>`<option value="${g.k}">${g.icon} ${g.l}</option>`).join('')}</select></div>
@@ -561,9 +585,9 @@ function renderPatients(el) {
   </div>
   <div class="filter-row">
     <button class="filter-chip active" data-df="all" onclick="setDF('all')">ทุกคน</button>
-    <button class="filter-chip" data-df="has" onclick="setDF('has')">🩺 มีรหัสโรค (${pts.length-noCode})</button>
-    <button class="filter-chip" data-df="none" onclick="setDF('none')">❓ ไม่มีรหัสโรค (${noCode})</button>
-    ${_riskReady?`<button class="filter-chip" id="rf-chip" onclick="toggleRF()">🚩 ยังไม่กรอกกลุ่มเสี่ยง (${noRisk})</button>`:''}
+    <button class="filter-chip" data-df="has" onclick="setDF('has')">🩺 กลุ่มป่วย (${pts.length-noCode})</button>
+    <button class="filter-chip" data-df="none" onclick="setDF('none')">🛡️ กลุ่มเสี่ยง (${noCode})</button>
+    ${_riskReady?`<button class="filter-chip" id="rf-chip" onclick="toggleRF()">🚩 ยังไม่กรอกปัจจัยเสี่ยง (${noRisk})</button>`:''}
   </div>
   <div id="pt-count" style="font-size:12px;color:var(--text3);margin:-4px 0 8px"></div>
   <div id="pt-list"></div>
@@ -1034,7 +1058,7 @@ async function renderOverview(el) {
       <div class="page-sub">${esc(hospitalName)} · ผู้ป่วยทั้งหมด ${total} ราย · ${thMonthName} ${yy+543}</div>
     </div>
 <div style="display:flex;gap:6px;flex-wrap:wrap">
-    ${canDo('visit')?`<button onclick="generateColorReport()" style="padding:8px 14px;background:#fff;color:var(--text1);border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;gap:6px;flex-shrink:0">🚦 รายงานแยกกลุ่มสี</button>`:''}
+    ${canDo('visit')?`<button onclick="generateColorReport()" style="padding:8px 14px;background:#fff;color:var(--text1);border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;gap:6px;flex-shrink:0">🚦 รายงานกลุ่มป่วย/กลุ่มเสี่ยง</button>`:''}
     <button onclick="window.print()" style="padding:8px 14px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;gap:6px;flex-shrink:0">🖨️ พิมพ์/Export</button>
     </div>
   </div>
@@ -1887,7 +1911,7 @@ async function renderAdmin(el) {
       <span>📄</span><span>พิมพ์รายงานสรุปรายเดือน</span>
     </button>
     <button onclick="generateColorReport()" style="width:100%;margin-top:8px;padding:10px;background:linear-gradient(135deg,#dc2626,#ca8a04,#16a34a);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px">
-      <span>🚦</span><span>รายงานผู้ป่วยแยกกลุ่มสี (แดง / เหลือง / เขียว)</span>
+      <span>🚦</span><span>รายงานกลุ่มป่วย (แดง / เหลือง / เขียว) และกลุ่มเสี่ยง</span>
     </button>
   </div>
   <div class="form-section">
@@ -2886,10 +2910,12 @@ async function generateColorReport(){
     {key:'red',   label:'กลุ่มสีแดง',     shape:'▲',color:'#b91c1c',bg:'#fef2f2'},
     {key:'yellow',label:'กลุ่มสีเหลือง',   shape:'◆',color:'#a16207',bg:'#fefce8'},
     {key:'green', label:'กลุ่มสีเขียว',    shape:'●',color:'#15803d',bg:'#f0fdf4'},
-    {key:'none',  label:'ยังไม่ได้จัดกลุ่ม',shape:'○',color:'#6b7280',bg:'#f9fafb'},
+    {key:'none',  label:'ป่วย·ยังไม่จัดสี',shape:'○',color:'#6b7280',bg:'#f9fafb'},
+    {key:'risk',  label:'กลุ่มเสี่ยง (ยังไม่ป่วย)',shape:'◇',color:'#0e7490',bg:'#ecfeff'},
   ]
-  const keyOf=p=>['red','yellow','green'].includes(p.group_color)?p.group_color:'none'
-  const by={red:[],yellow:[],green:[],none:[]}
+  // กลุ่มป่วย (มีรหัสโรค) แยกตามสี · กลุ่มเสี่ยง (ยังไม่มีรหัสโรค) แยกต่างหาก
+  const keyOf=p=>!hasDiseaseCode(p)?'risk':['red','yellow','green'].includes(p.group_color)?p.group_color:'none'
+  const by={red:[],yellow:[],green:[],none:[],risk:[]}
   pts.forEach(p=>by[keyOf(p)].push(p))
   const total=pts.length
   const pct=n=>total?Math.round(n/total*100):0
@@ -2911,8 +2937,8 @@ async function generateColorReport(){
     const c=k=>inR.filter(p=>keyOf(p)===k).length
     return `<tr><td>${r.icon} ${esc(r.l)}</td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}">${c(g.key)||'–'}</td>`).join('')}<td class="n"><b>${inR.length||'–'}</b></td></tr>`
   }).join('')
-  const riskTable=_riskReady?`<h2 style="color:#c2410c;border-color:#fdba74">🚩 กลุ่มเสี่ยง · ${anyRisk} ราย <span class="sub">(1 รายอาจอยู่หลายกลุ่ม)</span></h2>
-  <table><thead><tr><th>กลุ่มเสี่ยง</th>${GROUPS.map(g=>`<th class="n" style="color:${g.color}">${g.shape} ${g.label.replace('กลุ่ม','')}</th>`).join('')}<th class="n">รวม</th></tr></thead><tbody>${rRows}</tbody></table>`:''
+  const riskTable=_riskReady?`<h2 style="color:#c2410c;border-color:#fdba74">🚩 ปัจจัยเสี่ยง · ${anyRisk} ราย <span class="sub">(สูงอายุ / ADL / อื่น ๆ · 1 รายอาจมีหลายข้อ)</span></h2>
+  <table><thead><tr><th>ปัจจัยเสี่ยง</th>${GROUPS.map(g=>`<th class="n" style="color:${g.color}">${g.shape} ${g.label.replace('กลุ่ม','')}</th>`).join('')}<th class="n">รวม</th></tr></thead><tbody>${rRows}</tbody></table>`:''
   const riskCell=p=>riskGroupsOf(p).map(x=>`<span class="rk${x.k==='smiv'||x.k==='bed'?' hi':''}">${x.icon} ${esc(x.l)}</span>`).join(' ')
   const status=p=>{
     const d=parseInt(p.days_until)
@@ -2922,17 +2948,33 @@ async function generateColorReport(){
     if(d<=7)return `<span style="color:#a16207">อีก ${d} วัน</span>`
     return `<span style="color:#15803d">อีก ${d} วัน</span>`
   }
+  const ageCell=p=>{const a=ageOf(p.birth_date);return a!=null?a+' ปี':'—'}
+  const visitStatus=p=>{
+    if(!p.next_visit_date)return '<span style="color:#6b7280">—</span>'
+    const d=Math.round((new Date(p.next_visit_date+'T00:00:00')-new Date(todayISO()+'T00:00:00'))/86400000)
+    return d<0?`<span style="color:#b91c1c;font-weight:700">เกินนัด ${-d} วัน</span>`:d===0?'<span style="color:#0d9488;font-weight:700">นัดวันนี้</span>':`<span style="color:#15803d">อีก ${d} วัน</span>`
+  }
+  const sortList=l=>l.slice().sort((a,b)=>vSort(a.village||'',b.village||'')||String(a.name).localeCompare(String(b.name),'th'))
+  const riskSection=()=>{
+    const g=GROUPS.find(x=>x.key==='risk'),list=sortList(by.risk)
+    if(!list.length)return ''
+    return `<h2 style="color:${g.color};border-color:${g.color};break-before:page">🛡️ กลุ่มเสี่ยง (ยังไม่ป่วย) · ${list.length} ราย <span class="sub">(ยังไม่มีรหัสโรค)</span></h2>
+    <table><thead><tr><th style="width:26px">#</th><th>ชื่อ-นามสกุล</th><th>หมู่บ้าน</th><th>อายุ</th>${_riskReady?'<th>ปัจจัยเสี่ยง</th>':''}<th>นัดเยี่ยมบ้าน</th><th>สถานะ</th><th>อสม.</th></tr></thead><tbody>
+    ${list.map((p,i)=>`<tr><td class="n">${i+1}</td><td><b>${esc(p.name)}</b></td><td>${esc(p.village||'')}${p.house_no?` <span class="sub">${esc(p.house_no)}</span>`:''}</td><td class="n">${ageCell(p)}</td>${_riskReady?`<td>${riskCell(p)||'<span class="sub">ยังไม่ได้กรอก</span>'}</td>`:''}<td>${thDate(p.next_visit_date)}</td><td>${visitStatus(p)}</td><td>${esc(p.aosomo_responsible||'')}</td></tr>`).join('')}
+    </tbody></table>`
+  }
   const section=g=>{
+    if(g.key==='risk')return ''
     const list=by[g.key].slice().sort((a,b)=>vSort(a.village||'',b.village||'')||String(a.name).localeCompare(String(b.name),'th'))
     if(!list.length)return ''
     const over=list.filter(p=>parseInt(p.days_until)<0).length
     return `<h2 style="color:${g.color};border-color:${g.color}">${g.shape} ${g.label} · ${list.length} ราย${over?` <span class="sub">(เกินนัด ${over} ราย)</span>`:''}</h2>
-    <table><thead><tr><th style="width:26px">#</th><th>ชื่อ-นามสกุล</th><th>หมู่บ้าน</th>${_riskReady?'<th>กลุ่มเสี่ยง</th>':''}<th>โรค</th><th>ยาฉีด</th><th>ฉีดล่าสุด</th><th>นัดครั้งต่อไป</th><th>สถานะ</th><th>อสม.</th></tr></thead><tbody>
+    <table><thead><tr><th style="width:26px">#</th><th>ชื่อ-นามสกุล</th><th>หมู่บ้าน</th>${_riskReady?'<th>ปัจจัยเสี่ยง</th>':''}<th>โรค</th><th>ยาฉีด</th><th>ฉีดล่าสุด</th><th>นัดครั้งต่อไป</th><th>สถานะ</th><th>อสม.</th></tr></thead><tbody>
     ${list.map((p,i)=>`<tr><td class="n">${i+1}</td><td><b>${esc(p.name)}</b></td><td>${esc(p.village||'')}${p.house_no?` <span class="sub">${esc(p.house_no)}</span>`:''}</td>${_riskReady?`<td>${riskCell(p)}</td>`:''}<td>${esc(p.disease_code||'')}${p.disease_name?` <span class="sub">${esc(p.disease_name)}</span>`:''}</td><td>${esc(p.medication_name||'')}</td><td>${thDate(p.last_date)}</td><td>${thDate(p.next_inject_date||p.next_date)}</td><td>${status(p)}</td><td>${esc(p.aosomo_responsible||'')}</td></tr>`).join('')}
     </tbody></table>`
   }
   const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
-  <title>รายงานผู้ป่วยแยกกลุ่มสีและกลุ่มเสี่ยง ${thDate(todayISO())}</title>
+  <title>รายงานกลุ่มป่วยและกลุ่มเสี่ยง ${thDate(todayISO())}</title>
   <style>
     @page{size:A4 landscape;margin:12mm}
     body{font-family:'Sarabun',sans-serif;margin:0;padding:20px;color:#111;font-size:12px}
@@ -2944,7 +2986,7 @@ async function generateColorReport(){
     tr{break-inside:avoid}
     .n{text-align:center}
     .sub{color:#6b7280;font-weight:400;font-size:10px}
-    .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:10px 0}
+    .cards{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:10px 0}
     .card{border-radius:8px;padding:8px;text-align:center;border:1px solid #e5e7eb}
     .card .v{font-size:24px;font-weight:800;line-height:1.2}
     .card .l{font-size:11px;color:#374151}
@@ -2955,25 +2997,26 @@ async function generateColorReport(){
     @media print{body{padding:0}button{display:none}}
   </style></head><body>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-    <div><h1>รายงานสรุปผู้ป่วยแยกกลุ่มสี${_riskReady?'และกลุ่มเสี่ยง':''}</h1><div style="color:#6b7280">${esc(hospitalName)} · ข้อมูล ณ วันที่ ${thDate(todayISO())}${currentRole==='aosomo'&&currentVillage?` · ${esc(currentVillage)}`:''}</div></div>
+    <div><h1>รายงานสรุปกลุ่มป่วย (แยกสี) และกลุ่มเสี่ยง</h1><div style="color:#6b7280">${esc(hospitalName)} · ข้อมูล ณ วันที่ ${thDate(todayISO())} · 🩺 กลุ่มป่วย ${total-by.risk.length} ราย · 🛡️ กลุ่มเสี่ยง ${by.risk.length} ราย${currentRole==='aosomo'&&currentVillage?` · ${esc(currentVillage)}`:''}</div></div>
     <button onclick="window.print()" style="padding:8px 18px;background:#0a7ea4;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🖨️ พิมพ์ / บันทึก PDF</button>
   </div>
   <div class="cards">
-    <div class="card"><div class="v" style="color:#0a7ea4">${total}</div><div class="l">ผู้ป่วยทั้งหมด</div></div>
+    <div class="card"><div class="v" style="color:#0a7ea4">${total}</div><div class="l">ทั้งหมดในทะเบียน</div></div>
     ${GROUPS.map(g=>`<div class="card" style="background:${g.bg};border-color:${g.color}33"><div class="v" style="color:${g.color}">${by[g.key].length}</div><div class="l">${g.shape} ${g.label} · ${pct(by[g.key].length)}%</div></div>`).join('')}
   </div>
   <div class="bar">${GROUPS.filter(g=>by[g.key].length).map(g=>`<div style="width:${by[g.key].length/total*100}%;background:${g.color}"></div>`).join('')}</div>
-  <div class="note">กลุ่มสีตามบันทึกการฉีดยาครั้งล่าสุดของผู้ป่วยแต่ละราย · มีรหัสโรค ${pts.filter(hasDiseaseCode).length} ราย · ไม่มีรหัสโรค ${pts.filter(p=>!hasDiseaseCode(p)).length} ราย${_riskReady?` · กรอกกลุ่มเสี่ยงแล้ว ${pts.filter(riskFilled).length} ราย`:''}</div>
-  <h2 style="color:#374151;border-color:#d1d5db">🏘️ จำนวนผู้ป่วยแยกหมู่บ้าน</h2>
+  <div class="note">กลุ่มป่วย = มีรหัสโรค แยกสีตามบันทึกการฉีดยาครั้งล่าสุด · กลุ่มเสี่ยง = ยังไม่มีรหัสโรค${_riskReady?` · กรอกปัจจัยเสี่ยงแล้ว ${pts.filter(riskFilled).length} จาก ${total} ราย`:''}</div>
+  <h2 style="color:#374151;border-color:#d1d5db">🏘️ จำนวนแยกหมู่บ้าน</h2>
   <table><thead><tr><th>หมู่บ้าน</th>${GROUPS.map(g=>`<th class="n" style="color:${g.color}">${g.shape} ${g.label.replace('กลุ่ม','')}</th>`).join('')}<th class="n">รวม</th></tr></thead>
   <tbody>${vRows}<tr style="background:#f9fafb"><td><b>รวม</b></td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}"><b>${by[g.key].length}</b></td>`).join('')}<td class="n"><b>${total}</b></td></tr></tbody></table>
   ${riskTable}
   ${GROUPS.map(section).join('')}
+  ${riskSection()}
   <div style="margin-top:16px;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:6px">🔒 เอกสารนี้มีข้อมูลสุขภาพของผู้ป่วย เป็นความลับตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล ห้ามเผยแพร่ · พิมพ์โดย: ${esc(currentDisplayName)} · ${new Date().toLocaleString('th-TH')} · JitHome</div>
   </body></html>`
   const w=window.open('','_blank','width=1000,height=750')
   if(!w){showToast('❌ กรุณาอนุญาต Popup สำหรับไซต์นี้ แล้วลองใหม่',4000);return}
-  auditLog('print_color_report','report',null,{total,red:by.red.length,yellow:by.yellow.length,green:by.green.length})
+  auditLog('print_color_report','report',null,{total,red:by.red.length,yellow:by.yellow.length,green:by.green.length,risk:by.risk.length})
   w.document.write(html)
   w.document.close()
 }
@@ -3390,6 +3433,7 @@ async function openModal(id){
         <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village" onchange="refreshAosomoByVillage(this.value)">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
         <div class="form-group"><label>🏠 บ้านเลขที่</label><input type="text" id="edit-pt-house-no" placeholder="เช่น 123/4" style="width:100%;box-sizing:border-box"></div>
       </div>
+      ${dxFieldsHtml('edit-pt',p)}
       <div class="form-group"><label>👨‍⚕️ เจ้าหน้าที่รับผิดชอบ</label><select id="edit-pt-staff" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>🏡 อสม. รับผิดชอบ <span id="edit-pt-aosomo-village" style="font-size:11px;color:#7c3aed;font-weight:400"></span></label><select id="edit-pt-aosomo" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
@@ -3460,7 +3504,7 @@ async function openModal(id){
         ${_riskReady?`<div style="display:flex;align-items:flex-start;gap:10px">
           <span style="font-size:18px;flex-shrink:0">🚩</span>
           <div style="flex:1;min-width:0">
-            <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">กลุ่มเสี่ยง${ageOf(p.birth_date)!=null&&ageOf(p.birth_date)<60?` · อายุ ${ageOf(p.birth_date)} ปี`:''}</div>
+            <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">ปัจจัยเสี่ยง${ageOf(p.birth_date)!=null&&ageOf(p.birth_date)<60?` · อายุ ${ageOf(p.birth_date)} ปี`:''}</div>
             ${riskGroupsOf(p).length?riskBadgesHtml(p).replace('margin-top:6px','margin-top:2px'):`<div style="font-size:12px;color:var(--text3);font-style:italic">ไม่มี / ยังไม่ได้ระบุ</div>`}
           </div>
         </div>`:''}
@@ -3853,7 +3897,7 @@ async function saveEditPatient(id){
     const next_visit_date=document.getElementById('edit-pt-next-visit-date')?.value||null
     const next_inject_date=document.getElementById('edit-pt-next-inject-date')?.value||null
     const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name,oral_medication,next_visit_date,next_inject_date}
-    Object.assign(updates,readRiskFields('edit-pt'))
+    Object.assign(updates,readRiskFields('edit-pt'),readDxFields('edit-pt'))
     if(canDo('admin'))updates.national_id=nidRaw
     const photoInput=document.getElementById('edit-pt-photo')
     const photoFile=photoInput?.files?.[0]||null
@@ -5462,6 +5506,7 @@ function openAddPatient(){
     <div class="form-group"><label>หมู่บ้าน</label><select id="np-village">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
     <div class="form-group"><label>🏠 บ้านเลขที่</label><input type="text" id="np-house-no" placeholder="เช่น 123/4"></div>
   </div>
+  ${dxFieldsHtml('np')}
   <div class="form-group"><label>กลุ่มสี</label>
     <select id="np-group">
       <option value="yellow">🟡 กลุ่มสีเหลือง</option>
@@ -5539,7 +5584,7 @@ async function saveNewPatient(){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const house_no=(document.getElementById('np-house-no')?.value||'').trim()
-    const{data:newPt,error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date,...readRiskFields('np')}).select('id').single()
+    const{data:newPt,error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date,...readRiskFields('np'),...readDxFields('np')}).select('id').single()
     if(pe){
       if(pe.message?.includes('unique'))throw new Error(`ชื่อ "${name}" มีในระบบแล้ว กรุณาใช้ชื่ออื่น`)
       throw pe
