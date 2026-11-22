@@ -304,17 +304,74 @@ function patientCard(p) {
         ${p.next_visit_date?`<span style="color:#ea580c">🏡 ${thDate(p.next_visit_date)}</span>`:''}
       </span>
     </div>
-    ${disease}${nid}${note}
+    ${riskBadgesHtml(p)}${disease}${nid}${note}
   </div>`
+}
+
+// ─── กลุ่มเสี่ยง (สูงอายุ / ADL / SMI-V / อื่น ๆ) ───────────────────
+// ต้องรัน sql/security/09_risk_groups.sql ก่อน — ถ้ายังไม่รัน ระบบซ่อนช่องเหล่านี้ (_riskReady=false)
+let _riskReady=false
+const RISK_COLS='birth_date,adl_group,risk_flags'
+const ADL_GROUPS=[{k:'social',l:'ติดสังคม',icon:'🚶'},{k:'home',l:'ติดบ้าน',icon:'🏠'},{k:'bed',l:'ติดเตียง',icon:'🛏️'}]
+const RISK_FLAGS=[{k:'smiv',l:'SMI-V',icon:'⚠️'},{k:'disabled',l:'พิการ',icon:'♿'},{k:'alone',l:'อยู่คนเดียว',icon:'👤'},{k:'substance',l:'ใช้สารเสพติด',icon:'🚬'}]
+function ageOf(bd){
+  if(!bd)return null
+  const b=new Date(String(bd).slice(0,10)+'T00:00:00'),t=new Date()
+  if(isNaN(b))return null
+  let a=t.getFullYear()-b.getFullYear()
+  if(t.getMonth()<b.getMonth()||(t.getMonth()===b.getMonth()&&t.getDate()<b.getDate()))a--
+  return a>=0&&a<130?a:null
+}
+// กลุ่มเสี่ยงของผู้ป่วย: [{k,l,icon}] — สูงอายุ = อายุ 60 ปีขึ้นไป
+function riskGroupsOf(p){
+  const out=[],age=ageOf(p.birth_date)
+  if(age!=null&&age>=60)out.push({k:'elderly',l:`สูงอายุ ${age} ปี`,icon:'👴'})
+  const adl=ADL_GROUPS.find(g=>g.k===p.adl_group);if(adl)out.push(adl)
+  const flags=Array.isArray(p.risk_flags)?p.risk_flags:[]
+  RISK_FLAGS.forEach(f=>{if(flags.includes(f.k))out.push(f)})
+  return out
+}
+function riskBadgesHtml(p){
+  const g=riskGroupsOf(p)
+  if(!g.length)return ''
+  return `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${g.map(x=>`<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:${x.k==='smiv'||x.k==='bed'?'#fee2e2':'#f1f5f9'};color:${x.k==='smiv'||x.k==='bed'?'#b91c1c':'#334155'}">${x.icon} ${esc(x.l)}</span>`).join('')}</div>`
+}
+function riskFieldsHtml(pre){
+  if(!_riskReady)return ''
+  return `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+    <div style="font-size:12px;font-weight:700;color:#c2410c;margin-bottom:8px">🚩 กลุ่มเสี่ยง</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin-bottom:8px"><label>🎂 วันเกิด <span id="${pre}-age" style="font-weight:400;color:var(--text3)"></span></label><input type="date" id="${pre}-birth-date" max="${todayISO()}" oninput="const a=ageOf(this.value);document.getElementById('${pre}-age').textContent=a!=null?'อายุ '+a+' ปี'+(a>=60?' · สูงอายุ':''):''" style="width:100%;box-sizing:border-box"></div>
+      <div class="form-group" style="margin-bottom:8px"><label>🧓 ความสามารถ (ADL)</label><select id="${pre}-adl"><option value="">— ไม่ระบุ —</option>${ADL_GROUPS.map(g=>`<option value="${g.k}">${g.icon} ${g.l}</option>`).join('')}</select></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px 14px">${RISK_FLAGS.map(f=>`<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" id="${pre}-risk-${f.k}"> ${f.icon} ${f.l}</label>`).join('')}</div>
+  </div>`
+}
+function fillRiskFields(pre,d){
+  if(!_riskReady||!d)return
+  const bd=document.getElementById(pre+'-birth-date');if(bd){bd.value=d.birth_date||'';bd.dispatchEvent(new Event('input'))}
+  const adl=document.getElementById(pre+'-adl');if(adl)adl.value=d.adl_group||''
+  const flags=Array.isArray(d.risk_flags)?d.risk_flags:[]
+  RISK_FLAGS.forEach(f=>{const c=document.getElementById(`${pre}-risk-${f.k}`);if(c)c.checked=flags.includes(f.k)})
+}
+function readRiskFields(pre){
+  if(!_riskReady)return {}
+  return {
+    birth_date:document.getElementById(pre+'-birth-date')?.value||null,
+    adl_group:document.getElementById(pre+'-adl')?.value||null,
+    risk_flags:RISK_FLAGS.filter(f=>document.getElementById(`${pre}-risk-${f.k}`)?.checked).map(f=>f.k),
+  }
 }
 
 // ─── Data ────────────────────────────────────────────────────────
 async function getPatients() {
   let q = sb.from('patient_status').select('*').order('days_until')
   if (currentRole === 'aosomo' && currentVillage) q = q.eq('village', currentVillage)
-  let pq = sb.from('patients').select('id,next_inject_date,next_visit_date')
-  if (currentRole === 'aosomo' && currentVillage) pq = pq.eq('village', currentVillage)
-  const [{ data, error }, { data: pDates, error: pErr }] = await Promise.all([q, pq])
+  const pqOf = cols => { let pq = sb.from('patients').select(cols); if (currentRole === 'aosomo' && currentVillage) pq = pq.eq('village', currentVillage); return pq }
+  let [{ data, error }, { data: pDates, error: pErr }] = await Promise.all([q, pqOf('id,next_inject_date,next_visit_date,'+RISK_COLS)])
+  _riskReady = !pErr
+  // ยังไม่ได้รัน 09_risk_groups.sql → ดึงแบบเดิม
+  if (pErr) ({ data: pDates, error: pErr } = await pqOf('id,next_inject_date,next_visit_date'))
   // แจ้งให้เห็นชัด — ถ้าเงียบ หน้าจอจะดูเหมือน "ไม่มีผู้ป่วย" ทั้งที่จริงโหลดไม่สำเร็จ
   if (error) { console.error('getPatients:', error); showToast('❌ โหลดรายชื่อผู้ป่วยไม่สำเร็จ: '+error.message, 6000); return [] }
   if (pErr) console.error('getPatients (dates):', pErr)
@@ -327,6 +384,9 @@ async function getPatients() {
     if (dateMap[p.id]) {
       corrected.next_inject_date = dateMap[p.id].next_inject_date
       corrected.next_visit_date  = dateMap[p.id].next_visit_date
+      corrected.birth_date = dateMap[p.id].birth_date || null
+      corrected.adl_group  = dateMap[p.id].adl_group || null
+      corrected.risk_flags = dateMap[p.id].risk_flags || []
     }
     // ยึดวันนัดฉีดยาจากตาราง patients เป็นหลักสำหรับ days_until
     if (corrected.next_inject_date) {
@@ -2823,6 +2883,18 @@ async function generateColorReport(){
     const c=k=>inV.filter(p=>keyOf(p)===k).length
     return `<tr><td>${esc(v)}</td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}">${c(g.key)||'–'}</td>`).join('')}<td class="n"><b>${inV.length}</b></td></tr>`
   }).join('')
+  // ตารางกลุ่มเสี่ยง × กลุ่มสี
+  const RISK_ROWS=[{k:'elderly',l:'สูงอายุ (60 ปีขึ้นไป)',icon:'👴'},...ADL_GROUPS,...RISK_FLAGS]
+  const inRisk=(p,k)=>riskGroupsOf(p).some(x=>x.k===k)
+  const anyRisk=pts.filter(p=>riskGroupsOf(p).length).length
+  const rRows=RISK_ROWS.map(r=>{
+    const inR=pts.filter(p=>inRisk(p,r.k))
+    const c=k=>inR.filter(p=>keyOf(p)===k).length
+    return `<tr><td>${r.icon} ${esc(r.l)}</td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}">${c(g.key)||'–'}</td>`).join('')}<td class="n"><b>${inR.length||'–'}</b></td></tr>`
+  }).join('')
+  const riskTable=_riskReady?`<h2 style="color:#c2410c;border-color:#fdba74">🚩 กลุ่มเสี่ยง · ${anyRisk} ราย <span class="sub">(1 รายอาจอยู่หลายกลุ่ม)</span></h2>
+  <table><thead><tr><th>กลุ่มเสี่ยง</th>${GROUPS.map(g=>`<th class="n" style="color:${g.color}">${g.shape} ${g.label.replace('กลุ่ม','')}</th>`).join('')}<th class="n">รวม</th></tr></thead><tbody>${rRows}</tbody></table>`:''
+  const riskCell=p=>riskGroupsOf(p).map(x=>`<span class="rk${x.k==='smiv'||x.k==='bed'?' hi':''}">${x.icon} ${esc(x.l)}</span>`).join(' ')
   const status=p=>{
     const d=parseInt(p.days_until)
     if(isNaN(d))return '<span style="color:#6b7280">—</span>'
@@ -2836,12 +2908,12 @@ async function generateColorReport(){
     if(!list.length)return ''
     const over=list.filter(p=>parseInt(p.days_until)<0).length
     return `<h2 style="color:${g.color};border-color:${g.color}">${g.shape} ${g.label} · ${list.length} ราย${over?` <span class="sub">(เกินนัด ${over} ราย)</span>`:''}</h2>
-    <table><thead><tr><th style="width:26px">#</th><th>ชื่อ-นามสกุล</th><th>หมู่บ้าน</th><th>โรค</th><th>ยาฉีด</th><th>ฉีดล่าสุด</th><th>นัดครั้งต่อไป</th><th>สถานะ</th><th>อสม.</th></tr></thead><tbody>
-    ${list.map((p,i)=>`<tr><td class="n">${i+1}</td><td><b>${esc(p.name)}</b></td><td>${esc(p.village||'')}${p.house_no?` <span class="sub">${esc(p.house_no)}</span>`:''}</td><td>${esc(p.disease_code||'')}${p.disease_name?` <span class="sub">${esc(p.disease_name)}</span>`:''}</td><td>${esc(p.medication_name||'')}</td><td>${thDate(p.last_date)}</td><td>${thDate(p.next_inject_date||p.next_date)}</td><td>${status(p)}</td><td>${esc(p.aosomo_responsible||'')}</td></tr>`).join('')}
+    <table><thead><tr><th style="width:26px">#</th><th>ชื่อ-นามสกุล</th><th>หมู่บ้าน</th>${_riskReady?'<th>กลุ่มเสี่ยง</th>':''}<th>โรค</th><th>ยาฉีด</th><th>ฉีดล่าสุด</th><th>นัดครั้งต่อไป</th><th>สถานะ</th><th>อสม.</th></tr></thead><tbody>
+    ${list.map((p,i)=>`<tr><td class="n">${i+1}</td><td><b>${esc(p.name)}</b></td><td>${esc(p.village||'')}${p.house_no?` <span class="sub">${esc(p.house_no)}</span>`:''}</td>${_riskReady?`<td>${riskCell(p)}</td>`:''}<td>${esc(p.disease_code||'')}${p.disease_name?` <span class="sub">${esc(p.disease_name)}</span>`:''}</td><td>${esc(p.medication_name||'')}</td><td>${thDate(p.last_date)}</td><td>${thDate(p.next_inject_date||p.next_date)}</td><td>${status(p)}</td><td>${esc(p.aosomo_responsible||'')}</td></tr>`).join('')}
     </tbody></table>`
   }
   const html=`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
-  <title>รายงานผู้ป่วยแยกกลุ่มสี ${thDate(todayISO())}</title>
+  <title>รายงานผู้ป่วยแยกกลุ่มสีและกลุ่มเสี่ยง ${thDate(todayISO())}</title>
   <style>
     @page{size:A4 landscape;margin:12mm}
     body{font-family:'Sarabun',sans-serif;margin:0;padding:20px;color:#111;font-size:12px}
@@ -2859,10 +2931,12 @@ async function generateColorReport(){
     .card .l{font-size:11px;color:#374151}
     .bar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:4px 0 2px;background:#f3f4f6}
     .note{font-size:10px;color:#6b7280;margin-top:4px}
+    .rk{display:inline-block;font-size:10px;padding:0 5px;border-radius:8px;background:#f1f5f9;color:#334155;margin:1px 0;white-space:nowrap}
+    .rk.hi{background:#fee2e2;color:#b91c1c;font-weight:700}
     @media print{body{padding:0}button{display:none}}
   </style></head><body>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-    <div><h1>รายงานสรุปผู้ป่วยแยกกลุ่มสี</h1><div style="color:#6b7280">${esc(hospitalName)} · ข้อมูล ณ วันที่ ${thDate(todayISO())}${currentRole==='aosomo'&&currentVillage?` · ${esc(currentVillage)}`:''}</div></div>
+    <div><h1>รายงานสรุปผู้ป่วยแยกกลุ่มสี${_riskReady?'และกลุ่มเสี่ยง':''}</h1><div style="color:#6b7280">${esc(hospitalName)} · ข้อมูล ณ วันที่ ${thDate(todayISO())}${currentRole==='aosomo'&&currentVillage?` · ${esc(currentVillage)}`:''}</div></div>
     <button onclick="window.print()" style="padding:8px 18px;background:#0a7ea4;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🖨️ พิมพ์ / บันทึก PDF</button>
   </div>
   <div class="cards">
@@ -2874,6 +2948,7 @@ async function generateColorReport(){
   <h2 style="color:#374151;border-color:#d1d5db">🏘️ จำนวนผู้ป่วยแยกหมู่บ้าน</h2>
   <table><thead><tr><th>หมู่บ้าน</th>${GROUPS.map(g=>`<th class="n" style="color:${g.color}">${g.shape} ${g.label.replace('กลุ่ม','')}</th>`).join('')}<th class="n">รวม</th></tr></thead>
   <tbody>${vRows}<tr style="background:#f9fafb"><td><b>รวม</b></td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}"><b>${by[g.key].length}</b></td>`).join('')}<td class="n"><b>${total}</b></td></tr></tbody></table>
+  ${riskTable}
   ${GROUPS.map(section).join('')}
   <div style="margin-top:16px;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:6px">🔒 เอกสารนี้มีข้อมูลสุขภาพของผู้ป่วย เป็นความลับตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล ห้ามเผยแพร่ · พิมพ์โดย: ${esc(currentDisplayName)} · ${new Date().toLocaleString('th-TH')} · JitHome</div>
   </body></html>`
@@ -3215,8 +3290,9 @@ async function openModal(id){
     // ตรวจสิทธิ์: อสม. เข้าถึงได้เฉพาะหมู่บ้านที่รับผิดชอบ
     if(currentRole==='aosomo'&&currentVillage&&p.village!==currentVillage)throw new Error('ไม่มีสิทธิ์เข้าถึงข้อมูลผู้ป่วยหมู่อื่น')
     auditLog('view_patient','patient',id,{name:p.name,village:p.village})
-    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date,consent_signature,consent_given,consent_date').eq('id',id).single()
+    const{data:pExtra}=await sb.from('patients').select('photo_urls,oral_medication,next_inject_date,next_visit_date,consent_signature,consent_given,consent_date'+(_riskReady?','+RISK_COLS:'')).eq('id',id).single()
     p.photo_urls=pExtra?.photo_urls||[]
+    if(_riskReady){p.birth_date=pExtra?.birth_date||null;p.adl_group=pExtra?.adl_group||null;p.risk_flags=pExtra?.risk_flags||[]}
     p.oral_medication=pExtra?.oral_medication||null
     p.consent_signature=pExtra?.consent_signature||null
     const _sMap=await batchSignedUrls([...p.photo_urls,...(p.consent_signature?[p.consent_signature]:[])])
@@ -3319,6 +3395,7 @@ async function openModal(id){
       </div>
       <div class="form-group"><label>💊 ยาทานปัจจุบัน</label><input type="text" id="edit-pt-oral-medication" placeholder="เช่น Risperidone 2mg, Haloperidol 5mg" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>💉 ยาฉีด</label><input type="text" id="edit-pt-medication" list="med-list" autocomplete="off" placeholder="แตะเพื่อเลือกยา หรือพิมพ์ชื่อยา"></div>
+      ${riskFieldsHtml('edit-pt')}
       <div class="form-group">
         <label>📷 ภาพถ่ายบริบท <span style="font-size:11px;font-weight:400;color:var(--text3)">เช่น บ้าน สภาพแวดล้อม สถานที่อยู่อาศัย</span></label>
         ${(p.photo_urls&&p.photo_urls.length>0)?`<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:6px">${p.photo_urls.map((url,i)=>`<div style="border-radius:8px;overflow:hidden;border:1px solid var(--border);position:relative"><img src="${esc(url)}" style="max-width:100%;max-height:120px;object-fit:cover;display:block"><button onclick="removePatientPhoto(${p.id},${i})" style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,0.85);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;font-family:'Sarabun',sans-serif">×</button></div>`).join('')}</div>`:''}
@@ -3361,6 +3438,13 @@ async function openModal(id){
               : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้ระบุ</div>`}
           </div>
         </div>
+        ${_riskReady?`<div style="display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:18px;flex-shrink:0">🚩</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">กลุ่มเสี่ยง${ageOf(p.birth_date)!=null&&ageOf(p.birth_date)<60?` · อายุ ${ageOf(p.birth_date)} ปี`:''}</div>
+            ${riskGroupsOf(p).length?riskBadgesHtml(p).replace('margin-top:6px','margin-top:2px'):`<div style="font-size:12px;color:var(--text3);font-style:italic">ไม่มี / ยังไม่ได้ระบุ</div>`}
+          </div>
+        </div>`:''}
         <div style="display:flex;align-items:flex-start;gap:10px">
           <span style="font-size:18px;flex-shrink:0">💊</span>
           <div>
@@ -3576,8 +3660,9 @@ async function openEditPatient(id,name,village,houseNo,note,staffResp,aosomoResp
       staffSel.innerHTML+=`<option value="${esc(staffResp)}" selected>${esc(staffResp)}</option>`
   }
   // โหลดข้อมูลเพิ่มเติม
-  const {data:extra}=await sb.from('patients').select('visit_interval,inject_interval,medication_name,oral_medication,next_visit_date,next_inject_date').eq('id',id).single()
+  const {data:extra}=await sb.from('patients').select('visit_interval,inject_interval,medication_name,oral_medication,next_visit_date,next_inject_date'+(_riskReady?','+RISK_COLS:'')).eq('id',id).single()
   if(extra){
+    fillRiskFields('edit-pt',extra)
     const vi=document.getElementById('edit-pt-visit-interval')
     const ii=document.getElementById('edit-pt-inject-interval')
     const med=document.getElementById('edit-pt-medication')
@@ -3749,6 +3834,7 @@ async function saveEditPatient(id){
     const next_visit_date=document.getElementById('edit-pt-next-visit-date')?.value||null
     const next_inject_date=document.getElementById('edit-pt-next-inject-date')?.value||null
     const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name,oral_medication,next_visit_date,next_inject_date}
+    Object.assign(updates,readRiskFields('edit-pt'))
     if(canDo('admin'))updates.national_id=nidRaw
     const photoInput=document.getElementById('edit-pt-photo')
     const photoFile=photoInput?.files?.[0]||null
@@ -5384,6 +5470,7 @@ function openAddPatient(){
     </select></div>
   </div>
   <div class="form-group"><label>💊 รายการยาที่ฉีด</label><input type="text" id="np-medication" list="med-list" autocomplete="off" placeholder="แตะเพื่อเลือกยา หรือพิมพ์ชื่อยา"></div>
+  ${riskFieldsHtml('np')}
   <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;margin-bottom:12px">
     <div style="font-size:12px;font-weight:700;color:#0369a1;margin-bottom:8px">🔒 ความยินยอมตาม PDPA</div>
     <div style="display:flex;align-items:flex-start;gap:8px">
@@ -5433,7 +5520,7 @@ async function saveNewPatient(){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const house_no=(document.getElementById('np-house-no')?.value||'').trim()
-    const{data:newPt,error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date}).select('id').single()
+    const{data:newPt,error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date,...readRiskFields('np')}).select('id').single()
     if(pe){
       if(pe.message?.includes('unique'))throw new Error(`ชื่อ "${name}" มีในระบบแล้ว กรุณาใช้ชื่ออื่น`)
       throw pe
