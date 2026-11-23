@@ -158,6 +158,7 @@ function loadXLSX(){
 }
 function parseInterval(s) {
   if (!s) return 30
+  if (/ไม่มีนัด/.test(s))  return 0
   if (/3\s*เดือน/.test(s))   return 90
   if (/1\s*เดือน/.test(s))   return 30
   if (/4\s*สัปดาห์/.test(s)) return 28
@@ -180,7 +181,10 @@ function syncNextDateFromInterval(fromId,intId,nextId){
   const intEl=document.getElementById(intId)
   const nextEl=document.getElementById(nextId)
   if(!from||!intEl||!nextEl)return
-  const nd=addDaysToDate(from,parseInterval(intEl.value))
+  const days=parseInterval(intEl.value)
+  // "ไม่มีนัด" → ล้างวันนัดครั้งต่อไป
+  if(days<=0){if(nextEl._flatpickr)nextEl._flatpickr.clear();else nextEl.value='';return}
+  const nd=addDaysToDate(from,days)
   if(nextEl._flatpickr)nextEl._flatpickr.setDate(nd,true);else nextEl.value=nd
 }
 function syncIntervalFromNextDate(fromId,nextId,intId){
@@ -1932,7 +1936,7 @@ async function renderAdmin(el) {
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group"><label id="adm-date-label">วันที่ฉีดยา</label><input type="date" id="adm-date" value="${todayISO()}" oninput="syncNextDateFromInterval('adm-date','adm-interval','adm-next-date')"></div>
-      <div class="form-group"><label>รอบนัดต่อไป</label><select id="adm-interval" onchange="syncNextDateFromInterval('adm-date','adm-interval','adm-next-date')"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
+      <div class="form-group"><label>รอบนัดต่อไป</label><select id="adm-interval" onchange="syncNextDateFromInterval('adm-date','adm-interval','adm-next-date')"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option><option>ไม่มีนัด</option></select></div>
     </div>
     <div class="form-group"><label>📅 วันนัดครั้งต่อไป <span style="font-size:11px;color:var(--text3);font-weight:400">(เลือกจากปฏิทิน หรือปล่อยให้คำนวณอัตโนมัติ)</span></label><input type="date" id="adm-next-date" oninput="syncIntervalFromNextDate('adm-date','adm-next-date','adm-interval')"></div>
     <div class="form-group">
@@ -3404,7 +3408,7 @@ async function openModal(id){
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">${isFuture?'วันนัดหมาย':'วันที่ฉีดยา'}</label><input type="date" id="er-date-${h.id}" value="${h.injection_date}"></div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">รอบนัดต่อไป</label>
             <select id="er-interval-${h.id}" onchange="syncNextDateFromInterval('er-date-${h.id}','er-interval-${h.id}','er-next-date-${h.id}')" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:'Sarabun',sans-serif;font-size:13px">
-              ${['2 สัปดาห์','3 สัปดาห์','4 สัปดาห์','1 เดือน','3 เดือน'].map(v=>`<option${v===h.interval_str?' selected':''}>${v}</option>`).join('')}
+              ${['2 สัปดาห์','3 สัปดาห์','4 สัปดาห์','1 เดือน','3 เดือน','ไม่มีนัด'].map(v=>`<option${v===h.interval_str?' selected':''}>${v}</option>`).join('')}
             </select>
           </div>
           <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">📅 วันนัดครั้งต่อไป <span style="color:var(--text3);font-weight:400">(เลือกเองได้)</span></label><input type="date" id="er-next-date-${h.id}" oninput="syncIntervalFromNextDate('er-date-${h.id}','er-next-date-${h.id}','er-interval-${h.id}')"></div>
@@ -3587,7 +3591,7 @@ async function openModal(id){
         <button type="button" id="rec-type-vis" onclick="toggleRecType('visit')" style="flex:1;padding:6px;border-radius:8px;border:2px solid var(--border);background:#fff;color:var(--text3);font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🏡 เยี่ยมบ้าน</button>
       </div>
       <div class="form-group"><label id="rec-date-label">วันที่ฉีดยา</label><input type="date" id="rec-date" value="${todayISO()}" oninput="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"></div>
-      <div class="form-group"><label>รอบนัดต่อไป</label><select id="rec-interval" onchange="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
+      <div class="form-group"><label>รอบนัดต่อไป</label><select id="rec-interval" onchange="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option><option>ไม่มีนัด</option></select></div>
       <div class="form-group"><label>📅 วันนัดครั้งต่อไป <span style="font-size:11px;color:var(--text3);font-weight:400">(เลือกเองหรือปล่อยให้คำนวณ)</span></label><input type="date" id="rec-next-date" oninput="syncIntervalFromNextDate('rec-date','rec-next-date','rec-interval')"></div>
       <div class="form-group" id="rec-medication-wrap"><label>ยาที่ฉีด</label><input type="text" id="rec-medication" list="med-list" autocomplete="off" value="${esc(p.medication_name||'')}" placeholder="แตะเพื่อเลือกยา หรือพิมพ์ชื่อยา" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="rec-note" placeholder="ผลการฉีดยา, อาการ..."></div>
@@ -3653,6 +3657,9 @@ async function saveEditRecord(id,patientId){
         }
         await sb.from('patients').update({next_inject_date:nextDate}).eq('id',patientId)
       }
+    }else if(interval_days<=0&&!nextDate){
+      // "ไม่มีนัด" → ล้างวันนัดของผู้ป่วย
+      await sb.from('patients').update(rec?.record_type==='visit'?{next_visit_date:null}:{next_inject_date:null}).eq('id',patientId)
     }
     await openModal(patientId)
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
@@ -3992,6 +3999,9 @@ async function saveModalRecord(pid,gc){
         await sb.from('injection_records').insert({patient_id:pid,injection_date:nextDate,group_color:gc,group_label:gl,interval_str,interval_days,note:'',record_type,recorded_by:currentDisplayName||null})
         await sb.from('patients').update({next_inject_date:nextDate}).eq('id',pid)
       }
+    }else if(interval_days<=0&&!nextDate){
+      // "ไม่มีนัด" → ล้างวันนัดของผู้ป่วย ไม่ให้ขึ้นเกินนัด
+      await sb.from('patients').update(record_type==='visit'?{next_visit_date:null}:{next_inject_date:null}).eq('id',pid)
     }
     closeModal()
     allPatients=await getPatients()
@@ -5516,7 +5526,7 @@ function openAddPatient(){
     </select>
   </div>
   <div class="form-group"><label>วันที่ฉีดยาล่าสุด (ถ้ามี)</label><input type="date" id="np-date" value="${todayISO()}"></div>
-  <div class="form-group"><label>รอบนัดต่อไป</label><select id="np-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option></select></div>
+  <div class="form-group"><label>รอบนัดต่อไป</label><select id="np-interval"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option><option>ไม่มีนัด</option></select></div>
   <div class="form-group"><label>หมายเหตุ</label><input type="text" id="np-note" placeholder="บันทึกเพิ่มเติม..."></div>
   <div class="form-group">
     <label>🪪 เลขบัตรประชาชน <span style="font-size:11px;color:var(--text3);font-weight:400">(13 หลัก — แสดงเฉพาะ admin)</span></label>
@@ -5668,7 +5678,8 @@ async function refreshMedList(force=false){
     ;(pts||[]).forEach(r=>add(r.medication_name,1))
   }catch(e){console.warn('refreshMedList:',e)}
   DEFAULT_MEDS.forEach(n=>add(n,0))
-  const names=[...count.keys()].sort((a,b)=>count.get(b)-count.get(a)||a.localeCompare(b)).map(k=>label.get(k))
+  const FIXED=['ไม่มียาฉีด','ไม่ยินยอมฉีดยา']
+  const names=[...FIXED,...[...count.keys()].filter(k=>!FIXED.includes(label.get(k))).sort((a,b)=>count.get(b)-count.get(a)||a.localeCompare(b)).map(k=>label.get(k))]
   let dl=document.getElementById('med-list')
   if(!dl){dl=document.createElement('datalist');dl.id='med-list';document.body.appendChild(dl)}
   dl.innerHTML=names.map(n=>`<option value="${esc(n)}"></option>`).join('')
