@@ -3440,6 +3440,7 @@ async function openModal(id){
         <div class="form-group"><label>🏠 บ้านเลขที่</label><input type="text" id="edit-pt-house-no" placeholder="เช่น 123/4" style="width:100%;box-sizing:border-box"></div>
       </div>
       ${dxFieldsHtml('edit-pt',p)}
+      ${canDo('record')?`<div class="form-group"><label>กลุ่มสี <span style="font-size:11px;color:var(--text3);font-weight:400">${p.last_date?'(ปรับเมื่ออาการเปลี่ยน)':'(ยังไม่มีบันทึก — ตั้งสีได้ตอนกด + บันทึก)'}</span></label><select id="edit-pt-group" data-orig="${esc(p.group_color||'')}"${p.last_date?'':' disabled'}>${p.group_color?'':'<option value="">— ยังไม่มีสี —</option>'}${[['red','🔴 สีแดง'],['yellow','🟡 สีเหลือง'],['green','🟢 สีเขียว']].map(([k,l])=>`<option value="${k}"${p.group_color===k?' selected':''}>${l}</option>`).join('')}</select></div>`:''}
       <div class="form-group"><label>👨‍⚕️ เจ้าหน้าที่รับผิดชอบ</label><select id="edit-pt-staff" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>🏡 อสม. รับผิดชอบ <span id="edit-pt-aosomo-village" style="font-size:11px;color:#7c3aed;font-weight:400"></span></label><select id="edit-pt-aosomo" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
@@ -3908,6 +3909,20 @@ async function saveEditPatient(id){
     const next_inject_date=document.getElementById('edit-pt-next-inject-date')?.value||null
     const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name,oral_medication,next_visit_date,next_inject_date}
     Object.assign(updates,readRiskFields('edit-pt'),readDxFields('edit-pt'))
+    // กลุ่มสีอยู่ในบันทึกฉีดยา/นัด → เปลี่ยนสีของบันทึกล่าสุด และนัดล่วงหน้าทั้งหมด
+    const gEl=document.getElementById('edit-pt-group')
+    if(gEl&&!gEl.disabled&&['red','yellow','green'].includes(gEl.value)&&gEl.value!==gEl.dataset.orig){
+      const gc=gEl.value,gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
+      const{data:last}=await sb.from('injection_records').select('id').eq('patient_id',id).order('injection_date',{ascending:false}).order('id',{ascending:false}).limit(1).maybeSingle()
+      if(last){
+        const[{error:e1},{error:e2}]=await Promise.all([
+          sb.from('injection_records').update({group_color:gc,group_label:gl}).eq('id',last.id),
+          sb.from('injection_records').update({group_color:gc,group_label:gl}).eq('patient_id',id).gt('injection_date',todayISO())
+        ])
+        if(e1||e2)throw new Error('เปลี่ยนกลุ่มสีไม่สำเร็จ: '+(e1||e2).message)
+        auditLog('change_group_color','patient',id,{from:gEl.dataset.orig||null,to:gc})
+      }
+    }
     if(canDo('admin'))updates.national_id=nidRaw
     const photoInput=document.getElementById('edit-pt-photo')
     const photoFile=photoInput?.files?.[0]||null
@@ -5310,7 +5325,7 @@ async function loadAuditLog(){
     member_role_changed:'เปลี่ยน role',change_village:'เปลี่ยนหมู่บ้าน',account_unlocked:'ปลดล็อคบัญชี',
     import_aosomo_directory:'นำเข้ารายชื่อ อสม.',import_staff_directory:'นำเข้ารายชื่อเจ้าหน้าที่',
     export_csv:'ส่งออก CSV',export_json:'ส่งออก JSON',export_visits_excel:'ส่งออก Excel เยี่ยม',
-    print_monthly_report:'พิมพ์รายงานเดือน',print_color_report:'พิมพ์รายงานแยกกลุ่มสี',print_patient_timeline:'พิมพ์ Timeline ผู้ป่วย',
+    print_monthly_report:'พิมพ์รายงานเดือน',print_color_report:'พิมพ์รายงานแยกกลุ่มสี',change_group_color:'เปลี่ยนกลุ่มสี',print_patient_timeline:'พิมพ์ Timeline ผู้ป่วย',
     view_audit_log:'ดู Audit Log',privacy_accepted:'ยอมรับนโยบาย',
   }
   const ACTION_COLOR={
