@@ -313,7 +313,7 @@ function patientCard(p) {
 let _riskReady=false
 const RISK_COLS='birth_date,adl_group,risk_flags'
 const ADL_GROUPS=[{k:'social',l:'ติดสังคม',icon:'🚶'},{k:'home',l:'ติดบ้าน',icon:'🏠'},{k:'bed',l:'ติดเตียง',icon:'🛏️'}]
-const RISK_FLAGS=[{k:'smiv',l:'SMI-V',icon:'⚠️'},{k:'disabled',l:'พิการ',icon:'♿'},{k:'alone',l:'อยู่คนเดียว',icon:'👤'},{k:'substance',l:'ใช้สารเสพติด',icon:'🚬'}]
+const RISK_FLAGS=[{k:'elderly',l:'สูงอายุ',icon:'👴'},{k:'smiv',l:'SMI-V',icon:'⚠️'},{k:'disabled',l:'พิการ',icon:'♿'},{k:'alone',l:'อยู่คนเดียว',icon:'👤'},{k:'substance',l:'ใช้สารเสพติด',icon:'🚬'}]
 function ageOf(bd){
   if(!bd)return null
   const b=new Date(String(bd).slice(0,10)+'T00:00:00'),t=new Date()
@@ -322,13 +322,14 @@ function ageOf(bd){
   if(t.getMonth()<b.getMonth()||(t.getMonth()===b.getMonth()&&t.getDate()<b.getDate()))a--
   return a>=0&&a<130?a:null
 }
-// กลุ่มเสี่ยงของผู้ป่วย: [{k,l,icon}] — สูงอายุ = อายุ 60 ปีขึ้นไป
+// ปัจจัยเสี่ยงของผู้ป่วย: [{k,l,icon}] — สูงอายุ = อายุ 60 ปีขึ้นไป หรือติ๊ก "สูงอายุ" (เมื่อยังไม่ทราบวันเกิด)
 function riskGroupsOf(p){
   const out=[],age=ageOf(p.birth_date)
-  if(age!=null&&age>=60)out.push({k:'elderly',l:`สูงอายุ ${age} ปี`,icon:'👴'})
-  const adl=ADL_GROUPS.find(g=>g.k===p.adl_group);if(adl)out.push(adl)
   const flags=Array.isArray(p.risk_flags)?p.risk_flags:[]
-  RISK_FLAGS.forEach(f=>{if(flags.includes(f.k))out.push(f)})
+  if(age!=null&&age>=60)out.push({k:'elderly',l:`สูงอายุ ${age} ปี`,icon:'👴'})
+  else if(flags.includes('elderly'))out.push({k:'elderly',l:'สูงอายุ',icon:'👴'})
+  const adl=ADL_GROUPS.find(g=>g.k===p.adl_group);if(adl)out.push(adl)
+  RISK_FLAGS.forEach(f=>{if(f.k!=='elderly'&&flags.includes(f.k))out.push(f)})
   return out
 }
 // กลุ่มป่วย = มีรหัสโรค (วินิจฉัยแล้ว) · กลุ่มเสี่ยง = ยังไม่มีรหัสโรค (ยังไม่ป่วย เช่น สูงอายุ ติดบ้าน)
@@ -2929,7 +2930,7 @@ async function generateColorReport(){
     return `<tr><td>${esc(v)}</td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}">${c(g.key)||'–'}</td>`).join('')}<td class="n"><b>${inV.length}</b></td></tr>`
   }).join('')
   // ตารางกลุ่มเสี่ยง × กลุ่มสี
-  const RISK_ROWS=[{k:'elderly',l:'สูงอายุ (60 ปีขึ้นไป)',icon:'👴'},...ADL_GROUPS,...RISK_FLAGS]
+  const RISK_ROWS=[{k:'elderly',l:'สูงอายุ (60 ปีขึ้นไป)',icon:'👴'},...ADL_GROUPS,...RISK_FLAGS.filter(f=>f.k!=='elderly')]
   const inRisk=(p,k)=>riskGroupsOf(p).some(x=>x.k===k)
   const anyRisk=pts.filter(p=>riskGroupsOf(p).length).length
   const rRows=RISK_ROWS.map(r=>{
