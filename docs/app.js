@@ -2630,7 +2630,8 @@ async function mergeAndSavePatients(records, confirmMsg){
   const toUpdate=[]
   for(const rec of deduped){
     const ex=exMap[rec.name]
-    if(!ex){toInsert.push(rec)}
+    // group_color ไม่ใช่คอลัมน์ของ patients (สีอยู่ในบันทึกฉีดยา) — ตัดออกก่อนบันทึก
+    if(!ex){const{group_color,...row}=rec;toInsert.push(row)}
     else{
       // fill only empty fields, keep existing data
       const upd={
@@ -3593,6 +3594,7 @@ async function openModal(id){
       <div class="form-group"><label id="rec-date-label">วันที่ฉีดยา</label><input type="date" id="rec-date" value="${todayISO()}" oninput="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"></div>
       <div class="form-group"><label>รอบนัดต่อไป</label><select id="rec-interval" onchange="syncNextDateFromInterval('rec-date','rec-interval','rec-next-date')"><option>2 สัปดาห์</option><option>3 สัปดาห์</option><option>4 สัปดาห์</option><option selected>1 เดือน</option><option>3 เดือน</option><option>ไม่มีนัด</option></select></div>
       <div class="form-group"><label>📅 วันนัดครั้งต่อไป <span style="font-size:11px;color:var(--text3);font-weight:400">(เลือกเองหรือปล่อยให้คำนวณ)</span></label><input type="date" id="rec-next-date" oninput="syncIntervalFromNextDate('rec-date','rec-next-date','rec-interval')"></div>
+      <div class="form-group"><label>กลุ่มสี <span style="font-size:11px;color:var(--text3);font-weight:400">(ปรับได้เมื่ออาการเปลี่ยน)</span></label><select id="rec-group">${[['red','🔴 สีแดง'],['yellow','🟡 สีเหลือง'],['green','🟢 สีเขียว']].map(([k,l])=>`<option value="${k}"${(p.group_color||'yellow')===k?' selected':''}>${l}</option>`).join('')}</select></div>
       <div class="form-group" id="rec-medication-wrap"><label>ยาที่ฉีด</label><input type="text" id="rec-medication" list="med-list" autocomplete="off" value="${esc(p.medication_name||'')}" placeholder="แตะเพื่อเลือกยา หรือพิมพ์ชื่อยา" style="width:100%;box-sizing:border-box"></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="rec-note" placeholder="ผลการฉีดยา, อาการ..."></div>
       <div style="display:flex;gap:8px">
@@ -3968,7 +3970,10 @@ function toggleRecType(type){
   if(intLbl)intLbl.textContent=type==='visit'?'รอบเยี่ยมถัดไป':'รอบนัดต่อไป'
 }
 
-async function saveModalRecord(pid,gc){
+async function saveModalRecord(pid,gcOld){
+  // สีจากช่อง "กลุ่มสี" (เติมสีปัจจุบันไว้ให้) — ไม่มีช่อง/ค่าแปลก → ใช้สีเดิม
+  const gcSel=document.getElementById('rec-group')?.value
+  const gc=['red','yellow','green'].includes(gcSel)?gcSel:(['red','yellow','green'].includes(gcOld)?gcOld:'yellow')
   const date=document.getElementById('rec-date')?.value
   const note=document.getElementById('rec-note')?.value||''
   // ยาที่ฉีด บันทึกเฉพาะการฉีดยา (ช่องนี้เติมยาประจำของผู้ป่วยไว้ให้ล่วงหน้า)
