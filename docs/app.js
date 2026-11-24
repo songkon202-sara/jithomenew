@@ -1434,19 +1434,43 @@ function renderMHAssessResult(a,detail=false){
   const detailHtml=detail&&detailSecs.length?`<div style="margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden">${detailSecs.map((sec,si)=>`<div style="padding:6px 10px;${si<detailSecs.length-1?'border-bottom:1px solid var(--border)':''}"><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px">${sec.title}</div>${sec.rows.map(r=>`<div style="font-size:11px;color:var(--text1);line-height:1.8;padding-left:6px">• ${r}</div>`).join('')}</div>`).join('')}</div>`:''
   return`<div style="display:flex;flex-direction:column;gap:4px;margin-top:2px"><div style="display:flex;flex-wrap:wrap;gap:4px"><span style="font-size:11px;color:var(--text3);margin-right:2px">🧠</span>${chips.join('')}</div>${detailHtml}</div>`
 }
+// ─── เลือกรูป: ปุ่มถ่ายรูป + ปุ่มคลังรูป (Android บางรุ่นไม่แสดงคลังรูปถ้ามีช่องเดียว) ───
+const _picked={}
+function photoPickHtml(id,multiple){
+  _picked[id]=[]
+  const btn="flex:1;padding:10px 6px;border-radius:8px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;text-align:center"
+  return `<div style="display:flex;gap:8px">
+    <label style="${btn}">📷 ถ่ายรูป<input type="file" id="${id}-cam" accept="image/*" capture="environment" style="display:none" onchange="onPhotoPicked('${id}',this,${multiple})"></label>
+    <label style="${btn}">🖼️ เลือกจากคลังรูป<input type="file" id="${id}" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif"${multiple?' multiple':''} style="display:none" onchange="onPhotoPicked('${id}',this,${multiple})"></label>
+  </div><div id="${id}-status" style="font-size:11px;color:var(--text3);margin-top:4px">${multiple?'เลือกได้หลายรูป · ':''}ยังไม่ได้เลือกรูป</div>`
+}
+function onPhotoPicked(id,input,multiple){
+  const files=[...(input.files||[])]
+  if(!files.length)return
+  _picked[id]=multiple?[...(_picked[id]||[]),...files]:[files[0]]
+  input.value=''
+  const st=document.getElementById(id+'-status')
+  if(st)st.innerHTML=`✅ เลือกแล้ว ${_picked[id].length} รูป <a href="#" onclick="_picked['${id}']=[];this.parentNode.textContent='ยังไม่ได้เลือกรูป';return false" style="color:#b91c1c;margin-left:6px">ล้าง</a>`
+  if(id==='v-photo'){
+    const prev=document.getElementById('v-photo-preview')
+    if(prev)prev.innerHTML=`<img src="${URL.createObjectURL(_picked[id][0])}" style="max-width:100%;max-height:120px;border-radius:8px;object-fit:cover">`
+  }
+}
+function pickedPhotos(id){return _picked[id]||[]}
+function canEditVisit(v){return canDo('record')||(v.visit_type==='aosomo'&&currentRole==='aosomo')}
 function renderVisitList(visits){
   if(!visits.length)return'<div class="empty"><p>ไม่มีบันทึกการเยี่ยมบ้าน</p></div>'
   return visits.map(v=>{
     const cl=v.visit_type==='staff'?STAFF_CHECKLIST:AOSOMO_CHECKLIST
     const pct=cl.length?v.score/cl.length:0
     const[bg,clr,lbl]=pct>=0.8?['var(--green-lt)','var(--green)','ปกติดี']:pct>=0.5?['var(--yellow-lt)','var(--yellow)','พอใช้']:['var(--red-lt)','var(--red)','ต้องติดตาม']
-    const canEdit=canDo('admin')||(v.visit_type==='aosomo'&&currentRole==='aosomo')||(v.visit_type==='staff'&&canDo('record'))
+    const canEdit=canEditVisit(v)
     return`<div class="visit-card ${v.visit_type}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700">${esc(v.patient_name)}</div><div style="font-size:12px;color:var(--text3)">${esc(v.village||'')} · ${v.visit_date_th||v.visit_date}</div></div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
           <span style="background:${bg};color:${clr};padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700">${lbl}</span>
-          ${canEdit?`<button onclick="openEditVisit(${v.id})" aria-label="แก้ไขบันทึกเยี่ยมบ้าน" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">✏️</button>`:''}
+          ${canEdit?`<button onclick="openEditVisit(${v.id})" aria-label="แก้ไขบันทึกเยี่ยมบ้าน" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:3px 8px;font-size:12px;font-weight:700;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
           ${canDo('admin')?`<button onclick="deleteVisit(${v.id},'${jsStr(v.patient_name)}')" aria-label="ลบบันทึกเยี่ยมบ้าน" style="background:none;border:1px solid #fca5a5;border-radius:6px;cursor:pointer;color:#b91c1c;padding:3px 8px;font-size:11px;font-family:'Sarabun',sans-serif">🗑️</button>`:''}
         </div>
       </div>
@@ -1552,7 +1576,7 @@ async function saveEditVisit(id){
   const note=(noteRaw+rfText+ytText+a10Text+probText).trim()
   const btn=document.getElementById('v-save-btn')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
-  const photoFile=document.getElementById('v-photo')?.files?.[0]||null
+  const photoFile=pickedPhotos('v-photo')[0]||null
   const assessment_json=getMHAssessJSON()
   const updates={patient_name:name,village,visit_date:date,visitor,checks_json:JSON.stringify(_visitChecks),score:_visitChecks.length,note,refer,assessment_json}
   if(photoFile){
@@ -1569,7 +1593,9 @@ async function saveEditVisit(id){
   auditLog('edit_visit','visit',id,{patient_name:name,visitor})
   _markOwnWrite(id)
   closeVisitModal()
+  showToast('✅ บันทึกการแก้ไขแล้ว')
   if(location.hash==='#visit')navigate('visit')
+  if(document.getElementById('modal-overlay')?.style.display==='flex'&&window._modalPatientId)openModal(window._modalPatientId)
 }
 function setVTab(tab,btn){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active')
@@ -3575,6 +3601,8 @@ async function openModal(id){
     if(pExtra?.next_visit_date) p.next_visit_date=pExtra.next_visit_date
     p.group_label=groupLabel(p.group_color)
     const hist=await getHistory(id)
+    const{data:pVisits}=await sb.from('home_visits').select('id,visit_date,visit_type,visitor,note,refer,score,photo_url').eq('patient_id',id).order('visit_date',{ascending:false})
+    window._modalPatientId=id
     const todayStr=todayISO()
     const futureRecs=hist.filter(h=>h.injection_date>todayStr&&h.record_type!=='visit')
     const pastRecs=hist.filter(h=>h.injection_date<=todayStr)
@@ -3683,7 +3711,7 @@ async function openModal(id){
       <div class="form-group">
         <label>📷 ภาพถ่ายบริบท <span style="font-size:11px;font-weight:400;color:var(--text3)">เช่น บ้าน สภาพแวดล้อม สถานที่อยู่อาศัย</span></label>
         ${(p.photo_urls&&p.photo_urls.length>0)?`<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:6px">${p.photo_urls.map((url,i)=>`<div style="border-radius:8px;overflow:hidden;border:1px solid var(--border);position:relative"><img src="${esc(url)}" style="max-width:100%;max-height:120px;object-fit:cover;display:block"><button onclick="removePatientPhoto(${p.id},${i})" style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,0.85);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;font-family:'Sarabun',sans-serif">×</button></div>`).join('')}</div>`:''}
-        <input type="file" id="edit-pt-photo" accept="image/*" multiple style="width:100%;box-sizing:border-box"><div style="font-size:11px;color:var(--text3);margin-top:3px">ถ่ายรูปใหม่ หรือเลือกจากคลังรูป · เลือกได้หลายรูป</div>
+        ${photoPickHtml('edit-pt-photo',true)}
       </div>
       <div class="form-group">
         <label>📎 แนบไฟล์เอกสาร (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
@@ -3818,7 +3846,17 @@ async function openModal(id){
       </div>
     </div>
     <div>${histHtml}</div>
-    ${hist.length>8?`<div style="font-size:12px;color:var(--text3);text-align:center;padding-top:8px">+ ${hist.length-8} รายการก่อนหน้า</div>`:''}`
+    ${hist.length>8?`<div style="font-size:12px;color:var(--text3);text-align:center;padding-top:8px">+ ${hist.length-8} รายการก่อนหน้า</div>`:''}
+    ${(pVisits||[]).length?`<div style="font-size:13px;font-weight:700;margin:16px 0 8px;padding-top:12px;border-top:1px solid var(--border)">🏡 ประวัติการเยี่ยมบ้าน (${pVisits.length} ครั้ง)</div>
+    ${pVisits.slice(0,10).map(v=>`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:700">${esc(thDate(v.visit_date))} · ${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'}${v.refer?' <span style="color:#b91c1c">⚠️ ส่งต่อ</span>':''}${v.photo_url?' 📷':''}</div>
+        <div style="font-size:11px;color:var(--text3)">${esc(v.visitor||'')}</div>
+        ${v.note?`<div class="history-note">${esc(v.note.slice(0,120))}${v.note.length>120?'...':''}</div>`:''}
+      </div>
+      ${canEditVisit(v)?`<button onclick="openEditVisit(${v.id})" style="flex-shrink:0;background:#fff;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);padding:4px 10px;font-size:12px;font-weight:700;font-family:'Sarabun',sans-serif">✏️ แก้ไข</button>`:''}
+    </div>`).join('')}
+    ${pVisits.length>10?`<div style="font-size:12px;color:var(--text3);text-align:center">+ อีก ${pVisits.length-10} ครั้ง ดูได้ที่หน้าเยี่ยมบ้าน</div>`:''}`:''}`
   }catch(e){ct.innerHTML=`<div style="padding:20px;color:var(--red)">เกิดข้อผิดพลาด: ${esc(e.message)}</div>`}
 }
 function closeModal(){document.getElementById('modal-overlay').style.display='none'}
@@ -4154,8 +4192,7 @@ async function saveEditPatient(id){
       }
     }
     if(canDo('admin'))updates.national_id=nidRaw
-    const photoInput=document.getElementById('edit-pt-photo')
-    const photoFiles=[...(photoInput?.files||[])]
+    const photoFiles=pickedPhotos('edit-pt-photo')
     if(photoFiles.length){
       const urls=[]
       for(const[i,photoFile]of photoFiles.entries()){
@@ -4563,7 +4600,7 @@ function openVisitForm(type){
     </div>
 `:''}
   <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="v-note" rows="3" style="resize:none;font-family:'Sarabun',sans-serif" placeholder="อาการ สิ่งที่พบ ข้อสังเกต..."></textarea></div>
-  <div class="form-group"><label>📷 รูปถ่าย (ไม่บังคับ)</label><input type="file" id="v-photo" accept="image/*" style="width:100%;box-sizing:border-box"><div style="font-size:11px;color:var(--text3);margin-top:3px">ถ่ายรูปใหม่ หรือเลือกรูปที่ถ่ายไว้แล้วจากคลังรูป</div><div id="v-photo-preview" style="margin-top:6px"></div></div>
+  <div class="form-group"><label>📷 รูปถ่าย (ไม่บังคับ)</label>${photoPickHtml('v-photo',false)}<div id="v-photo-preview" style="margin-top:6px"></div></div>
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:8px;margin-bottom:14px">
     <div><div style="font-size:13px;font-weight:700;color:var(--red)">ต้องการส่งต่อ / รายงานเร่งด่วน</div><div style="font-size:11px;color:var(--text3)">กรณีพบความเสี่ยงสูง</div></div>
     <label class="toggle"><input type="checkbox" id="v-refer"><span class="toggle-slider"></span></label>
@@ -4948,7 +4985,7 @@ async function saveVisitRecord(){
   const a10Text=_visitType==='staff'?getAssess10Text():''
   const probText=_visitProblems.length>0?`\n[ปัญหาที่พบ] ${_visitProblems.map(id=>AOSOMO_PROBLEMS.find(([pid])=>pid===id)?.[1]||id).join(' | ')}`:''
   const fullNote=(note+oasText+rfText+ytText+a10Text+probText).trim()
-  const photoFile=document.getElementById('v-photo')?.files?.[0]||null
+  const photoFile=pickedPhotos('v-photo')[0]||null
   let photoUrl=null
   if(photoFile){
     btn.textContent='กำลังอัพโหลดรูป...'
