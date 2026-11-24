@@ -313,7 +313,10 @@ function patientCard(p) {
         ${p.next_visit_date?`<span style="color:#ea580c">🏡 ${thDate(p.next_visit_date)}</span>`:''}
       </span>
     </div>
-    ${p.deceased_date?`<div style="margin-top:6px;font-size:11px;color:#374151">⚫ เสียชีวิต ${thDate(p.deceased_date)}</div>`:''}${!hasDiseaseCode(p)?'<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc">🛡️ กลุ่มเสี่ยง · ยังไม่ป่วย</span></div>':''}${riskBadgesHtml(p)}${_aosomoVisReady&&canDo('record')?`<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;${p.aosomo_visible?'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe">🏡 ส่งให้ อสม. แล้ว':'background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb">🙈 อสม. ไม่เห็น'}</span></div>`:''}${disease}${nid}${note}
+    ${p.deceased_date?`<div style="margin-top:6px;font-size:11px;color:#374151">⚫ เสียชีวิต ${thDate(p.deceased_date)}</div>`:''}${!hasDiseaseCode(p)?'<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc">🛡️ กลุ่มเสี่ยง · ยังไม่ป่วย</span></div>':''}${riskBadgesHtml(p)}${_aosomoVisReady&&canDo('record')&&!dead?`<div style="margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;${p.aosomo_visible?'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe">🏡 ส่งให้ อสม. แล้ว':'background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb">🙈 อสม. ไม่เห็น'}</span>
+      <button onclick="event.stopPropagation();toggleAosomoVisible(${p.id},true)" style="padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;${p.aosomo_visible?'border:1.5px solid #d1d5db;background:#fff;color:#374151">ยกเลิกการส่ง':'border:1.5px solid #7c3aed;background:#7c3aed;color:#fff">🏡 ส่งให้ อสม.'}</button>
+    </div>`:''}${disease}${nid}${note}
   </div>`
 }
 
@@ -709,10 +712,11 @@ async function setAosomoVisible(list,on){
   }
   return true
 }
-async function toggleAosomoVisible(id){
+async function toggleAosomoVisible(id,fromCard){
   const p=allPatients.find(x=>x.id===id)||_deceasedPatients.find(x=>x.id===id)
   if(!p)return
-  if(await setAosomoVisible([p],!p.aosomo_visible))openModal(id)
+  // กดจากการ์ดในหน้ารายชื่อ: อยู่หน้าเดิม (รายการรีเฟรชเอง) · กดจากหน้ารายละเอียด: เปิดรายละเอียดใหม่
+  if(await setAosomoVisible([p],!p.aosomo_visible)&&!fromCard)openModal(id)
 }
 function renderPtPage(){
   const list=document.getElementById('pt-list')
