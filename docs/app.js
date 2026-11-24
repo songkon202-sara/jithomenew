@@ -1561,6 +1561,7 @@ async function saveEditVisit(id){
     const filename=`visits/${Date.now()}.${ext}`
     const{error:ue}=await sb.storage.from('patient-files').upload(filename,photoFile)
     if(!ue){const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename);updates.photo_url=publicUrl}
+    else showToast('⚠️ อัพโหลดรูปไม่สำเร็จ: '+ue.message+' — บันทึกข้อมูลอื่นต่อ',5000)
     btn.textContent='กำลังบันทึก...'
   }
   const{error}=await sb.from('home_visits').update(updates).eq('id',id)
@@ -3682,7 +3683,7 @@ async function openModal(id){
       <div class="form-group">
         <label>📷 ภาพถ่ายบริบท <span style="font-size:11px;font-weight:400;color:var(--text3)">เช่น บ้าน สภาพแวดล้อม สถานที่อยู่อาศัย</span></label>
         ${(p.photo_urls&&p.photo_urls.length>0)?`<div style="margin-bottom:8px;display:flex;flex-direction:column;gap:6px">${p.photo_urls.map((url,i)=>`<div style="border-radius:8px;overflow:hidden;border:1px solid var(--border);position:relative"><img src="${esc(url)}" style="max-width:100%;max-height:120px;object-fit:cover;display:block"><button onclick="removePatientPhoto(${p.id},${i})" style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,0.85);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;font-family:'Sarabun',sans-serif">×</button></div>`).join('')}</div>`:''}
-        <input type="file" id="edit-pt-photo" accept="image/*" capture="environment" style="width:100%;box-sizing:border-box">
+        <input type="file" id="edit-pt-photo" accept="image/*" multiple style="width:100%;box-sizing:border-box"><div style="font-size:11px;color:var(--text3);margin-top:3px">ถ่ายรูปใหม่ หรือเลือกจากคลังรูป · เลือกได้หลายรูป</div>
       </div>
       <div class="form-group">
         <label>📎 แนบไฟล์เอกสาร (ภาพ / PDF / Excel ไม่เกิน 10 MB)</label>
@@ -4154,16 +4155,19 @@ async function saveEditPatient(id){
     }
     if(canDo('admin'))updates.national_id=nidRaw
     const photoInput=document.getElementById('edit-pt-photo')
-    const photoFile=photoInput?.files?.[0]||null
-    if(photoFile){
-      btn.textContent='กำลังอัพโหลดรูป...'
-      const ext=photoFile.name.split('.').pop()
-      const filename=`photos/${Date.now()}.${ext}`
-      const{error:pe}=await sb.storage.from('patient-files').upload(filename,photoFile)
-      if(pe)throw new Error('อัพโหลดรูปไม่สำเร็จ: '+pe.message)
-      const{data:{publicUrl}}=sb.storage.from('patient-files').getPublicUrl(filename)
+    const photoFiles=[...(photoInput?.files||[])]
+    if(photoFiles.length){
+      const urls=[]
+      for(const[i,photoFile]of photoFiles.entries()){
+        btn.textContent=`กำลังอัพโหลดรูป ${i+1}/${photoFiles.length}...`
+        const ext=(photoFile.name.split('.').pop()||'jpg').toLowerCase()
+        const filename=`photos/${Date.now()}_${i}.${ext}`
+        const{error:pe}=await sb.storage.from('patient-files').upload(filename,photoFile)
+        if(pe)throw new Error('อัพโหลดรูปไม่สำเร็จ: '+pe.message)
+        urls.push(sb.storage.from('patient-files').getPublicUrl(filename).data.publicUrl)
+      }
       const{data:cur}=await sb.from('patients').select('photo_urls').eq('id',id).single()
-      updates.photo_urls=[publicUrl,...(cur?.photo_urls||[])]
+      updates.photo_urls=[...urls,...(cur?.photo_urls||[])]
       btn.textContent='กำลังบันทึก...'
     }
     if(file){
@@ -4559,7 +4563,7 @@ function openVisitForm(type){
     </div>
 `:''}
   <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="v-note" rows="3" style="resize:none;font-family:'Sarabun',sans-serif" placeholder="อาการ สิ่งที่พบ ข้อสังเกต..."></textarea></div>
-  <div class="form-group"><label>📷 รูปถ่าย (ไม่บังคับ)</label><input type="file" id="v-photo" accept="image/*" capture="environment" style="width:100%;box-sizing:border-box"><div id="v-photo-preview" style="margin-top:6px"></div></div>
+  <div class="form-group"><label>📷 รูปถ่าย (ไม่บังคับ)</label><input type="file" id="v-photo" accept="image/*" style="width:100%;box-sizing:border-box"><div style="font-size:11px;color:var(--text3);margin-top:3px">ถ่ายรูปใหม่ หรือเลือกรูปที่ถ่ายไว้แล้วจากคลังรูป</div><div id="v-photo-preview" style="margin-top:6px"></div></div>
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:8px;margin-bottom:14px">
     <div><div style="font-size:13px;font-weight:700;color:var(--red)">ต้องการส่งต่อ / รายงานเร่งด่วน</div><div style="font-size:11px;color:var(--text3)">กรณีพบความเสี่ยงสูง</div></div>
     <label class="toggle"><input type="checkbox" id="v-refer"><span class="toggle-slider"></span></label>
