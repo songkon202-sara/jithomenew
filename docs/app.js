@@ -2010,7 +2010,7 @@ async function renderAdmin(el) {
         </div>
         <button onclick="document.getElementById('hospital-import-input').click()" style="padding:5px 12px;background:#d97706;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">📎 นำเข้า</button>
       </div>
-      <div style="font-size:11px;color:#92400e;background:#fff;border-radius:6px;padding:6px 10px">คอลัมน์: <strong>C=ชื่อ, D=สกุล, E=เลขบัตร, G=เลขที่(หมู่), H=namemooban, I=ตำบล, J=อำเภอ, K=จังหวัด, L=รหัสโรค, M=ชื่อโรค</strong></div>
+      <div style="font-size:11px;color:#92400e;background:#fff;border-radius:6px;padding:6px 10px">อ่านตาม<strong>หัวคอลัมน์</strong>ได้: ชื่อ, สกุล, รหัสบัตรประชาชน, อายุ, เลขที่ (เช่น "146 หมู่ที่ 3"), รหัสโรค, ชื่อโรค, กลุ่มสี · ลำดับคอลัมน์ไม่สำคัญ · อายุ 60 ปีขึ้นไปติ๊ก "สูงอายุ" ให้ · คนเดิมจับคู่ด้วยเลขบัตรหรือชื่อ (ไม่สร้างซ้ำ)</div>
       <input type="file" id="hospital-import-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="importHospitalFile(this)">
     </div>
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border)">
@@ -2632,17 +2632,26 @@ async function mergeAndSavePatients(records, confirmMsg){
   if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return false}
   if(!confirm(confirmMsg))return false
   // fetch existing patients to merge
-  const{data:existing}=await sb.from('patients').select('id,name,house_no,village,note,national_id,disease_code,disease_name,visit_interval,inject_interval,medication_name')
-  const exMap={}
-  existing?.forEach(p=>{exMap[p.name]=p})
-  // deduplicate records by name (last row wins within file)
+  const{data:existing}=await sb.from('patients').select('id,name,house_no,village,note,national_id,disease_code,disease_name,visit_interval,inject_interval,medication_name'+(_riskReady?',risk_flags':'')+(_baseColorReady?',group_color':''))
+  // จับคู่คนเดิม: เลขบัตรประชาชนก่อน แล้วจึงชื่อ (ไม่สนคำนำหน้า/ช่องว่าง) — กันบันทึกซ้ำแบบที่เคยเกิด
+  const exByNid={},exByName={}
+  existing?.forEach(p=>{const n=String(p.national_id||'').replace(/\D/g,'');if(n.length===13)exByNid[n]=p;exByName[normName(p.name)]=p})
+  const findEx=rec=>{
+    const n=String(rec.national_id||'').replace(/\D/g,'')
+    if(n.length===13&&exByNid[n])return exByNid[n]
+    const byName=exByName[normName(rec.name)]
+    // ชื่อตรงแต่เลขบัตรคนละเลข = คนละคน
+    const bn=String(byName?.national_id||'').replace(/\D/g,'')
+    return byName&&!(n.length===13&&bn.length===13&&bn!==n)?byName:null
+  }
+  // deduplicate records within the file (last row wins)
   const recMap={}
-  for(const rec of records)recMap[rec.name]=rec
+  for(const rec of records){const n=String(rec.national_id||'').replace(/\D/g,'');recMap[n.length===13?n:normName(rec.name)]=rec}
   const deduped=Object.values(recMap)
   const toInsert=[]
   const toUpdate=[]
   for(const rec of deduped){
-    const ex=exMap[rec.name]
+    const ex=findEx(rec)
     // group_color ไม่ใช่คอลัมน์ของ patients (สีอยู่ในบันทึกฉีดยา) — ตัดออกก่อนบันทึก
     if(!ex){const{group_color,...row}=rec;toInsert.push(_baseColorReady&&group_color?{...row,group_color}:row)}
     else{
@@ -2652,12 +2661,15 @@ async function mergeAndSavePatients(records, confirmMsg){
         village:ex.village||rec.village||'',
         note:ex.note||rec.note||'',
         national_id:ex.national_id||rec.national_id||null,
-        disease_code:ex.disease_code||rec.disease_code||null,
-        disease_name:ex.disease_name||rec.disease_name||null,
+        // F99 "รอระบุรหัสโรคจริง" → แทนด้วยรหัสจริงจากไฟล์
+        disease_code:(ex.disease_code&&ex.disease_code!=='F99'?ex.disease_code:null)||rec.disease_code||ex.disease_code||null,
+        disease_name:(ex.disease_code&&ex.disease_code!=='F99'?ex.disease_name:null)||(rec.disease_code?rec.disease_name:null)||ex.disease_name||null,
         visit_interval:ex.visit_interval??rec.visit_interval??null,
         inject_interval:ex.inject_interval??rec.inject_interval??null,
         medication_name:ex.medication_name||rec.medication_name||null,
       }
+      if(_riskReady&&rec.risk_flags?.length)upd.risk_flags=[...new Set([...(ex.risk_flags||[]),...rec.risk_flags])]
+      if(_baseColorReady&&rec.group_color&&!ex.group_color)upd.group_color=rec.group_color
       toUpdate.push({id:ex.id,...upd})
     }
   }
@@ -2704,6 +2716,40 @@ async function importPatientFile(input){
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
 
+// ─── นำเข้าไฟล์ตามหัวคอลัมน์ ──────────────────────────────────────
+// รองรับไฟล์ส่งออกจาก HOSxP / JHCIS / 43 แฟ้ม ที่เรียงคอลัมน์ต่างกัน — คืน null ถ้าไม่พบหัวคอลัมน์ ชื่อ+สกุล
+const PRENAME_RE=/^(นางสาว|นาง|นาย|น\.ส\.|นส\.|ด\.ช\.|ด\.ญ\.|เด็กชาย|เด็กหญิง|พระภิกษุ|พระ)\s*/
+function normName(n){return String(n||'').replace(PRENAME_RE,'').replace(/\s+/g,'')}
+function parseHospitalRowsByHeader(rows){
+  const H=rows[0].map(h=>String(h||'').trim().toLowerCase().replace(/\s+/g,''))
+  const col=(...names)=>{for(const n of names){const i=H.indexOf(n.toLowerCase());if(i>=0)return i}return -1}
+  const c={
+    fname:col('ชื่อ','fname','name'), lname:col('สกุล','นามสกุล','lname'), pname:col('คำนำหน้า','คำนำหน้าชื่อ','pname','prefix'),
+    cid:col('รหัสบัตรประชาชน','เลขบัตรประชาชน','เลขบัตร','cid','pid'), age:col('อายุ','age'), birth:col('วันเกิด','birthday','birth','dob'),
+    house:col('เลขที่','บ้านเลขที่','house_no','house','addr'), moo:col('หมู่','หมู่ที่','moo','namemooban','mooban','หมู่บ้าน','village'),
+    sub:col('subdistrict','ตำบล'), dist:col('district','อำเภอ'), prov:col('province','จังหวัด'),
+    dx:col('รหัสโรค','icd10','diagcode','รหัสicd10','disease_code'), dxn:col('ชื่อโรค','diagname','โรค','disease_name'), color:col('กลุ่มสี','สี','color','color_group'),
+  }
+  if(c.fname<0||c.lname<0)return null
+  const colorMap={'เขียว':'green','สีเขียว':'green','เหลือง':'yellow','สีเหลือง':'yellow','ส้ม':'yellow','แดง':'red','สีแดง':'red'}
+  const v=(r,i)=>i>=0?String(r[i]??'').trim():''
+  return rows.slice(1).map(r=>{
+    const name=[v(r,c.fname),v(r,c.lname)].filter(Boolean).join(' ')
+    if(!name)return null
+    const houseRaw=v(r,c.house)
+    const mooTxt=v(r,c.moo)||houseRaw
+    const m=mooTxt.match(/หมู่(?:ที่)?\s*(\d+)/)||(c.moo>=0&&/^\d+$/.test(v(r,c.moo))?[0,v(r,c.moo)]:null)
+    const village=m?`หมู่ ${parseInt(m[1])}`:''
+    const house_no=houseRaw.replace(/หมู่(?:ที่)?\s*\d+.*/,'').trim()
+    const sub=v(r,c.sub),dist=v(r,c.dist),prov=v(r,c.prov)
+    const note=[sub&&`ต.${sub}`,dist&&`อ.${dist}`,prov&&`จ.${prov}`].filter(Boolean).join(' ')
+    const rec={name,house_no,village,note,disease_code:v(r,c.dx).toUpperCase()||null,disease_name:v(r,c.dxn)||null,group_color:colorMap[v(r,c.color)]||null}
+    const nid=v(r,c.cid).replace(/\D/g,'').slice(0,13);if(nid.length===13)rec.national_id=nid
+    const age=parseInt(v(r,c.age));if(_riskReady&&age>=60&&age<130)rec.risk_flags=['elderly']
+    return rec
+  }).filter(Boolean)
+}
+
 async function importHospitalFile(input){
   const file=input.files[0];if(!file)return;input.value=''
   try{
@@ -2713,6 +2759,13 @@ async function importHospitalFile(input){
     const ws=wb.Sheets[wb.SheetNames[0]]
     const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}).filter(r=>r.length>1)
     if(rows.length<2){alert('ไม่พบข้อมูล');return}
+    // ไฟล์ที่มีหัวคอลัมน์ (ชื่อ / สกุล / รหัสโรค ...) → อ่านตามชื่อหัวคอลัมน์ ลำดับคอลัมน์ไม่สำคัญ
+    const byHeader=parseHospitalRowsByHeader(rows)
+    if(byHeader){
+      if(!byHeader.length){alert('ไม่พบรายชื่อในไฟล์');return}
+      await mergeAndSavePatients(byHeader,`นำเข้า/อัปเดต ${byHeader.length} รายชื่อ (อ่านตามหัวคอลัมน์) ใช่หรือไม่?\n\nจับคู่คนเดิมด้วยเลขบัตรประชาชน หรือชื่อ (ไม่สนคำนำหน้า/ช่องว่าง)`)
+      return
+    }
     // C=ชื่อ D=สกุล E=เลขบัตร G=เลขที่ H=namemooban I=subdistrict J=district K=province L=รหัสโรค M=ชื่อโรค N=สี
     const colorMap={'เขียว':'green','เหลือง':'yellow','แดง':'red','ส้ม':'yellow'}
     const records=rows.slice(1).filter(r=>String(r[2]||'').trim()).map(r=>{
