@@ -345,6 +345,9 @@ function riskGroupsOf(p){
 }
 // กลุ่มป่วย = มีรหัสโรค (วินิจฉัยแล้ว) · กลุ่มเสี่ยง = ยังไม่มีรหัสโรค (ยังไม่ป่วย เช่น สูงอายุ ติดบ้าน)
 // เรียงหมู่บ้านตามตัวเลข (หมู่ 2 ก่อนหมู่ 10) · นอกเขตไว้ท้าย
+// พื้นที่รับผิดชอบของ รพ.สต. (ใช้ตอนนำเข้าไฟล์: นอกพื้นที่ → นอกเขต)
+const HOME_SUBDISTRICT='สองคอน'
+const AREA_VILLAGES=['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9']
 function villageSort(a,b){const x=a==='นอกเขต',y=b==='นอกเขต';return x!==y?(x?1:-1):String(a).localeCompare(String(b),'th',{numeric:true})}
 function hasDiseaseCode(p){return !!String(p.disease_code||'').trim()}
 // หลายรหัสโรค: เก็บรวมในช่องเดียว รหัสคั่นด้วย ", " และชื่อโรคคั่นด้วย " / " (ลำดับตรงกัน)
@@ -2863,7 +2866,12 @@ function parseHospitalRowsByHeader(rows){
     if(!name)continue
     const houseRaw=v(r,c.house),mooRaw=v(r,c.moo)
     const m=(mooRaw.match(/หมู่(?:ที่)?\s*(\d+)/)||houseRaw.match(/หมู่(?:ที่)?\s*(\d+)/)||(/^\d{1,2}$/.test(mooRaw)?[0,mooRaw]:null))
-    const village=m?`หมู่ ${parseInt(m[1])}`:''
+    let village=m?`หมู่ ${parseInt(m[1])}`:''
+    const sub0=v(r,c.sub)
+    // นอกพื้นที่รับผิดชอบ → นอกเขต: ตำบลอื่น หรือหมู่ที่ไม่อยู่ในรายชื่อหมู่บ้าน
+    const outsideWarn=[]
+    if(sub0&&!sub0.includes(HOME_SUBDISTRICT)){if(village)outsideWarn.push(`ต.${sub0} ${village} อยู่นอกพื้นที่ → นอกเขต`);village='นอกเขต'}
+    else if(village&&!AREA_VILLAGES.includes(village)){outsideWarn.push(`${village} ไม่อยู่ในพื้นที่รับผิดชอบ → นอกเขต`);village='นอกเขต'}
     const house_no=houseRaw.replace(/\s*(ม\.|หมู่(?:ที่)?)\s*\d+.*/,'').trim()
     const sub=v(r,c.sub),dist=v(r,c.dist),prov=v(r,c.prov)
     const note=[sub&&`ต.${sub}`,dist&&`อ.${dist}`,prov&&`จ.${prov}`].filter(Boolean).join(' ')
@@ -2871,6 +2879,7 @@ function parseHospitalRowsByHeader(rows){
     const nid=v(r,c.cid).replace(/\D/g,'')
     if(nid.length===13&&validThaiId(nid))rec.national_id=nid
     else if(nid)rec._warn=['เลขบัตรไม่ถูกต้อง (ไม่บันทึก)']
+    if(outsideWarn.length)rec._warn=[...(rec._warn||[]),...outsideWarn]
     const age=parseInt(v(r,c.age));if(_riskReady&&age>=60&&age<130)rec.risk_flags=['elderly']
     out.push(rec)
   }
