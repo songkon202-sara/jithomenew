@@ -2628,9 +2628,48 @@ async function importStaffDirFile(input){
   }catch(e){alert('❌ เกิดข้อผิดพลาด: '+e.message)}
 }
 
+// ─── หน้าตรวจทานก่อนนำเข้า ─────────────────────────────────────────
+function showImportPreview(plan,subtitle){
+  return new Promise(resolve=>{
+    const nNew=plan.filter(x=>!x.ex).length,nUpd=plan.length-nNew,nWarn=plan.filter(x=>x.w.length).length
+    const ov=document.createElement('div')
+    ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px'
+    const td='padding:5px 6px;border-bottom:1px solid #f1f5f9;vertical-align:top'
+    const row=(x,i)=>`<tr style="${x.w.length?'background:#fffbeb':''}"><td style="${td};text-align:center">${i+1}</td><td style="${td}"><b>${esc(x.rec.name)}</b>${x.ex&&x.ex.name!==x.rec.name?`<div style="font-size:10px;color:#64748b">ในระบบ: ${esc(x.ex.name)}</div>`:''}</td><td style="${td}">${esc(x.rec.village||'—')}</td><td style="${td}">${esc(x.rec.disease_code||'—')}</td><td style="${td};text-align:center">${x.rec.national_id?'✓':'—'}</td><td style="${td}"><span style="font-size:11px;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap;${!x.ex?'background:#dcfce7;color:#166534':'background:#dbeafe;color:#1e40af'}">${esc(x.how)}</span></td><td style="${td};font-size:11px;color:#b45309">${x.w.map(esc).join('<br>')}</td></tr>`
+    ov.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:920px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;font-family:'Sarabun',sans-serif">
+      <div style="padding:14px 18px;border-bottom:1px solid #e2e8f0">
+        <div style="font-size:17px;font-weight:800">🔎 ตรวจทานก่อนนำเข้า</div>
+        <div style="font-size:12px;color:#64748b">${esc(subtitle||'')} · ยังไม่บันทึกจนกว่าจะกดอนุมัติ</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:12px;font-weight:700;align-items:center">
+          <span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:10px">🆕 ใหม่ ${nNew} ราย</span>
+          <span style="background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:10px">🔄 อัปเดตคนเดิม ${nUpd} ราย</span>
+          <span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:10px">⚠️ ควรตรวจ ${nWarn} ราย</span>
+          <label style="display:flex;align-items:center;gap:4px;font-weight:400;margin-left:auto;cursor:pointer"><input type="checkbox" id="imp-only-warn"> แสดงเฉพาะที่ควรตรวจ</label>
+        </div>
+      </div>
+      <div style="overflow:auto;flex:1">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead style="position:sticky;top:0;background:#f3f4f6"><tr><th style="padding:6px">#</th><th style="text-align:left">ชื่อ</th><th style="text-align:left">หมู่บ้าน</th><th style="text-align:left">รหัสโรค</th><th>เลขบัตร</th><th style="text-align:left">การนำเข้า</th><th style="text-align:left">หมายเหตุ</th></tr></thead>
+          <tbody id="imp-body">${plan.map(row).join('')}</tbody>
+        </table>
+      </div>
+      <div style="padding:12px 18px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center">
+        <div style="font-size:11px;color:#64748b;margin-right:auto">คนเดิม: เติมเฉพาะช่องที่ยังว่าง ไม่ทับข้อมูลที่มีอยู่ (ยกเว้นแทน F99)</div>
+        <button id="imp-cancel" style="padding:9px 18px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px">ยกเลิก</button>
+        <button id="imp-ok" style="padding:9px 18px;border:none;background:#0a7ea4;color:#fff;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px">✅ อนุมัตินำเข้า ${plan.length} ราย</button>
+      </div></div>`
+    document.body.appendChild(ov)
+    ov.querySelector('#imp-only-warn').onchange=e=>{
+      ov.querySelectorAll('#imp-body tr').forEach((tr,i)=>{tr.style.display=e.target.checked&&!plan[i].w.length?'none':''})
+    }
+    const done=v=>{ov.remove();resolve(v)}
+    ov.querySelector('#imp-cancel').onclick=()=>done(false)
+    ov.querySelector('#imp-ok').onclick=()=>{auditLog('import_patients','patients',null,{new:nNew,update:nUpd});done(true)}
+  })
+}
+
 async function mergeAndSavePatients(records, confirmMsg){
   if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return false}
-  if(!confirm(confirmMsg))return false
   // fetch existing patients to merge
   const{data:existing}=await sb.from('patients').select('id,name,house_no,village,note,national_id,disease_code,disease_name,visit_interval,inject_interval,medication_name'+(_riskReady?',risk_flags':'')+(_baseColorReady?',group_color':''))
   // จับคู่คนเดิม: เลขบัตรประชาชนก่อน แล้วจึงชื่อ (ไม่สนคำนำหน้า/ช่องว่าง) — กันบันทึกซ้ำแบบที่เคยเกิด
@@ -2656,14 +2695,15 @@ async function mergeAndSavePatients(records, confirmMsg){
     if(!ex){const{group_color,...row}=rec;toInsert.push(_baseColorReady&&group_color?{...row,group_color}:row)}
     else{
       // fill only empty fields, keep existing data
+      const fileDx=!!rec.disease_code&&(!ex.disease_code||ex.disease_code==='F99')
       const upd={
         house_no:ex.house_no||rec.house_no||'',
         village:ex.village||rec.village||'',
         note:ex.note||rec.note||'',
         national_id:ex.national_id||rec.national_id||null,
-        // F99 "รอระบุรหัสโรคจริง" → แทนด้วยรหัสจริงจากไฟล์
-        disease_code:(ex.disease_code&&ex.disease_code!=='F99'?ex.disease_code:null)||rec.disease_code||ex.disease_code||null,
-        disease_name:(ex.disease_code&&ex.disease_code!=='F99'?ex.disease_name:null)||(rec.disease_code?rec.disease_name:null)||ex.disease_name||null,
+        // ใช้รหัส+ชื่อโรคจากไฟล์คู่กัน เฉพาะเมื่อในระบบยังไม่มีรหัส หรือเป็น F99 "รอระบุรหัสโรคจริง"
+        disease_code:fileDx?rec.disease_code:(ex.disease_code||null),
+        disease_name:fileDx?(rec.disease_name||null):(ex.disease_name||null),
         visit_interval:ex.visit_interval??rec.visit_interval??null,
         inject_interval:ex.inject_interval??rec.inject_interval??null,
         medication_name:ex.medication_name||rec.medication_name||null,
@@ -2673,6 +2713,21 @@ async function mergeAndSavePatients(records, confirmMsg){
       toUpdate.push({id:ex.id,...upd})
     }
   }
+  // ── หน้าตรวจทานก่อนนำเข้า ──
+  const plan=deduped.map(rec=>{
+    const ex=findEx(rec),w=[...(rec._warn||[])]
+    if(!rec.village)w.push('ไม่มีหมู่บ้าน')
+    if(!rec.national_id&&!(rec._warn||[]).length)w.push('ไม่มีเลขบัตร')
+    if(ex&&rec.village&&ex.village&&rec.village!==ex.village)w.push(`หมู่บ้านในไฟล์ (${rec.village}) ต่างจากในระบบ (${ex.village}) — คงของเดิม`)
+    if(ex&&rec.disease_code&&ex.disease_code==='F99')w.push(`แทน F99 ด้วย ${rec.disease_code}`)
+    if(ex&&rec.disease_code&&ex.disease_code&&ex.disease_code!=='F99'&&rec.disease_code!==ex.disease_code)w.push(`รหัสโรคในไฟล์ (${rec.disease_code}) ต่างจากในระบบ (${ex.disease_code}) — คงของเดิม`)
+    const nidMatch=ex&&rec.national_id&&String(ex.national_id||'').replace(/\D/g,'')===rec.national_id
+    return {rec,ex,how:!ex?'ใหม่':nidMatch?'อัปเดต · ตรงเลขบัตร':'อัปเดต · ตรงชื่อ',w}
+  })
+  const ok=await showImportPreview(plan,(confirmMsg||'').replace(/ใช่หรือไม่\?[\s\S]*/,'').trim())
+  if(!ok)return false
+  // ฟิลด์ที่ขึ้นต้นด้วย _ ใช้เฉพาะหน้าตรวจทาน — ไม่บันทึก
+  for(let i=0;i<toInsert.length;i++)toInsert[i]=Object.fromEntries(Object.entries(toInsert[i]).filter(([k])=>!k.startsWith('_')))
   const batchSize=50
   for(let i=0;i<toInsert.length;i+=batchSize){
     const{error}=await sb.from('patients').insert(toInsert.slice(i,i+batchSize))
@@ -2699,6 +2754,9 @@ async function importPatientFile(input){
     const wb=XLSX.read(data)
     const ws=wb.Sheets[wb.SheetNames[0]]
     const rows=XLSX.utils.sheet_to_json(ws,{header:1}).filter(r=>r.length>0)
+    // ไฟล์จากโรงพยาบาลที่มีหัวคอลัมน์ ชื่อ / สกุล → อ่านตามหัวคอลัมน์ (เหมือนปุ่ม HOSxP)
+    const byHeader=rows.length>=2?parseHospitalRowsByHeader(rows):null
+    if(byHeader){if(!byHeader.length){alert('ไม่พบรายชื่อในไฟล์');return}await mergeAndSavePatients(byHeader,'อ่านตามหัวคอลัมน์');return}
     if(rows.length<2){alert('ไม่พบข้อมูล (ต้องมีแถว header และข้อมูลอย่างน้อย 1 แถว)');return}
     const records=rows.slice(1).filter(r=>r[0]).map(r=>({
       name:String(r[0]||'').trim(),
@@ -2719,6 +2777,12 @@ async function importPatientFile(input){
 // ─── นำเข้าไฟล์ตามหัวคอลัมน์ ──────────────────────────────────────
 // รองรับไฟล์ส่งออกจาก HOSxP / JHCIS / 43 แฟ้ม ที่เรียงคอลัมน์ต่างกัน — คืน null ถ้าไม่พบหัวคอลัมน์ ชื่อ+สกุล
 const PRENAME_RE=/^(นางสาว|นาง|นาย|น\.ส\.|นส\.|ด\.ช\.|ด\.ญ\.|เด็กชาย|เด็กหญิง|พระภิกษุ|พระ)\s*/
+// เลขบัตรประชาชน 13 หลัก: ตรวจหลักสุดท้าย (mod 11)
+function validThaiId(id){
+  if(!/^\d{13}$/.test(id))return false
+  let sum=0;for(let i=0;i<12;i++)sum+=parseInt(id[i])*(13-i)
+  return (11-sum%11)%10===parseInt(id[12])
+}
 function normName(n){return String(n||'').replace(PRENAME_RE,'').replace(/\s+/g,'')}
 function parseHospitalRowsByHeader(rows){
   const H=rows[0].map(h=>String(h||'').trim().toLowerCase().replace(/\s+/g,''))
@@ -2744,7 +2808,9 @@ function parseHospitalRowsByHeader(rows){
     const sub=v(r,c.sub),dist=v(r,c.dist),prov=v(r,c.prov)
     const note=[sub&&`ต.${sub}`,dist&&`อ.${dist}`,prov&&`จ.${prov}`].filter(Boolean).join(' ')
     const rec={name,house_no,village,note,disease_code:v(r,c.dx).toUpperCase()||null,disease_name:v(r,c.dxn)||null,group_color:colorMap[v(r,c.color)]||null}
-    const nid=v(r,c.cid).replace(/\D/g,'').slice(0,13);if(nid.length===13)rec.national_id=nid
+    const nid=v(r,c.cid).replace(/\D/g,'')
+    if(nid.length===13&&validThaiId(nid))rec.national_id=nid
+    else if(nid)rec._warn=['เลขบัตรไม่ถูกต้อง (ไม่บันทึก)']
     const age=parseInt(v(r,c.age));if(_riskReady&&age>=60&&age<130)rec.risk_flags=['elderly']
     return rec
   }).filter(Boolean)
@@ -5421,7 +5487,7 @@ async function loadAuditLog(){
     member_role_changed:'เปลี่ยน role',change_village:'เปลี่ยนหมู่บ้าน',account_unlocked:'ปลดล็อคบัญชี',
     import_aosomo_directory:'นำเข้ารายชื่อ อสม.',import_staff_directory:'นำเข้ารายชื่อเจ้าหน้าที่',
     export_csv:'ส่งออก CSV',export_json:'ส่งออก JSON',export_visits_excel:'ส่งออก Excel เยี่ยม',
-    print_monthly_report:'พิมพ์รายงานเดือน',print_color_report:'พิมพ์รายงานแยกกลุ่มสี',change_group_color:'เปลี่ยนกลุ่มสี',mark_deceased:'บันทึกเสียชีวิต',print_patient_timeline:'พิมพ์ Timeline ผู้ป่วย',
+    print_monthly_report:'พิมพ์รายงานเดือน',print_color_report:'พิมพ์รายงานแยกกลุ่มสี',change_group_color:'เปลี่ยนกลุ่มสี',mark_deceased:'บันทึกเสียชีวิต',import_patients:'นำเข้ารายชื่อผู้ป่วย',print_patient_timeline:'พิมพ์ Timeline ผู้ป่วย',
     view_audit_log:'ดู Audit Log',privacy_accepted:'ยอมรับนโยบาย',
   }
   const ACTION_COLOR={
