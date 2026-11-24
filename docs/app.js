@@ -2728,7 +2728,7 @@ async function mergeAndSavePatients(records, confirmMsg){
         house_no:ex.house_no||rec.house_no||'',
         village:ex.village||rec.village||'',
         note:ex.note||rec.note||'',
-        national_id:ex.national_id||rec.national_id||null,
+        national_id:ex.national_id||rec.national_id||'',
         // ใช้รหัส+ชื่อโรคจากไฟล์คู่กัน เฉพาะเมื่อในระบบยังไม่มีรหัส หรือเป็น F99 "รอระบุรหัสโรคจริง"
         ...(fileDx?{disease_code:rec.disease_code,disease_name:rec.disease_name||null}
                   :rec.disease_code?dxAppend(ex,rec):{disease_code:ex.disease_code||null,disease_name:ex.disease_name||null}),
@@ -2758,10 +2758,16 @@ async function mergeAndSavePatients(records, confirmMsg){
   const ok=await showImportPreview(plan,(confirmMsg||'').replace(/ใช่หรือไม่\?[\s\S]*/,'').trim())
   if(!ok)return false
   // ฟิลด์ที่ขึ้นต้นด้วย _ ใช้เฉพาะหน้าตรวจทาน — ไม่บันทึก
-  for(let i=0;i<toInsert.length;i++)toInsert[i]=Object.fromEntries(Object.entries(toInsert[i]).filter(([k])=>!k.startsWith('_')))
+  for(let i=0;i<toInsert.length;i++){
+    const row=Object.fromEntries(Object.entries(toInsert[i]).filter(([k])=>!k.startsWith('_')))
+    // ช่อง NOT NULL ห้ามส่ง null: national_id ใช้ '' · risk_flags ใช้ [] (แถวในชุดเดียวกันต้องมีช่องเท่ากัน)
+    row.national_id=row.national_id||''
+    if(_riskReady)row.risk_flags=row.risk_flags||[]
+    toInsert[i]=row
+  }
   const batchSize=50
   for(let i=0;i<toInsert.length;i+=batchSize){
-    const{error}=await sb.from('patients').insert(toInsert.slice(i,i+batchSize))
+    const{error}=await sb.from('patients').insert(toInsert.slice(i,i+batchSize),{defaultToNull:false})
     if(error)throw error
   }
   // อัปเดตพร้อมกันครั้งละ 10 แถว (เดิมทีละแถว — 200 แถว = 200 รอบ)
