@@ -264,11 +264,13 @@ function showToast(msg,duration=2500){
 }
 function setSubtitle(el,text){if(!el)return;el.innerHTML=esc(text||'').replace(/\n/g,'<br>')}
 function todayISO() { return new Date().toISOString().slice(0,10) }
+// PDPA: ไม่แสดงเลขบัตรเต็มกับใคร (รวมแอดมิน) — หลังรัน 15_hide_national_id.sql
+// ฐานข้อมูลส่งมาแค่เลขที่ปิดไว้แล้ว (มี X) เลขเต็มอ่านผ่านแอป/API ไม่ได้
 function maskNationalId(id){
+  if(/X/i.test(id||''))return String(id)
   const d=(id||'').replace(/\D/g,'')
   if(!d)return''
   const fmt=n=>`${n.slice(0,1)}-${n.slice(1,5)}-${n.slice(5,10)}-${n.slice(10,12)}-${n.slice(12,13)}`
-  if(canDo('admin'))return fmt(d.padEnd(13,'?'))
   if(canDo('record')){
     // PDPA: แสดงเฉพาะหลักที่ 5-8, ซ่อนส่วนที่เหลือ
     const p=d.padEnd(13,'?')
@@ -2719,17 +2721,33 @@ function showImportPreview(plan,subtitle){
 async function mergeAndSavePatients(records, confirmMsg){
   if(!records.length){alert('ไม่พบรายชื่อในไฟล์');return false}
   // fetch existing patients to merge
-  const{data:existing}=await sb.from('patients').select('id,name,house_no,village,note,national_id,disease_code,disease_name,visit_interval,inject_interval,medication_name'+(_riskReady?',risk_flags':'')+(_baseColorReady?',group_color':''))
-  // จับคู่คนเดิม: เลขบัตรประชาชนก่อน แล้วจึงชื่อ (ไม่สนคำนำหน้า/ช่องว่าง) — กันบันทึกซ้ำแบบที่เคยเกิด
+  // เลขบัตรเต็มอ่านจากฐานข้อมูลไม่ได้ (15_hide_national_id.sql) — ใช้ national_id_masked
+  // บอกว่า "มีเลขแล้ว" และให้ฐานข้อมูลเทียบเลขบัตรในไฟล์ผ่าน jh_find_patients_by_nid
+  const exCols='id,name,house_no,village,note,disease_code,disease_name,visit_interval,inject_interval,medication_name'+(_riskReady?',risk_flags':'')+(_baseColorReady?',group_color':'')
+  let{data:existing,error:exErr}=await sb.from('patients').select(exCols+',national_id_masked')
+  const fileNids=[...new Set(records.map(r=>String(r.national_id||'').replace(/\D/g,'')).filter(n=>n.length===13))]
   const exByNid={},exByName={}
-  existing?.forEach(p=>{const n=String(p.national_id||'').replace(/\D/g,'');if(n.length===13)exByNid[n]=p;exByName[normName(p.name)]=p})
+  if(!exErr){
+    const byId={};(existing||[]).forEach(p=>{p.has_nid=/\d/.test(p.national_id_masked||'');byId[p.id]=p})
+    for(let i=0;i<fileNids.length;i+=500){
+      const{data:hits,error:re}=await sb.rpc('jh_find_patients_by_nid',{nids:fileNids.slice(i,i+500)})
+      if(re){alert('❌ ตรวจเลขบัตรซ้ำไม่สำเร็จ: '+re.message);return false}
+      ;(hits||[]).forEach(h=>{if(byId[h.patient_id])exByNid[h.nid]=byId[h.patient_id]})
+    }
+  }else{
+    // ยังไม่ได้รัน 15_hide_national_id.sql → ใช้วิธีเดิม
+    ;({data:existing,error:exErr}=await sb.from('patients').select(exCols+',national_id'))
+    if(exErr){alert('❌ โหลดรายชื่อเดิมไม่สำเร็จ: '+exErr.message);return false}
+    ;(existing||[]).forEach(p=>{const n=String(p.national_id||'').replace(/\D/g,'');p.has_nid=n.length===13;if(n.length===13)exByNid[n]=p})
+  }
+  // จับคู่คนเดิม: เลขบัตรประชาชนก่อน แล้วจึงชื่อ (ไม่สนคำนำหน้า/ช่องว่าง) — กันบันทึกซ้ำแบบที่เคยเกิด
+  ;(existing||[]).forEach(p=>{exByName[normName(p.name)]=p})
   const findEx=rec=>{
     const n=String(rec.national_id||'').replace(/\D/g,'')
     if(n.length===13&&exByNid[n])return exByNid[n]
     const byName=exByName[normName(rec.name)]
-    // ชื่อตรงแต่เลขบัตรคนละเลข = คนละคน
-    const bn=String(byName?.national_id||'').replace(/\D/g,'')
-    return byName&&!(n.length===13&&bn.length===13&&bn!==n)?byName:null
+    // ชื่อตรงแต่คนในระบบมีเลขบัตรอื่นอยู่แล้ว (เลขในไฟล์ไม่ตรงกับใคร) = คนละคน
+    return byName&&!(n.length===13&&byName.has_nid)?byName:null
   }
   // deduplicate records within the file (last row wins)
   const recMap={}
@@ -2762,7 +2780,8 @@ async function mergeAndSavePatients(records, confirmMsg){
         house_no:ex.house_no||rec.house_no||'',
         village:ex.village||rec.village||'นอกเขต',
         note:ex.note||rec.note||'',
-        national_id:ex.national_id||rec.national_id||'',
+        // มีเลขบัตรเดิมแล้ว → ไม่ส่งช่องนี้ (คงเลขเดิม)
+        ...(ex.has_nid?{}:{national_id:rec.national_id||''}),
         // ใช้รหัส+ชื่อโรคจากไฟล์คู่กัน เฉพาะเมื่อในระบบยังไม่มีรหัส หรือเป็น F99 "รอระบุรหัสโรคจริง"
         ...(fileDx?{disease_code:rec.disease_code,disease_name:rec.disease_name||null}
                   :rec.disease_code?dxAppend(ex,rec):{disease_code:ex.disease_code||null,disease_name:ex.disease_name||null}),
@@ -2786,7 +2805,7 @@ async function mergeAndSavePatients(records, confirmMsg){
       const add=dxCodes(rec.disease_code).filter(c=>!dxCodes(ex.disease_code).includes(c))
       if(add.length)w.push(`เพิ่มรหัสโรค ${add.join(', ')} ต่อจาก ${ex.disease_code}`)
     }
-    const nidMatch=ex&&rec.national_id&&String(ex.national_id||'').replace(/\D/g,'')===rec.national_id
+    const nidMatch=ex&&rec.national_id&&exByNid[String(rec.national_id).replace(/\D/g,'')]===ex
     return {rec,ex,how:!ex?'ใหม่':nidMatch?'อัปเดต · ตรงเลขบัตร':'อัปเดต · ตรงชื่อ',w}
   })
   const ok=await showImportPreview(plan,(confirmMsg||'').replace(/ใช่หรือไม่\?[\s\S]*/,'').trim())
@@ -3046,7 +3065,7 @@ async function sendReferralToHospital(visitData){
       `━━━━━━━━━━━━━━━`,
       `👤 ${d.patient_name}`,
       `🏠 ${d.house_no?d.house_no+' ':''} ${d.village}`,
-      d.national_id?(()=>{const n=(d.national_id||'').replace(/\D/g,'').padEnd(13,'?');const fmt=s=>`${s.slice(0,1)}-${s.slice(1,5)}-${s.slice(5,10)}-${s.slice(10,12)}-${s.slice(12,13)}`;return`🪪 บัตรประชาชน: ${fmt('X'.repeat(4)+n.slice(4,8)+'X'.repeat(5))}`})():'',
+      d.national_id?`🪪 บัตรประชาชน: ${maskNationalId(d.national_id)}`:'',
       d.disease_code||d.disease_name?`🦠 โรค: ${[d.disease_code,d.disease_name].filter(Boolean).join(' — ')}`:'',
       d.group_label?`${colorIcon} กลุ่ม: ${d.group_label}`:'',
       d.medication_name?`💊 ยา: ${d.medication_name}`:'',
@@ -3688,8 +3707,9 @@ async function openModal(id){
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
       ${canDo('admin')?`<div class="form-group">
         <label>🪪 เลขบัตรประชาชน <span style="font-size:11px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-weight:700">admin เท่านั้น</span></label>
-        <input type="text" id="edit-pt-nid" placeholder="X-XXXX-XXXXX-XX-X" maxlength="17" inputmode="numeric"
+        <input type="text" id="edit-pt-nid" placeholder="X-XXXX-XXXXX-XX-X" maxlength="17" inputmode="numeric" autocomplete="off"
           oninput="this.value=formatNationalIdInput(this.value)" style="letter-spacing:1px">
+        <div id="edit-pt-nid-hint" style="font-size:11px;color:var(--text3);margin-top:3px"></div>
       </div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group"><label>🏡 เยี่ยมบ้านทุก (เดือน)</label><select id="edit-pt-visit-interval">
@@ -3745,9 +3765,9 @@ async function openModal(id){
         <div style="display:flex;align-items:center;gap:10px">
           <span style="font-size:18px;flex-shrink:0">🪪</span>
           <div style="flex:1;min-width:0">
-            <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">เลขบัตรประชาชน${canDo('admin')?'':' <span style="background:#e5e7eb;color:#6b7280;padding:0 4px;border-radius:3px;font-size:9px">PDPA</span>'}</div>
+            <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:1px">เลขบัตรประชาชน <span style="background:#e5e7eb;color:#6b7280;padding:0 4px;border-radius:3px;font-size:9px">PDPA · ปิดบางส่วน</span></div>
             ${p.national_id
-              ? `<div style="font-size:13px;font-weight:700;letter-spacing:1.5px;color:${canDo('admin')?'#92400e':'var(--text2)'};font-family:monospace">${maskNationalId(p.national_id)}</div>`
+              ? `<div style="font-size:13px;font-weight:700;letter-spacing:1.5px;color:var(--text2);font-family:monospace">${maskNationalId(p.national_id)}</div>`
               : `<div style="font-size:12px;color:var(--text3);font-style:italic">ยังไม่ได้ระบุ</div>`}
           </div>
         </div>
@@ -3958,7 +3978,8 @@ async function openEditPatient(id,name,village,houseNo,note,staffResp,aosomoResp
   const nidEl=document.getElementById('edit-pt-nid')
   if(nEl)nEl.value=name||''
   if(ntEl)ntEl.value=note||''
-  if(nidEl)nidEl.value=formatNationalIdInput(nationalId||'')
+  // ไม่เติมเลขบัตรเดิมลงช่อง (เลขเต็มไม่แสดงกับใคร) — พิมพ์ใหม่เฉพาะเมื่อต้องการเปลี่ยน
+  if(nidEl){nidEl.value='';const h=document.getElementById('edit-pt-nid-hint');if(h)h.textContent=nationalId?`มีเลขบัตรแล้ว: ${maskNationalId(nationalId)} · เว้นว่าง = ใช้เลขเดิม · พิมพ์ใหม่ 13 หลักเพื่อเปลี่ยน`:'ยังไม่มีเลขบัตร · พิมพ์ 13 หลัก'}
   const hnEl=document.getElementById('edit-pt-house-no')
   if(hnEl)hnEl.value=houseNo||''
   // ตั้งค่า dropdown หมู่บ้าน
@@ -4191,7 +4212,11 @@ async function saveEditPatient(id){
         auditLog('change_group_color','patient',id,{from:gEl.dataset.orig||null,to:gc})
       }
     }
-    if(canDo('admin'))updates.national_id=nidRaw
+    if(canDo('admin')&&nidRaw){
+      if(nidRaw.length!==13||!validThaiId(nidRaw))throw new Error('เลขบัตรประชาชนไม่ถูกต้อง (ต้องมี 13 หลัก และเลขตรวจสอบถูกต้อง)')
+      updates.national_id=nidRaw
+      auditLog('change_national_id','patient',id,{})
+    }
     const photoFiles=pickedPhotos('edit-pt-photo')
     if(photoFiles.length){
       const urls=[]
