@@ -2728,7 +2728,7 @@ async function mergeAndSavePatients(records, confirmMsg){
       const fileDx=!!rec.disease_code&&(!ex.disease_code||ex.disease_code==='F99')
       const upd={
         house_no:ex.house_no||rec.house_no||'',
-        village:ex.village||rec.village||'',
+        village:ex.village||rec.village||'นอกเขต',
         note:ex.note||rec.note||'',
         national_id:ex.national_id||rec.national_id||'',
         // ใช้รหัส+ชื่อโรคจากไฟล์คู่กัน เฉพาะเมื่อในระบบยังไม่มีรหัส หรือเป็น F99 "รอระบุรหัสโรคจริง"
@@ -2746,7 +2746,7 @@ async function mergeAndSavePatients(records, confirmMsg){
   // ── หน้าตรวจทานก่อนนำเข้า ──
   const plan=deduped.map(rec=>{
     const ex=findEx(rec),w=[...(rec._warn||[])]
-    if(!rec.village)w.push('ไม่มีหมู่บ้าน')
+    if(!rec.village&&!(ex&&ex.village))w.push('ไม่มีหมู่บ้านในไฟล์ → ลงนอกเขตไว้ก่อน')
     if(!rec.national_id&&!(rec._warn||[]).length)w.push('ไม่มีเลขบัตร')
     if(ex&&rec.village&&ex.village&&rec.village!==ex.village)w.push(`หมู่บ้านในไฟล์ (${rec.village}) ต่างจากในระบบ (${ex.village}) — คงของเดิม`)
     if(ex&&rec.disease_code&&ex.disease_code==='F99')w.push(`แทน F99 ด้วย ${rec.disease_code}`)
@@ -2764,6 +2764,7 @@ async function mergeAndSavePatients(records, confirmMsg){
     const row=Object.fromEntries(Object.entries(toInsert[i]).filter(([k])=>!k.startsWith('_')))
     // ช่อง NOT NULL ห้ามส่ง null: national_id ใช้ '' · risk_flags ใช้ [] (แถวในชุดเดียวกันต้องมีช่องเท่ากัน)
     row.national_id=row.national_id||''
+    row.village=String(row.village||'').trim()||'นอกเขต'  // ไม่มีหมู่บ้าน → ลงนอกเขตไว้ก่อน
     if(_riskReady)row.risk_flags=row.risk_flags||[]
     toInsert[i]=row
   }
@@ -2800,7 +2801,7 @@ async function importPatientFile(input){
     const records=rows.slice(1).filter(r=>r[0]).map(r=>({
       name:String(r[0]||'').trim(),
       house_no:String(r[1]||'').trim(),
-      village:String(r[2]||'').trim()||'หมู่ 1',
+      village:String(r[2]||'').trim()||'นอกเขต',
       note:String(r[3]||'').trim(),
       national_id:String(r[4]||'').replace(/\D/g,'').slice(0,13)||null,
       disease_code:String(r[5]||'').trim()||null,
