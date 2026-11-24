@@ -2782,7 +2782,13 @@ async function mergeAndSavePatients(records, confirmMsg){
     if(failed)throw failed.error
   }
   alert(`✅ นำเข้าสำเร็จ\nใหม่: ${toInsert.length} ราย | อัปเดต: ${toUpdate.length} ราย`)
-  await loadPatients()
+  // โหลดรายชื่อใหม่ แล้ววาดหน้าปัจจุบันใหม่ (เดิมเรียก loadPatients() ซึ่งไม่มีอยู่จริง → error หลังนำเข้าสำเร็จ)
+  _ptCache=null
+  allPatients=await getPatients()
+  const el=document.getElementById('page-content')
+  const page=(location.hash||'').slice(1)
+  if(el&&page==='patients')renderPatients(el)
+  else if(el&&PAGES.includes(page))navigate(page)
   return true
 }
 
@@ -4560,7 +4566,9 @@ async function resolveReferral(id){
   const{error}=await sb.from('home_visits').update({refer_resolved:true}).eq('id',id)
   if(error){alert('เกิดข้อผิดพลาด: '+error.message);if(btn){btn.textContent='✅ รับเรื่องแล้ว';btn.disabled=false}return}
   auditLog('resolve_referral','visit',id)
-  renderPage('admin')
+  // วาดหน้าปัจจุบันใหม่ (เดิมเรียก renderPage() ซึ่งไม่มีอยู่จริง)
+  const page=(location.hash||'').slice(1)
+  navigate(PAGES.includes(page)?page:'dashboard')
 }
 // ── GAF / BPRS / AIMS ─────────────────────────────────────────
 function updateGAF(val){
