@@ -593,6 +593,7 @@ function renderPatients(el) {
   const villages=[...new Set(pts.map(p=>p.village).filter(Boolean))].sort()
   window._gf='all'; window._vf='all'; window._df='all'; window._rf=false; window._dead=false
   const noCode=pts.filter(p=>!hasDiseaseCode(p)).length
+  const noVillage=pts.filter(p=>!String(p.village||'').trim()).length
   const noRisk=pts.filter(p=>!riskFilled(p)).length
   el.innerHTML=`<div class="page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
@@ -612,6 +613,7 @@ function renderPatients(el) {
   <div class="filter-row">
     <button class="filter-chip active" data-vf="all" onclick="setVF('all')">ทุกหมู่บ้าน</button>
     ${villages.map(v=>`<button class="filter-chip" data-vf="${esc(v)}" onclick="setVF('${jsStr(v)}')">${esc(v)}</button>`).join('')}
+    ${noVillage?`<button class="filter-chip" data-vf="__none__" onclick="setVF('__none__')" style="border-color:#f59e0b;color:#b45309">❓ ยังไม่ระบุหมู่บ้าน (${noVillage})</button>`:''}
   </div>
   <div class="filter-row">
     <button class="filter-chip active" data-df="all" onclick="setDF('all')">ทุกคน</button>
@@ -630,7 +632,7 @@ function filterPts() {
   const gf=window._gf||'all', vf=window._vf||'all', df=window._df||'all'
   _ptFiltered=(window._dead?_deceasedPatients:allPatients).filter(p=>{
     if(gf!=='all'&&p.group_color!==gf)return false
-    if(vf!=='all'&&p.village!==vf)return false
+    if(vf==='__none__'?String(p.village||'').trim():(vf!=='all'&&p.village!==vf))return false
     if(df==='has'&&!hasDiseaseCode(p))return false
     if(df==='none'&&hasDiseaseCode(p))return false
     if(window._rf&&riskFilled(p))return false
@@ -3619,7 +3621,7 @@ async function openModal(id){
       <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:#166534">✏️ แก้ไขข้อมูลผู้ป่วย</div>
       <div class="form-group"><label>ชื่อ-นามสกุล</label><input type="text" id="edit-pt-name" style="width:100%;box-sizing:border-box"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village" onchange="refreshAosomoByVillage(this.value)">${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+        <div class="form-group"><label>หมู่บ้าน</label><select id="edit-pt-village" onchange="refreshAosomoByVillage(this.value)"><option value="">— ยังไม่ระบุหมู่บ้าน —</option>${['หมู่ 1','หมู่ 2','หมู่ 3','หมู่ 4','หมู่ 5','หมู่ 6','หมู่ 7','หมู่ 8','หมู่ 9','นอกเขต'].map(v=>`<option>${v}</option>`).join('')}</select></div>
         <div class="form-group"><label>🏠 บ้านเลขที่</label><input type="text" id="edit-pt-house-no" placeholder="เช่น 123/4" style="width:100%;box-sizing:border-box"></div>
       </div>
       ${dxFieldsHtml('edit-pt',p)}
@@ -3906,7 +3908,11 @@ async function openEditPatient(id,name,village,houseNo,note,staffResp,aosomoResp
   if(vEl){
     let matched=false
     for(const o of vEl.options)if(o.value===village||o.text===village){o.selected=true;matched=true;break}
-    if(!matched) vEl.selectedIndex=0
+    // หมู่บ้านที่ไม่อยู่ในรายการ → เพิ่มเป็นตัวเลือก (เดิมเลือกหมู่ 1 ให้เอง ทำให้ย้ายหมู่โดยไม่ตั้งใจ)
+    if(!matched){
+      if(village){const o=document.createElement('option');o.value=o.textContent=village;vEl.appendChild(o);o.selected=true}
+      else vEl.value=''
+    }
   }
   // โหลด dropdown เจ้าหน้าที่ (user_profiles + staff_directory)
   const staffSel=document.getElementById('edit-pt-staff')
