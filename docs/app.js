@@ -1605,7 +1605,7 @@ async function openEditVisit(id){
   // เปิดฟอร์มเต็มเหมือนตอนเยี่ยม (จะ reset _visitChecks ภายใน)
   openVisitForm(_visitType)
   // หลัง render เสร็จ restore ค่า
-  setTimeout(()=>{
+  setTimeout(async()=>{
     // restore ชื่อ หมู่บ้าน วันที่ ผู้เยี่ยม
     const nEl=document.getElementById('v-name');if(nEl)nEl.value=v.patient_name||''
     const vEl=document.getElementById('v-village');if(vEl)for(const o of vEl.options)if(o.value===v.village){o.selected=true;break}
@@ -1625,6 +1625,7 @@ async function openEditVisit(id){
     const ntEl=document.getElementById('v-note');if(ntEl)ntEl.value=cleanNote
     // แสดงรูปเดิม (ถ้ามี)
     const prevEl=document.getElementById('v-photo-preview')
+    if(prevEl&&v.photo_url){const su=(await batchSignedUrls([v.photo_url]))[v.photo_url];if(su)v.photo_url=su}
     if(prevEl&&v.photo_url)prevEl.innerHTML=`<a href="${safeUrl(v.photo_url)}" target="_blank"><img src="${safeUrl(v.photo_url)}" style="max-width:100%;max-height:120px;border-radius:8px;object-fit:cover"></a><div style="font-size:11px;color:var(--text3);margin-top:2px">📷 รูปเดิม — อัปโหลดใหม่เพื่อแทนที่</div>`
     // เปลี่ยนปุ่มบันทึกเป็น saveEditVisit
     const saveBtn=document.getElementById('v-save-btn')
@@ -3680,8 +3681,9 @@ async function openModal(id){
     if(_riskReady){p.birth_date=pExtra?.birth_date||null;p.adl_group=pExtra?.adl_group||null;p.risk_flags=pExtra?.risk_flags||[]}
     p.oral_medication=pExtra?.oral_medication||null
     p.consent_signature=pExtra?.consent_signature||null
-    const _sMap=await batchSignedUrls([...p.photo_urls,...(p.consent_signature?[p.consent_signature]:[])])
+    const _sMap=await batchSignedUrls([...p.photo_urls,...(p.consent_signature?[p.consent_signature]:[]),...(p.file_url?[p.file_url]:[])])
     p.photo_urls=p.photo_urls.map(u=>_sMap[u]||u)
+    if(p.file_url)p.file_url=_sMap[p.file_url]||p.file_url
     if(p.consent_signature)p.consent_signature=_sMap[p.consent_signature]||p.consent_signature
     if(pExtra?.consent_given!=null){p.consent_given=pExtra.consent_given;p.consent_date=pExtra.consent_date||p.consent_date}
     if(pExtra?.next_inject_date) p.next_inject_date=pExtra.next_inject_date
