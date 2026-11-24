@@ -139,7 +139,7 @@ function daysChip(n) {
   return           { cls:'upcoming',  label:`อีก ${n} วัน` }
 }
 function groupLabel(g) {
-  return {red:'กลุ่มสีแดง',yellow:'กลุ่มสีเหลือง',green:'กลุ่มสีเขียว'}[g] || 'กลุ่มสีเหลือง'
+  return {red:'กลุ่มสีแดง',yellow:'กลุ่มสีเหลือง',green:'กลุ่มสีเขียว'}[g] || 'ยังไม่จัดกลุ่มสี'
 }
 let _xlsxP=null
 function loadXLSX(){
@@ -317,6 +317,8 @@ function patientCard(p) {
 let _riskReady=false
 // ผู้เสียชีวิต: ต้องรัน 13_deceased.sql ก่อน · ไม่อยู่ใน allPatients (ไม่นับนัด/สถิติ) แยกไว้ใน _deceasedPatients
 let _deceasedReady=false, _deceasedPatients=[]
+// สีระดับผู้ป่วย (patients.group_color): ต้องรัน 14_patient_color.sql — ตั้งสีได้แม้ยังไม่มีบันทึกฉีดยา
+let _baseColorReady=false
 const RISK_COLS='birth_date,adl_group,risk_flags'
 const ADL_GROUPS=[{k:'social',l:'ติดสังคม',icon:'🚶'},{k:'home',l:'ติดบ้าน',icon:'🏠'},{k:'bed',l:'ติดเตียง',icon:'🛏️'}]
 const RISK_FLAGS=[{k:'elderly',l:'สูงอายุ',icon:'👴'},{k:'smiv',l:'SMI-V',icon:'⚠️'},{k:'disabled',l:'พิการ',icon:'♿'},{k:'alone',l:'อยู่คนเดียว',icon:'👤'},{k:'substance',l:'ใช้สารเสพติด',icon:'🚬'}]
@@ -410,6 +412,7 @@ async function getPatients() {
   if (error) { console.error('getPatients:', error); showToast('❌ โหลดรายชื่อผู้ป่วยไม่สำเร็จ: '+error.message, 6000); return [] }
   if (pErr) console.error('getPatients (dates):', pErr)
   _deceasedReady = !!(data && data.length && ('deceased_date' in data[0]))
+  _baseColorReady = !!(data && data.length && ('base_color' in data[0]))
   // ดึง next_inject_date / next_visit_date ตรงจากตาราง patients (ไม่ผ่าน view)
   const dateMap = {}
   for (const p of (pDates||[])) dateMap[p.id] = p
@@ -2638,7 +2641,7 @@ async function mergeAndSavePatients(records, confirmMsg){
   for(const rec of deduped){
     const ex=exMap[rec.name]
     // group_color ไม่ใช่คอลัมน์ของ patients (สีอยู่ในบันทึกฉีดยา) — ตัดออกก่อนบันทึก
-    if(!ex){const{group_color,...row}=rec;toInsert.push(row)}
+    if(!ex){const{group_color,...row}=rec;toInsert.push(_baseColorReady&&group_color?{...row,group_color}:row)}
     else{
       // fill only empty fields, keep existing data
       const upd={
@@ -2726,7 +2729,7 @@ async function importHospitalFile(input){
       const addressParts=[namemooban,subdistrict&&`ต.${subdistrict}`,district&&`อ.${district}`,province&&`จ.${province}`].filter(Boolean)
       const note=[...new Set(addressParts)].join(' ')
       const colorTh=String(r[13]||'').trim()
-      const group_color=colorMap[colorTh]||'yellow'
+      const group_color=colorMap[colorTh]||null
       const rec={name,house_no,village,note,group_color,disease_code,disease_name}
       if(nid)rec.national_id=nid
       return rec
@@ -3447,7 +3450,7 @@ async function openModal(id){
         <div class="form-group"><label>🏠 บ้านเลขที่</label><input type="text" id="edit-pt-house-no" placeholder="เช่น 123/4" style="width:100%;box-sizing:border-box"></div>
       </div>
       ${dxFieldsHtml('edit-pt',p)}
-      ${canDo('record')?`<div class="form-group"><label>กลุ่มสี <span style="font-size:11px;color:var(--text3);font-weight:400">${p.last_date?'(ปรับเมื่ออาการเปลี่ยน)':'(ยังไม่มีบันทึก — ตั้งสีได้ตอนกด + บันทึก)'}</span></label><select id="edit-pt-group" data-orig="${esc(p.group_color||'')}"${p.last_date?'':' disabled'}>${p.group_color?'':'<option value="">— ยังไม่มีสี —</option>'}${[['red','🔴 สีแดง'],['yellow','🟡 สีเหลือง'],['green','🟢 สีเขียว']].map(([k,l])=>`<option value="${k}"${p.group_color===k?' selected':''}>${l}</option>`).join('')}</select></div>`:''}
+      ${canDo('record')?`<div class="form-group"><label>กลุ่มสี <span style="font-size:11px;color:var(--text3);font-weight:400">${p.last_date||_baseColorReady?'(ปรับเมื่ออาการเปลี่ยน)':'(ยังไม่มีบันทึก — ตั้งสีได้ตอนกด + บันทึก)'}</span></label><select id="edit-pt-group" data-orig="${esc(p.group_color||'')}"${p.last_date||_baseColorReady?'':' disabled'}>${p.group_color?'':'<option value="">— ยังไม่มีสี —</option>'}${[['red','🔴 สีแดง'],['yellow','🟡 สีเหลือง'],['green','🟢 สีเขียว']].map(([k,l])=>`<option value="${k}"${p.group_color===k?' selected':''}>${l}</option>`).join('')}</select></div>`:''}
       ${_deceasedReady&&canDo('record')?`<div style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:10px;padding:10px 14px;margin-bottom:12px">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer"><input type="checkbox" id="edit-pt-dead" data-orig="${esc(p.deceased_date||'')}"${p.deceased_date?' checked':''} onchange="document.getElementById('edit-pt-dead-box').style.display=this.checked?'':'none'"> ⚫ เสียชีวิต</label>
         <div id="edit-pt-dead-box" style="display:${p.deceased_date?'':'none'};margin-top:8px">
@@ -3941,7 +3944,9 @@ async function saveEditPatient(id){
     const gEl=document.getElementById('edit-pt-group')
     if(gEl&&!gEl.disabled&&['red','yellow','green'].includes(gEl.value)&&gEl.value!==gEl.dataset.orig){
       const gc=gEl.value,gl={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}[gc]
+      if(_baseColorReady)updates.group_color=gc
       const{data:last}=await sb.from('injection_records').select('id').eq('patient_id',id).order('injection_date',{ascending:false}).order('id',{ascending:false}).limit(1).maybeSingle()
+      if(!last&&_baseColorReady)auditLog('change_group_color','patient',id,{from:gEl.dataset.orig||null,to:gc})
       if(last){
         const[{error:e1},{error:e2}]=await Promise.all([
           sb.from('injection_records').update({group_color:gc,group_label:gl}).eq('id',last.id),
@@ -4022,6 +4027,7 @@ async function saveModalRecord(pid,gcOld){
   // สีจากช่อง "กลุ่มสี" (เติมสีปัจจุบันไว้ให้) — ไม่มีช่อง/ค่าแปลก → ใช้สีเดิม
   const gcSel=document.getElementById('rec-group')?.value
   const gc=['red','yellow','green'].includes(gcSel)?gcSel:(['red','yellow','green'].includes(gcOld)?gcOld:'yellow')
+  if(_baseColorReady&&gc!==gcOld)sb.from('patients').update({group_color:gc}).eq('id',pid).then(({error})=>{if(error)console.warn('patient color:',error.message)})
   const date=document.getElementById('rec-date')?.value
   const note=document.getElementById('rec-note')?.value||''
   // ยาที่ฉีด บันทึกเฉพาะการฉีดยา (ช่องนี้เติมยาประจำของผู้ป่วยไว้ให้ล่วงหน้า)
@@ -5648,7 +5654,7 @@ async function saveNewPatient(){
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   try{
     const house_no=(document.getElementById('np-house-no')?.value||'').trim()
-    const{data:newPt,error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date,...readRiskFields('np'),...readDxFields('np')}).select('id').single()
+    const{data:newPt,error:pe}=await sb.from('patients').insert({name,village,house_no,note:'',national_id,visit_interval,inject_interval,medication_name,consent_given,consent_date,...readRiskFields('np'),...readDxFields('np'),...(_baseColorReady?{group_color:gc}:{})}).select('id').single()
     if(pe){
       if(pe.message?.includes('unique'))throw new Error(`ชื่อ "${name}" มีในระบบแล้ว กรุณาใช้ชื่ออื่น`)
       throw pe
