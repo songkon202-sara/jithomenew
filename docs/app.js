@@ -308,13 +308,15 @@ function patientCard(p) {
         ${p.next_visit_date?`<span style="color:#ea580c">🏡 ${thDate(p.next_visit_date)}</span>`:''}
       </span>
     </div>
-    ${!hasDiseaseCode(p)?'<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc">🛡️ กลุ่มเสี่ยง · ยังไม่ป่วย</span></div>':''}${riskBadgesHtml(p)}${disease}${nid}${note}
+    ${p.deceased_date?`<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#374151;color:#fff">⚫ เสียชีวิต ${thDate(p.deceased_date)}</span></div>`:''}${!hasDiseaseCode(p)?'<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc">🛡️ กลุ่มเสี่ยง · ยังไม่ป่วย</span></div>':''}${riskBadgesHtml(p)}${disease}${nid}${note}
   </div>`
 }
 
 // ─── กลุ่มเสี่ยง (สูงอายุ / ADL / SMI-V / อื่น ๆ) ───────────────────
 // ต้องรัน sql/security/09_risk_groups.sql ก่อน — ถ้ายังไม่รัน ระบบซ่อนช่องเหล่านี้ (_riskReady=false)
 let _riskReady=false
+// ผู้เสียชีวิต: ต้องรัน 13_deceased.sql ก่อน · ไม่อยู่ใน allPatients (ไม่นับนัด/สถิติ) แยกไว้ใน _deceasedPatients
+let _deceasedReady=false, _deceasedPatients=[]
 const RISK_COLS='birth_date,adl_group,risk_flags'
 const ADL_GROUPS=[{k:'social',l:'ติดสังคม',icon:'🚶'},{k:'home',l:'ติดบ้าน',icon:'🏠'},{k:'bed',l:'ติดเตียง',icon:'🛏️'}]
 const RISK_FLAGS=[{k:'elderly',l:'สูงอายุ',icon:'👴'},{k:'smiv',l:'SMI-V',icon:'⚠️'},{k:'disabled',l:'พิการ',icon:'♿'},{k:'alone',l:'อยู่คนเดียว',icon:'👤'},{k:'substance',l:'ใช้สารเสพติด',icon:'🚬'}]
@@ -407,11 +409,12 @@ async function getPatients() {
   // แจ้งให้เห็นชัด — ถ้าเงียบ หน้าจอจะดูเหมือน "ไม่มีผู้ป่วย" ทั้งที่จริงโหลดไม่สำเร็จ
   if (error) { console.error('getPatients:', error); showToast('❌ โหลดรายชื่อผู้ป่วยไม่สำเร็จ: '+error.message, 6000); return [] }
   if (pErr) console.error('getPatients (dates):', pErr)
+  _deceasedReady = !!(data && data.length && ('deceased_date' in data[0]))
   // ดึง next_inject_date / next_visit_date ตรงจากตาราง patients (ไม่ผ่าน view)
   const dateMap = {}
   for (const p of (pDates||[])) dateMap[p.id] = p
   const today = todayISO()
-  return (data||[]).map(p => {
+  const all = (data||[]).map(p => {
     const corrected = { ...p, group_label: groupLabel(p.group_color) }
     if (dateMap[p.id]) {
       corrected.next_inject_date = dateMap[p.id].next_inject_date
@@ -438,6 +441,8 @@ async function getPatients() {
     const db=b.days_until!=null?parseInt(b.days_until):9999
     return da-db
   }).filter((p,i,arr)=>arr.findIndex(x=>x.id===p.id)===i)
+  _deceasedPatients = all.filter(p=>p.deceased_date)
+  return all.filter(p=>!p.deceased_date)
 }
 // ค่าที่แสดงได้ก่อน login (ไม่มี token) — ตาราง app_settings อ่านได้เฉพาะผู้ที่ login แล้ว
 async function getPublicSettings() {
@@ -566,7 +571,7 @@ let _ptShown = 0
 function renderPatients(el) {
   const pts = allPatients
   const villages=[...new Set(pts.map(p=>p.village).filter(Boolean))].sort()
-  window._gf='all'; window._vf='all'; window._df='all'; window._rf=false
+  window._gf='all'; window._vf='all'; window._df='all'; window._rf=false; window._dead=false
   const noCode=pts.filter(p=>!hasDiseaseCode(p)).length
   const noRisk=pts.filter(p=>!riskFilled(p)).length
   el.innerHTML=`<div class="page">
@@ -593,6 +598,7 @@ function renderPatients(el) {
     <button class="filter-chip" data-df="has" onclick="setDF('has')">🩺 กลุ่มป่วย (${pts.length-noCode})</button>
     <button class="filter-chip" data-df="none" onclick="setDF('none')">🛡️ กลุ่มเสี่ยง (${noCode})</button>
     ${_riskReady?`<button class="filter-chip" id="rf-chip" onclick="toggleRF()">🚩 ยังไม่กรอกปัจจัยเสี่ยง (${noRisk})</button>`:''}
+    ${_deceasedReady?`<button class="filter-chip" id="dead-chip" onclick="toggleDead()">⚫ เสียชีวิต (${_deceasedPatients.length})</button>`:''}
   </div>
   <div id="pt-count" style="font-size:12px;color:var(--text3);margin:-4px 0 8px"></div>
   <div id="pt-list"></div>
@@ -602,7 +608,7 @@ function renderPatients(el) {
 function filterPts() {
   const q=(document.getElementById('pt-search')?.value||'').toLowerCase()
   const gf=window._gf||'all', vf=window._vf||'all', df=window._df||'all'
-  _ptFiltered=allPatients.filter(p=>{
+  _ptFiltered=(window._dead?_deceasedPatients:allPatients).filter(p=>{
     if(gf!=='all'&&p.group_color!==gf)return false
     if(vf!=='all'&&p.village!==vf)return false
     if(df==='has'&&!hasDiseaseCode(p))return false
@@ -613,7 +619,7 @@ function filterPts() {
   })
   _ptShown=0
   const cnt=document.getElementById('pt-count')
-  if(cnt)cnt.textContent=(df!=='all'||window._rf||gf!=='all'||vf!=='all'||q)?`พบ ${_ptFiltered.length} ราย`:''
+  if(cnt)cnt.textContent=window._dead?`⚫ ผู้เสียชีวิต ${_ptFiltered.length} ราย (ไม่นับในนัดและสถิติ)`:(df!=='all'||window._rf||gf!=='all'||vf!=='all'||q)?`พบ ${_ptFiltered.length} ราย`:''
   renderPtPage()
 }
 function renderPtPage(){
@@ -628,6 +634,7 @@ function renderPtPage(){
 }
 function setGF(gf){window._gf=gf;document.querySelectorAll('[data-gf]').forEach(e=>e.classList.toggle('active',e.dataset.gf===gf));filterPts()}
 function setDF(df){window._df=df;document.querySelectorAll('[data-df]').forEach(e=>e.classList.toggle('active',e.dataset.df===df));filterPts()}
+function toggleDead(){window._dead=!window._dead;document.getElementById('dead-chip')?.classList.toggle('active',window._dead);filterPts()}
 function toggleRF(){window._rf=!window._rf;document.getElementById('rf-chip')?.classList.toggle('active',window._rf);filterPts()}
 function setVF(vf){window._vf=vf;document.querySelectorAll('[data-vf]').forEach(e=>e.classList.toggle('active',e.dataset.vf===vf));filterPts()}
 
@@ -3011,7 +3018,7 @@ async function generateColorReport(){
     ${GROUPS.map(g=>`<div class="card" style="background:${g.bg};border-color:${g.color}33"><div class="v" style="color:${g.color}">${by[g.key].length}</div><div class="l">${g.shape} ${g.label} · ${pct(by[g.key].length)}%</div></div>`).join('')}
   </div>
   <div class="bar">${GROUPS.filter(g=>by[g.key].length).map(g=>`<div style="width:${by[g.key].length/total*100}%;background:${g.color}"></div>`).join('')}</div>
-  <div class="note">กลุ่มป่วย = มีรหัสโรค แยกสีตามบันทึกการฉีดยาครั้งล่าสุด · กลุ่มเสี่ยง = ยังไม่มีรหัสโรค${_riskReady?` · กรอกปัจจัยเสี่ยงแล้ว ${pts.filter(riskFilled).length} จาก ${total} ราย`:''}</div>
+  <div class="note">กลุ่มป่วย = มีรหัสโรค แยกสีตามบันทึกการฉีดยาครั้งล่าสุด · กลุ่มเสี่ยง = ยังไม่มีรหัสโรค${_deceasedPatients.length?` · ไม่นับผู้เสียชีวิต ${_deceasedPatients.length} ราย`:''}${_riskReady?` · กรอกปัจจัยเสี่ยงแล้ว ${pts.filter(riskFilled).length} จาก ${total} ราย`:''}</div>
   <h2 style="color:#374151;border-color:#d1d5db">🏘️ จำนวนแยกหมู่บ้าน</h2>
   <table><thead><tr><th>หมู่บ้าน</th>${GROUPS.map(g=>`<th class="n" style="color:${g.color}">${g.shape} ${g.label.replace('กลุ่ม','')}</th>`).join('')}<th class="n">รวม</th></tr></thead>
   <tbody>${vRows}<tr style="background:#f9fafb"><td><b>รวม</b></td>${GROUPS.map(g=>`<td class="n" style="color:${g.color}"><b>${by[g.key].length}</b></td>`).join('')}<td class="n"><b>${total}</b></td></tr></tbody></table>
@@ -3441,6 +3448,16 @@ async function openModal(id){
       </div>
       ${dxFieldsHtml('edit-pt',p)}
       ${canDo('record')?`<div class="form-group"><label>กลุ่มสี <span style="font-size:11px;color:var(--text3);font-weight:400">${p.last_date?'(ปรับเมื่ออาการเปลี่ยน)':'(ยังไม่มีบันทึก — ตั้งสีได้ตอนกด + บันทึก)'}</span></label><select id="edit-pt-group" data-orig="${esc(p.group_color||'')}"${p.last_date?'':' disabled'}>${p.group_color?'':'<option value="">— ยังไม่มีสี —</option>'}${[['red','🔴 สีแดง'],['yellow','🟡 สีเหลือง'],['green','🟢 สีเขียว']].map(([k,l])=>`<option value="${k}"${p.group_color===k?' selected':''}>${l}</option>`).join('')}</select></div>`:''}
+      ${_deceasedReady&&canDo('record')?`<div style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:10px;padding:10px 14px;margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer"><input type="checkbox" id="edit-pt-dead" data-orig="${esc(p.deceased_date||'')}"${p.deceased_date?' checked':''} onchange="document.getElementById('edit-pt-dead-box').style.display=this.checked?'':'none'"> ⚫ เสียชีวิต</label>
+        <div id="edit-pt-dead-box" style="display:${p.deceased_date?'':'none'};margin-top:8px">
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px">
+            <div class="form-group" style="margin-bottom:4px"><label>วันที่เสียชีวิต</label><input type="date" id="edit-pt-dead-date" max="${todayISO()}" value="${esc(p.deceased_date||todayISO())}" style="width:100%;box-sizing:border-box"></div>
+            <div class="form-group" style="margin-bottom:4px"><label>หมายเหตุ</label><input type="text" id="edit-pt-dead-note" value="${esc(p.deceased_note||'')}" placeholder="เช่น สาเหตุ / แหล่งข้อมูล" style="width:100%;box-sizing:border-box"></div>
+          </div>
+          <div style="font-size:11px;color:var(--text3)">บันทึกแล้ว: ยกเลิกวันนัดที่ค้าง ไม่นับในสถิติ/รายงาน · ประวัติยังอยู่ · ยกเลิกติ๊กได้ถ้าบันทึกผิด</div>
+        </div>
+      </div>`:''}
       <div class="form-group"><label>👨‍⚕️ เจ้าหน้าที่รับผิดชอบ</label><select id="edit-pt-staff" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>🏡 อสม. รับผิดชอบ <span id="edit-pt-aosomo-village" style="font-size:11px;color:#7c3aed;font-weight:400"></span></label><select id="edit-pt-aosomo" style="width:100%"><option value="">— ไม่ระบุ —</option></select></div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="edit-pt-note"></div>
@@ -3491,6 +3508,7 @@ async function openModal(id){
       <span class="badge ${p.group_color}"><span class="badge-dot"></span>${esc(p.group_label)}</span>
       <span class="days-chip ${chip.cls}">${chip.label}</span>
     </div>
+    ${p.deceased_date?`<div style="background:#1f2937;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b>⚫ เสียชีวิต</b> เมื่อ ${thDateFull(p.deceased_date)}${p.deceased_note?` · ${esc(p.deceased_note)}`:''}<div style="font-size:11px;opacity:.8;margin-top:2px">ไม่นับในนัดหมาย สถิติ และรายงาน · ประวัติยังเก็บไว้</div></div>`:''}
     <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:16px">
       <div style="font-size:12px;color:var(--text3);margin-bottom:2px">วันนัดครั้งต่อไป</div>
       <div style="font-size:16px;font-weight:700;color:var(--primary)">${thDateFull(correctedNextDate)}</div>
@@ -3909,6 +3927,16 @@ async function saveEditPatient(id){
     const next_inject_date=document.getElementById('edit-pt-next-inject-date')?.value||null
     const updates={name,village,house_no,note,staff_responsible,aosomo_responsible,visit_interval,inject_interval,medication_name,oral_medication,next_visit_date,next_inject_date}
     Object.assign(updates,readRiskFields('edit-pt'),readDxFields('edit-pt'))
+    // ผู้เสียชีวิต: บันทึกวันที่ + ยกเลิกนัดที่ค้าง (วันนัดฉีดยา/เยี่ยม และนัดแพทย์)
+    const dEl=document.getElementById('edit-pt-dead')
+    let newlyDeceased=false
+    if(dEl){
+      const dd=dEl.checked?(document.getElementById('edit-pt-dead-date')?.value||todayISO()):null
+      updates.deceased_date=dd
+      updates.deceased_note=dEl.checked?((document.getElementById('edit-pt-dead-note')?.value||'').trim()||null):null
+      newlyDeceased=!!dd&&!dEl.dataset.orig
+      if(dd){updates.next_inject_date=null;updates.next_visit_date=null}
+    }
     // กลุ่มสีอยู่ในบันทึกฉีดยา/นัด → เปลี่ยนสีของบันทึกล่าสุด และนัดล่วงหน้าทั้งหมด
     const gEl=document.getElementById('edit-pt-group')
     if(gEl&&!gEl.disabled&&['red','yellow','green'].includes(gEl.value)&&gEl.value!==gEl.dataset.orig){
@@ -3951,6 +3979,11 @@ async function saveEditPatient(id){
     if(error)throw error
     _markOwnWrite(id)
     auditLog('edit_patient','patient',id,{name:updates.name})
+    if(newlyDeceased){
+      const{error:ae}=await sb.from('doctor_appointments').update({status:'missed',note:'ยกเลิก: ผู้ป่วยเสียชีวิต'}).eq('patient_id',id).not('status','in','(done,missed)')
+      if(ae)console.warn('cancel appointments:',ae.message)
+      auditLog('mark_deceased','patient',id,{deceased_date:updates.deceased_date})
+    }
     allPatients=await getPatients()
     await openModal(id)
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
@@ -5325,7 +5358,7 @@ async function loadAuditLog(){
     member_role_changed:'เปลี่ยน role',change_village:'เปลี่ยนหมู่บ้าน',account_unlocked:'ปลดล็อคบัญชี',
     import_aosomo_directory:'นำเข้ารายชื่อ อสม.',import_staff_directory:'นำเข้ารายชื่อเจ้าหน้าที่',
     export_csv:'ส่งออก CSV',export_json:'ส่งออก JSON',export_visits_excel:'ส่งออก Excel เยี่ยม',
-    print_monthly_report:'พิมพ์รายงานเดือน',print_color_report:'พิมพ์รายงานแยกกลุ่มสี',change_group_color:'เปลี่ยนกลุ่มสี',print_patient_timeline:'พิมพ์ Timeline ผู้ป่วย',
+    print_monthly_report:'พิมพ์รายงานเดือน',print_color_report:'พิมพ์รายงานแยกกลุ่มสี',change_group_color:'เปลี่ยนกลุ่มสี',mark_deceased:'บันทึกเสียชีวิต',print_patient_timeline:'พิมพ์ Timeline ผู้ป่วย',
     view_audit_log:'ดู Audit Log',privacy_accepted:'ยอมรับนโยบาย',
   }
   const ACTION_COLOR={
