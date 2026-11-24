@@ -2685,7 +2685,19 @@ async function mergeAndSavePatients(records, confirmMsg){
   }
   // deduplicate records within the file (last row wins)
   const recMap={}
-  for(const rec of records){const n=String(rec.national_id||'').replace(/\D/g,'');recMap[n.length===13?n:normName(rec.name)]=rec}
+  // คนเดียวกันหลายแถว (มารับบริการหลายครั้ง) → รวมเป็นคนเดียว ใช้ค่าที่ไม่ว่างจากทุกแถว
+  for(const rec of records){
+    const n=String(rec.national_id||'').replace(/\D/g,''),k=n.length===13?n:normName(rec.name)
+    const prev=recMap[k]
+    if(!prev){recMap[k]=rec;continue}
+    const merged={...prev}
+    for(const[f,val]of Object.entries(rec)){
+      if(f==='risk_flags')merged.risk_flags=[...new Set([...(prev.risk_flags||[]),...(val||[])])]
+      else if(f==='_warn')merged._warn=[...new Set([...(prev._warn||[]),...(val||[])])]
+      else if(val!=null&&val!==''&&(merged[f]==null||merged[f]===''))merged[f]=val
+    }
+    recMap[k]=merged
+  }
   const deduped=Object.values(recMap)
   const toInsert=[]
   const toUpdate=[]
@@ -2755,7 +2767,7 @@ async function importPatientFile(input){
     const ws=wb.Sheets[wb.SheetNames[0]]
     const rows=XLSX.utils.sheet_to_json(ws,{header:1}).filter(r=>r.length>0)
     // ไฟล์จากโรงพยาบาลที่มีหัวคอลัมน์ ชื่อ / สกุล → อ่านตามหัวคอลัมน์ (เหมือนปุ่ม HOSxP)
-    const byHeader=rows.length>=2?parseHospitalRowsByHeader(rows):null
+    const byHeader=rows.length>=2&&parseHospitalRowsByHeader(rows)?parseHospitalRowsByHeader(allSheetRows(wb,{header:1}).filter(r=>r.length>0)):null
     if(byHeader){if(!byHeader.length){alert('ไม่พบรายชื่อในไฟล์');return}await mergeAndSavePatients(byHeader,'อ่านตามหัวคอลัมน์');return}
     if(rows.length<2){alert('ไม่พบข้อมูล (ต้องมีแถว header และข้อมูลอย่างน้อย 1 แถว)');return}
     const records=rows.slice(1).filter(r=>r[0]).map(r=>({
@@ -2784,27 +2796,39 @@ function validThaiId(id){
   return (11-sum%11)%10===parseInt(id[12])
 }
 function normName(n){return String(n||'').replace(PRENAME_RE,'').replace(/\s+/g,'')}
+// รวมแถวจากทุกแผ่นงาน (แต่ละแผ่นมีหัวตารางของตัวเอง)
+function allSheetRows(wb,opts){
+  return wb.SheetNames.flatMap(n=>XLSX.utils.sheet_to_json(wb.Sheets[n],opts))
+}
 function parseHospitalRowsByHeader(rows){
-  const H=rows[0].map(h=>String(h||'').trim().toLowerCase().replace(/\s+/g,''))
-  const col=(...names)=>{for(const n of names){const i=H.indexOf(n.toLowerCase());if(i>=0)return i}return -1}
-  const c={
-    fname:col('ชื่อ','fname','name'), lname:col('สกุล','นามสกุล','lname'), pname:col('คำนำหน้า','คำนำหน้าชื่อ','pname','prefix'),
-    cid:col('รหัสบัตรประชาชน','เลขบัตรประชาชน','เลขบัตร','cid','pid'), age:col('อายุ','age'), birth:col('วันเกิด','birthday','birth','dob'),
-    house:col('เลขที่','บ้านเลขที่','house_no','house','addr'), moo:col('หมู่','หมู่ที่','moo','namemooban','mooban','หมู่บ้าน','village'),
-    sub:col('subdistrict','ตำบล'), dist:col('district','อำเภอ'), prov:col('province','จังหวัด'),
-    dx:col('รหัสโรค','icd10','diagcode','รหัสicd10','disease_code'), dxn:col('ชื่อโรค','diagname','โรค','disease_name'), color:col('กลุ่มสี','สี','color','color_group'),
+  // ไฟล์อาจมีหัวตารางหลายชุด (หลายช่วงต่อกัน แต่ละชุดเรียงคอลัมน์ต่างกัน) → เจอหัวตารางใหม่เมื่อไรก็เปลี่ยนการอ่านตาม
+  const norm=r=>(r||[]).map(h=>String(h??'').trim().toLowerCase().replace(/\s+/g,''))
+  const isHeader=r=>{const H=norm(r);return H.includes('ชื่อ')&&(H.includes('สกุล')||H.includes('นามสกุล'))}
+  if(!isHeader(rows[0]))return null
+  const mapOf=r=>{
+    const H=norm(r)
+    const col=(...names)=>{for(const n of names){const i=H.indexOf(n.toLowerCase());if(i>=0)return i}return -1}
+    return {
+      fname:col('ชื่อ','fname','name'), lname:col('สกุล','นามสกุล','lname'),
+      cid:col('รหัสบัตรประชาชน','เลขบัตรประชาชน','เลขบัตร','cid','pid','pop_id'), age:col('อายุ','age'),
+      house:col('เลขที่','บ้านเลขที่','house_no','house','addr','addrpart'), moo:col('หมู่','หมู่ที่','moo','namemooban','mooban','หมู่บ้าน','village'),
+      sub:col('subdistrict','ตำบล'), dist:col('district','อำเภอ'), prov:col('province','จังหวัด'),
+      dx:col('รหัสโรค','icd10','diagcode','รหัสicd10','disease_code'), dxn:col('ชื่อโรค','diagname','โรค','disease_name'), color:col('กลุ่มสี','สี','color','color_group'),
+    }
   }
-  if(c.fname<0||c.lname<0)return null
   const colorMap={'เขียว':'green','สีเขียว':'green','เหลือง':'yellow','สีเหลือง':'yellow','ส้ม':'yellow','แดง':'red','สีแดง':'red'}
   const v=(r,i)=>i>=0?String(r[i]??'').trim():''
-  return rows.slice(1).map(r=>{
+  const out=[]
+  let c=null
+  for(const r of rows){
+    if(isHeader(r)){c=mapOf(r);continue}
+    if(!c)continue
     const name=[v(r,c.fname),v(r,c.lname)].filter(Boolean).join(' ')
-    if(!name)return null
-    const houseRaw=v(r,c.house)
-    const mooTxt=v(r,c.moo)||houseRaw
-    const m=mooTxt.match(/หมู่(?:ที่)?\s*(\d+)/)||(c.moo>=0&&/^\d+$/.test(v(r,c.moo))?[0,v(r,c.moo)]:null)
+    if(!name)continue
+    const houseRaw=v(r,c.house),mooRaw=v(r,c.moo)
+    const m=(mooRaw.match(/หมู่(?:ที่)?\s*(\d+)/)||houseRaw.match(/หมู่(?:ที่)?\s*(\d+)/)||(/^\d{1,2}$/.test(mooRaw)?[0,mooRaw]:null))
     const village=m?`หมู่ ${parseInt(m[1])}`:''
-    const house_no=houseRaw.replace(/หมู่(?:ที่)?\s*\d+.*/,'').trim()
+    const house_no=houseRaw.replace(/\s*(ม\.|หมู่(?:ที่)?)\s*\d+.*/,'').trim()
     const sub=v(r,c.sub),dist=v(r,c.dist),prov=v(r,c.prov)
     const note=[sub&&`ต.${sub}`,dist&&`อ.${dist}`,prov&&`จ.${prov}`].filter(Boolean).join(' ')
     const rec={name,house_no,village,note,disease_code:v(r,c.dx).toUpperCase()||null,disease_name:v(r,c.dxn)||null,group_color:colorMap[v(r,c.color)]||null}
@@ -2812,8 +2836,9 @@ function parseHospitalRowsByHeader(rows){
     if(nid.length===13&&validThaiId(nid))rec.national_id=nid
     else if(nid)rec._warn=['เลขบัตรไม่ถูกต้อง (ไม่บันทึก)']
     const age=parseInt(v(r,c.age));if(_riskReady&&age>=60&&age<130)rec.risk_flags=['elderly']
-    return rec
-  }).filter(Boolean)
+    out.push(rec)
+  }
+  return out
 }
 
 async function importHospitalFile(input){
@@ -2826,7 +2851,7 @@ async function importHospitalFile(input){
     const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}).filter(r=>r.length>1)
     if(rows.length<2){alert('ไม่พบข้อมูล');return}
     // ไฟล์ที่มีหัวคอลัมน์ (ชื่อ / สกุล / รหัสโรค ...) → อ่านตามชื่อหัวคอลัมน์ ลำดับคอลัมน์ไม่สำคัญ
-    const byHeader=parseHospitalRowsByHeader(rows)
+    const byHeader=parseHospitalRowsByHeader(rows)?parseHospitalRowsByHeader(allSheetRows(wb,{header:1,defval:''}).filter(r=>r.length>1)):null
     if(byHeader){
       if(!byHeader.length){alert('ไม่พบรายชื่อในไฟล์');return}
       await mergeAndSavePatients(byHeader,`นำเข้า/อัปเดต ${byHeader.length} รายชื่อ (อ่านตามหัวคอลัมน์) ใช่หรือไม่?\n\nจับคู่คนเดิมด้วยเลขบัตรประชาชน หรือชื่อ (ไม่สนคำนำหน้า/ช่องว่าง)`)
