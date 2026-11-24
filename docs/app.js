@@ -344,6 +344,8 @@ function riskGroupsOf(p){
   return out
 }
 // กลุ่มป่วย = มีรหัสโรค (วินิจฉัยแล้ว) · กลุ่มเสี่ยง = ยังไม่มีรหัสโรค (ยังไม่ป่วย เช่น สูงอายุ ติดบ้าน)
+// เรียงหมู่บ้านตามตัวเลข (หมู่ 2 ก่อนหมู่ 10) · นอกเขตไว้ท้าย
+function villageSort(a,b){const x=a==='นอกเขต',y=b==='นอกเขต';return x!==y?(x?1:-1):String(a).localeCompare(String(b),'th',{numeric:true})}
 function hasDiseaseCode(p){return !!String(p.disease_code||'').trim()}
 // หลายรหัสโรค: เก็บรวมในช่องเดียว รหัสคั่นด้วย ", " และชื่อโรคคั่นด้วย " / " (ลำดับตรงกัน)
 function dxCodes(code){return String(code||'').split(/[,;]\s*/).map(x=>x.trim().toUpperCase()).filter(Boolean)}
@@ -590,7 +592,7 @@ let _ptShown = 0
 
 function renderPatients(el) {
   const pts = allPatients
-  const villages=[...new Set(pts.map(p=>p.village).filter(Boolean))].sort()
+  const villages=[...new Set(pts.map(p=>p.village).filter(Boolean))].sort(villageSort)
   window._gf='all'; window._vf='all'; window._df='all'; window._rf=false; window._dead=false
   const noCode=pts.filter(p=>!hasDiseaseCode(p)).length
   const noVillage=pts.filter(p=>!String(p.village||'').trim()).length
@@ -818,7 +820,7 @@ function filterDaPatients(){
 }
 function openDoctorApptForm(id=null){
   const appt=id?(window._doctorAppts||[]).find(a=>a.id===id):null
-  const villages=[...new Set(allPatients.map(p=>p.village).filter(Boolean))].sort()
+  const villages=[...new Set(allPatients.map(p=>p.village).filter(Boolean))].sort(villageSort)
   const villageOpts=villages.map(v=>`<option value="${v}">${v}</option>`).join('')
   const selPid=appt?.patient_id
   const patOpts=allPatients.map(p=>`<option value="${p.id}"${p.id===selPid?' selected':''}>${esc(p.name)} — ${esc(p.village||'')}</option>`).join('')
