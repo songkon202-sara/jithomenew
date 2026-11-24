@@ -39,6 +39,13 @@ BEGIN
 END $$;
 
 -- 3. view ที่แอปใช้แสดงรายชื่อ: ช่อง national_id ส่งเลขที่ปิดแล้ว (โครงสร้างเดิมจากไฟล์ 14)
+--    ข้ามถ้า view ส่งเลขที่ปิดอยู่แล้ว (เช่น รันไฟล์ 17 ไปแล้ว — กันลบคอลัมน์ที่ไฟล์ใหม่เพิ่มไว้)
+DO $do$
+BEGIN
+  IF pg_get_viewdef('public.patient_status'::regclass) LIKE '%national_id_masked%' THEN
+    RAISE NOTICE 'view patient_status ปิดเลขบัตรอยู่แล้ว — ข้าม';
+  ELSE
+    EXECUTE $v$
 CREATE OR REPLACE VIEW public.patient_status WITH (security_invoker = true) AS
  SELECT p.id, p.name, p.village, p.note, p.house_no, p.national_id_masked AS national_id,
     p.disease_code, p.disease_name, p.medication_name, p.oral_medication,
@@ -67,7 +74,10 @@ CREATE OR REPLACE VIEW public.patient_status WITH (security_invoker = true) AS
      FROM public.injection_records r
      WHERE r.patient_id = p.id
      ORDER BY r.injection_date DESC, r.id DESC
-     LIMIT 1) ir ON true;
+     LIMIT 1) ir ON true
+    $v$;
+  END IF;
+END $do$;
 
 -- 4. เทียบเลขบัตรตอนนำเข้าไฟล์ (เฉพาะแอดมิน/เจ้าหน้าที่ · ครั้งละไม่เกิน 1,000 เลข)
 CREATE OR REPLACE FUNCTION public.jh_find_patients_by_nid(nids text[])

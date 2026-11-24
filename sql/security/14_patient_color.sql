@@ -20,6 +20,14 @@ FROM (SELECT DISTINCT ON (patient_id) patient_id, group_color
       ORDER BY patient_id, injection_date DESC, id DESC) r
 WHERE r.patient_id = p.id AND p.group_color IS NULL;
 
+-- ถ้ารันไฟล์ 15 (ปิดเลขบัตร) ไปแล้ว ไม่สร้าง view นี้ซ้ำ — กันเลขบัตรเต็มกลับมา / คอลัมน์ใหม่หาย
+DO $do$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+             AND table_name = 'patients' AND column_name = 'national_id_masked') THEN
+    RAISE NOTICE 'รันไฟล์ 15 แล้ว — ข้ามการสร้าง view (ใช้ของไฟล์ 15/17)';
+  ELSE
+    EXECUTE $v$
 CREATE OR REPLACE VIEW public.patient_status WITH (security_invoker = true) AS
  SELECT p.id, p.name, p.village, p.note, p.house_no, p.national_id,
     p.disease_code, p.disease_name, p.medication_name, p.oral_medication,
@@ -48,7 +56,10 @@ CREATE OR REPLACE VIEW public.patient_status WITH (security_invoker = true) AS
      FROM public.injection_records r
      WHERE r.patient_id = p.id
      ORDER BY r.injection_date DESC, r.id DESC
-     LIMIT 1) ir ON true;
+     LIMIT 1) ir ON true
+    $v$;
+  END IF;
+END $do$;
 
 -- ─── ตรวจผล ──────────────────────────────────────────────────────────
 SELECT CASE WHEN COALESCE(trim(p.disease_code), '') = '' THEN '🛡️ กลุ่มเสี่ยง' ELSE '🩺 กลุ่มป่วย' END AS กลุ่ม,
