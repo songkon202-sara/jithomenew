@@ -293,7 +293,7 @@ function patientCard(p) {
   const gl   = dead ? 'เสียชีวิต' : (p.group_label || groupLabel(p.group_color))
   const gcls = dead ? 'black' : p.group_color
   const cls  = `patient-card ${gcls}${over&&!dead?' overdue':''} fade-up`
-  const disease = canDo('record') && (p.disease_code||p.disease_name) ? `<div class="pc-note" style="color:#0369a1;background:#f0f9ff">${p.disease_code?`<strong>${esc(p.disease_code)}</strong> `:''}${esc(p.disease_name||'')}</div>` : ''
+  const disease = canDo('record') && (p.disease_code||p.disease_name) ? `<div class="pc-note" style="color:#0369a1;background:#f0f9ff">${dxPairs(p).map(([c,n])=>`<div>${c?`<strong>${esc(c)}</strong> `:''}${esc(n)}</div>`).join('')}</div>` : ''
   const note = p.note ? `<div class="pc-note">${esc(p.note)}</div>` : ''
   const nid = canDo('record') && p.national_id ? `<div class="pc-note" style="color:#78350f;background:#fef9c3;font-family:monospace;letter-spacing:0.5px">🪪 ${maskNationalId(p.national_id)}</div>` : ''
   return `<div class="${cls}" onclick="openModal(${p.id})" data-id="${p.id}" data-group="${p.group_color}" data-village="${esc(p.village||'')}">
@@ -345,6 +345,20 @@ function riskGroupsOf(p){
 }
 // กลุ่มป่วย = มีรหัสโรค (วินิจฉัยแล้ว) · กลุ่มเสี่ยง = ยังไม่มีรหัสโรค (ยังไม่ป่วย เช่น สูงอายุ ติดบ้าน)
 function hasDiseaseCode(p){return !!String(p.disease_code||'').trim()}
+// หลายรหัสโรค: เก็บรวมในช่องเดียว รหัสคั่นด้วย ", " และชื่อโรคคั่นด้วย " / " (ลำดับตรงกัน)
+function dxCodes(code){return String(code||'').split(/[,;]\s*/).map(x=>x.trim().toUpperCase()).filter(Boolean)}
+function dxPairs(p){
+  const codes=dxCodes(p.disease_code),names=String(p.disease_name||'').split(' / ')
+  if(!codes.length)return p.disease_name?[['',p.disease_name]]:[]
+  return codes.map((c,i)=>[c,codes.length===1?(p.disease_name||''):(names[i]||'')])
+}
+// เพิ่มรหัสใหม่ต่อท้าย (ไม่ซ้ำ) — คืน {disease_code, disease_name}
+function dxAppend(cur,add){
+  const codes=dxCodes(cur.disease_code),names=String(cur.disease_name||'').split(' / ')
+  if(codes.length===1)names.length=1
+  for(const[c,n]of dxPairs(add)){if(c&&!codes.includes(c)){codes.push(c);names[codes.length-1]=n||''}}
+  return {disease_code:codes.join(', ')||null,disease_name:codes.length>1?codes.map((_,i)=>names[i]||'').join(' / '):(names[0]||cur.disease_name||null)}
+}
 const DX_LIST=[['F20','Schizophrenia (โรคจิตเภท)'],['F25','Schizoaffective disorder'],['F29','Unspecified psychosis (โรคจิต)'],
   ['F31','Bipolar disorder (โรคอารมณ์สองขั้ว)'],['F32','Depressive episode (โรคซึมเศร้า)'],['F33','Recurrent depressive disorder'],
   ['F10','Alcohol use disorder (สุรา)'],['F15','Stimulant use disorder (ยาบ้า/แอมเฟตามีน)'],['F19','Multiple drug use (สารเสพติดหลายชนิด)'],
@@ -2694,6 +2708,8 @@ async function mergeAndSavePatients(records, confirmMsg){
     for(const[f,val]of Object.entries(rec)){
       if(f==='risk_flags')merged.risk_flags=[...new Set([...(prev.risk_flags||[]),...(val||[])])]
       else if(f==='_warn')merged._warn=[...new Set([...(prev._warn||[]),...(val||[])])]
+      else if(f==='disease_code'){if(val)Object.assign(merged,dxAppend(merged,rec))}
+      else if(f==='disease_name'){}
       else if(val!=null&&val!==''&&(merged[f]==null||merged[f]===''))merged[f]=val
     }
     recMap[k]=merged
@@ -2714,8 +2730,8 @@ async function mergeAndSavePatients(records, confirmMsg){
         note:ex.note||rec.note||'',
         national_id:ex.national_id||rec.national_id||null,
         // ใช้รหัส+ชื่อโรคจากไฟล์คู่กัน เฉพาะเมื่อในระบบยังไม่มีรหัส หรือเป็น F99 "รอระบุรหัสโรคจริง"
-        disease_code:fileDx?rec.disease_code:(ex.disease_code||null),
-        disease_name:fileDx?(rec.disease_name||null):(ex.disease_name||null),
+        ...(fileDx?{disease_code:rec.disease_code,disease_name:rec.disease_name||null}
+                  :rec.disease_code?dxAppend(ex,rec):{disease_code:ex.disease_code||null,disease_name:ex.disease_name||null}),
         visit_interval:ex.visit_interval??rec.visit_interval??null,
         inject_interval:ex.inject_interval??rec.inject_interval??null,
         medication_name:ex.medication_name||rec.medication_name||null,
@@ -2732,7 +2748,10 @@ async function mergeAndSavePatients(records, confirmMsg){
     if(!rec.national_id&&!(rec._warn||[]).length)w.push('ไม่มีเลขบัตร')
     if(ex&&rec.village&&ex.village&&rec.village!==ex.village)w.push(`หมู่บ้านในไฟล์ (${rec.village}) ต่างจากในระบบ (${ex.village}) — คงของเดิม`)
     if(ex&&rec.disease_code&&ex.disease_code==='F99')w.push(`แทน F99 ด้วย ${rec.disease_code}`)
-    if(ex&&rec.disease_code&&ex.disease_code&&ex.disease_code!=='F99'&&rec.disease_code!==ex.disease_code)w.push(`รหัสโรคในไฟล์ (${rec.disease_code}) ต่างจากในระบบ (${ex.disease_code}) — คงของเดิม`)
+    if(ex&&rec.disease_code&&ex.disease_code&&ex.disease_code!=='F99'){
+      const add=dxCodes(rec.disease_code).filter(c=>!dxCodes(ex.disease_code).includes(c))
+      if(add.length)w.push(`เพิ่มรหัสโรค ${add.join(', ')} ต่อจาก ${ex.disease_code}`)
+    }
     const nidMatch=ex&&rec.national_id&&String(ex.national_id||'').replace(/\D/g,'')===rec.national_id
     return {rec,ex,how:!ex?'ใหม่':nidMatch?'อัปเดต · ตรงเลขบัตร':'อัปเดต · ตรงชื่อ',w}
   })
@@ -3738,8 +3757,7 @@ async function openModal(id){
     ${canDo('record')&&(p.disease_code||p.disease_name)?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
       <div style="font-size:20px">🏥</div>
       <div>
-        ${p.disease_code?`<div style="font-size:12px;font-weight:700;color:#0369a1;letter-spacing:.5px">${esc(p.disease_code)}</div>`:''}
-        ${p.disease_name?`<div style="font-size:12px;color:#0c4a6e">${esc(p.disease_name)}</div>`:''}
+        ${dxPairs(p).map(([c,n],i)=>`<div style="${i?'margin-top:6px;padding-top:6px;border-top:1px dashed #bae6fd':''}">${c?`<div style="font-size:12px;font-weight:700;color:#0369a1;letter-spacing:.5px">${esc(c)}</div>`:''}${n?`<div style="font-size:12px;color:#0c4a6e">${esc(n)}</div>`:''}</div>`).join('')}
       </div>
     </div>`:''}
     ${p.note?`<div style="background:var(--yellow-lt);border:1px solid var(--yellow-bd);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#92400e">📋 ${esc(p.note)}</div>`:''}
