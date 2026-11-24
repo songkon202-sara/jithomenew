@@ -313,7 +313,7 @@ function patientCard(p) {
         ${p.next_visit_date?`<span style="color:#ea580c">🏡 ${thDate(p.next_visit_date)}</span>`:''}
       </span>
     </div>
-    ${p.deceased_date?`<div style="margin-top:6px;font-size:11px;color:#374151">⚫ เสียชีวิต ${thDate(p.deceased_date)}</div>`:''}${!hasDiseaseCode(p)?'<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc">🛡️ กลุ่มเสี่ยง · ยังไม่ป่วย</span></div>':''}${riskBadgesHtml(p)}${disease}${nid}${note}
+    ${p.deceased_date?`<div style="margin-top:6px;font-size:11px;color:#374151">⚫ เสียชีวิต ${thDate(p.deceased_date)}</div>`:''}${!hasDiseaseCode(p)?'<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc">🛡️ กลุ่มเสี่ยง · ยังไม่ป่วย</span></div>':''}${riskBadgesHtml(p)}${_aosomoVisReady&&canDo('record')?`<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;${p.aosomo_visible?'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe">🏡 ส่งให้ อสม. แล้ว':'background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb">🙈 อสม. ไม่เห็น'}</span></div>`:''}${disease}${nid}${note}
   </div>`
 }
 
@@ -322,6 +322,8 @@ function patientCard(p) {
 let _riskReady=false
 // ผู้เสียชีวิต: ต้องรัน 13_deceased.sql ก่อน · ไม่อยู่ใน allPatients (ไม่นับนัด/สถิติ) แยกไว้ใน _deceasedPatients
 let _deceasedReady=false, _deceasedPatients=[]
+// ส่งผู้ป่วยให้ อสม. เห็น: ต้องรัน 17_aosomo_visible.sql ก่อน (ฐานข้อมูลบังคับสิทธิ์ + บันทึกประวัติเอง)
+let _aosomoVisReady=false
 // สีระดับผู้ป่วย (patients.group_color): ต้องรัน 14_patient_color.sql — ตั้งสีได้แม้ยังไม่มีบันทึกฉีดยา
 let _baseColorReady=false
 const RISK_COLS='birth_date,adl_group,risk_flags'
@@ -437,6 +439,7 @@ async function getPatients() {
   if (pErr) console.error('getPatients (dates):', pErr)
   _deceasedReady = !!(data && data.length && ('deceased_date' in data[0]))
   _baseColorReady = !!(data && data.length && ('base_color' in data[0]))
+  _aosomoVisReady = !!(data && data.length && ('aosomo_visible' in data[0]))
   // ดึง next_inject_date / next_visit_date ตรงจากตาราง patients (ไม่ผ่าน view)
   const dateMap = {}
   for (const p of (pDates||[])) dateMap[p.id] = p
@@ -598,7 +601,9 @@ let _ptShown = 0
 function renderPatients(el) {
   const pts = allPatients
   const villages=[...new Set(pts.map(p=>p.village).filter(Boolean))].sort(villageSort)
-  window._gf='all'; window._vf='all'; window._df='all'; window._rf=false; window._dead=false
+  window._gf='all'; window._vf='all'; window._df='all'; window._rf=false; window._dead=false; window._af='all'
+  const shared=pts.filter(p=>p.aosomo_visible).length
+  const showShare=_aosomoVisReady&&canDo('record')
   const noCode=pts.filter(p=>!hasDiseaseCode(p)).length
   const noVillage=pts.filter(p=>!String(p.village||'').trim()).length
   const noRisk=pts.filter(p=>!riskFilled(p)).length
@@ -629,6 +634,12 @@ function renderPatients(el) {
     ${_riskReady?`<button class="filter-chip" id="rf-chip" onclick="toggleRF()">🚩 ยังไม่กรอกปัจจัยเสี่ยง (${noRisk})</button>`:''}
     ${_deceasedReady?`<button class="filter-chip" id="dead-chip" onclick="toggleDead()">⚫ เสียชีวิต (${_deceasedPatients.length})</button>`:''}
   </div>
+  ${showShare?`<div class="filter-row">
+    <button class="filter-chip active" data-af="all" onclick="setAF('all')">อสม. ทั้งหมด</button>
+    <button class="filter-chip" data-af="yes" onclick="setAF('yes')">🏡 ส่งให้ อสม. แล้ว (${shared})</button>
+    <button class="filter-chip" data-af="no" onclick="setAF('no')">🙈 อสม. ไม่เห็น (${pts.length-shared})</button>
+  </div>
+  <div id="share-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:-2px 0 10px"></div>`:''}
   <div id="pt-count" style="font-size:12px;color:var(--text3);margin:-4px 0 8px"></div>
   <div id="pt-list"></div>
   </div>`
@@ -643,13 +654,65 @@ function filterPts() {
     if(df==='has'&&!hasDiseaseCode(p))return false
     if(df==='none'&&hasDiseaseCode(p))return false
     if(window._rf&&riskFilled(p))return false
+    if(window._af==='yes'&&!p.aosomo_visible)return false
+    if(window._af==='no'&&p.aosomo_visible)return false
     if(q&&!(p.name||'').toLowerCase().includes(q))return false
     return true
   })
   _ptShown=0
   const cnt=document.getElementById('pt-count')
   if(cnt)cnt.textContent=window._dead?`⚫ ผู้เสียชีวิต ${_ptFiltered.length} ราย (ไม่นับในนัดและสถิติ)`:(df!=='all'||window._rf||gf!=='all'||vf!=='all'||q)?`พบ ${_ptFiltered.length} ราย`:''
+  renderShareBar()
   renderPtPage()
+}
+// ปุ่มส่ง/ยกเลิกการส่งให้ อสม. ทีละหลายราย ตามตัวกรองที่เลือกอยู่
+function renderShareBar(){
+  const bar=document.getElementById('share-bar')
+  if(!bar)return
+  const list=window._dead?[]:_ptFiltered
+  const toShare=list.filter(p=>!p.aosomo_visible).length, toHide=list.length-toShare
+  const btn="padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif"
+  bar.innerHTML=!list.length?'':`<span style="font-size:12px;color:var(--text3)">ที่แสดงอยู่ ${list.length} ราย:</span>
+    ${toShare?`<button onclick="bulkShareAosomo(true)" style="${btn};border:1.5px solid #7c3aed;background:#f5f3ff;color:#6d28d9">🏡 ส่งให้ อสม. (${toShare})</button>`:''}
+    ${toHide?`<button onclick="bulkShareAosomo(false)" style="${btn};border:1.5px solid #d1d5db;background:#fff;color:#374151">🙈 ยกเลิกการส่ง (${toHide})</button>`:''}`
+}
+async function bulkShareAosomo(on){
+  const list=_ptFiltered.filter(p=>!!p.aosomo_visible!==on)
+  if(list.length)await setAosomoVisible(list,on)
+}
+// ส่ง/ยกเลิก — ยืนยันก่อนเสมอ · ฐานข้อมูลบันทึกผู้ทำและเวลาลง Audit Log เอง (17_aosomo_visible.sql)
+async function setAosomoVisible(list,on){
+  if(!canDo('record')){alert('🔒 เฉพาะเจ้าหน้าที่/แอดมิน');return false}
+  const vill=[...new Set(list.map(p=>p.village||'ไม่ระบุหมู่บ้าน'))].sort(villageSort)
+  const names=list.slice(0,10).map(p=>`• ${p.name} (${p.village||'-'})`).join('\n')+(list.length>10?`\n… และอีก ${list.length-10} ราย`:'')
+  const msg=on
+    ?`🏡 ยืนยันส่งรายชื่อให้ อสม. เห็น ${list.length} ราย?\n\n${names}\n\nหมู่บ้าน: ${vill.join(', ')}\n\n⚠️ อสม. ของหมู่บ้านเหล่านี้จะเห็นชื่อ ที่อยู่ โรค และประวัติการรักษาของผู้ป่วย\nระบบจะบันทึกชื่อผู้ส่งและเวลาไว้ในประวัติการใช้งาน`
+    :`🙈 ยืนยันยกเลิกการส่ง ${list.length} ราย?\n\n${names}\n\nอสม. จะไม่เห็นรายชื่อเหล่านี้อีก · ระบบจะบันทึกชื่อผู้ยกเลิกและเวลาไว้`
+  if(!confirm(msg))return false
+  const ids=list.map(p=>p.id)
+  for(let i=0;i<ids.length;i+=100){
+    const{error}=await sb.from('patients').update({aosomo_visible:on}).in('id',ids.slice(i,i+100))
+    if(error){alert('❌ บันทึกไม่สำเร็จ: '+error.message+(i?`\n(สำเร็จไปแล้ว ${i} ราย)`:''));_ptCache=null;allPatients=await getPatients();return false}
+  }
+  const now=new Date().toISOString()
+  const set=new Set(ids)
+  allPatients.forEach(p=>{if(set.has(p.id)){p.aosomo_visible=on;p.aosomo_shared_at=now;p.aosomo_shared_by=currentDisplayName}})
+  _ptCache=null
+  showToast(on?`🏡 ส่งให้ อสม. แล้ว ${ids.length} ราย`:`🙈 ยกเลิกการส่ง ${ids.length} ราย`,3000)
+  // หน้าผู้ป่วย: คงตัวกรองเดิม แค่ปรับตัวเลขและรายการ
+  if(document.getElementById('pt-list')){
+    const n=allPatients.filter(p=>p.aosomo_visible).length
+    const y=document.querySelector('[data-af="yes"]'),no=document.querySelector('[data-af="no"]')
+    if(y)y.textContent=`🏡 ส่งให้ อสม. แล้ว (${n})`
+    if(no)no.textContent=`🙈 อสม. ไม่เห็น (${allPatients.length-n})`
+    filterPts()
+  }
+  return true
+}
+async function toggleAosomoVisible(id){
+  const p=allPatients.find(x=>x.id===id)||_deceasedPatients.find(x=>x.id===id)
+  if(!p)return
+  if(await setAosomoVisible([p],!p.aosomo_visible))openModal(id)
 }
 function renderPtPage(){
   const list=document.getElementById('pt-list')
@@ -664,6 +727,7 @@ function renderPtPage(){
 function setGF(gf){window._gf=gf;document.querySelectorAll('[data-gf]').forEach(e=>e.classList.toggle('active',e.dataset.gf===gf));filterPts()}
 function setDF(df){window._df=df;document.querySelectorAll('[data-df]').forEach(e=>e.classList.toggle('active',e.dataset.df===df));filterPts()}
 function toggleDead(){window._dead=!window._dead;document.getElementById('dead-chip')?.classList.toggle('active',window._dead);filterPts()}
+function setAF(af){window._af=af;document.querySelectorAll('[data-af]').forEach(e=>e.classList.toggle('active',e.dataset.af===af));filterPts()}
 function toggleRF(){window._rf=!window._rf;document.getElementById('rf-chip')?.classList.toggle('active',window._rf);filterPts()}
 function setVF(vf){window._vf=vf;document.querySelectorAll('[data-vf]').forEach(e=>e.classList.toggle('active',e.dataset.vf===vf));filterPts()}
 
@@ -3762,6 +3826,14 @@ async function openModal(id){
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden">
       <div style="padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text2)">📋 ข้อมูลพื้นฐาน</div>
       <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+        ${_aosomoVisReady&&canDo('record')?`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;${p.aosomo_visible?'background:#f5f3ff;border:1px solid #ddd6fe':'background:#f9fafb;border:1px solid var(--border)'}">
+          <span style="font-size:18px;flex-shrink:0">${p.aosomo_visible?'🏡':'🙈'}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:${p.aosomo_visible?'#6d28d9':'var(--text2)'}">${p.aosomo_visible?'ส่งให้ อสม. เยี่ยมแล้ว':'อสม. ไม่เห็นรายชื่อนี้'}</div>
+            <div style="font-size:11px;color:var(--text3)">${p.aosomo_shared_at?`${p.aosomo_visible?'ส่ง':'ยกเลิก'}ล่าสุดโดย ${esc(p.aosomo_shared_by||'-')} · ${thDate(String(p.aosomo_shared_at).slice(0,10))}`:'ยังไม่เคยส่ง'}</div>
+          </div>
+          <button onclick="toggleAosomoVisible(${p.id})" style="flex-shrink:0;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;${p.aosomo_visible?'border:1.5px solid #d1d5db;background:#fff;color:#374151">🙈 ยกเลิกการส่ง':'border:1.5px solid #7c3aed;background:#7c3aed;color:#fff">🏡 ส่งให้ อสม.'}</button>
+        </div>`:''}
         <div style="display:flex;align-items:center;gap:10px">
           <span style="font-size:18px;flex-shrink:0">🪪</span>
           <div style="flex:1;min-width:0">
@@ -5619,7 +5691,7 @@ async function loadAuditLog(){
   const ACTION_LABEL={
     login:'เข้าสู่ระบบ',logout:'ออกจากระบบ',login_failed:'เข้าสู่ระบบล้มเหลว',
     create_patient:'เพิ่มผู้ป่วย',edit_patient:'แก้ไขผู้ป่วย',delete_patient:'ลบผู้ป่วย',
-    view_patient:'ดูผู้ป่วย',save_visit:'บันทึกเยี่ยมบ้าน',edit_visit:'แก้ไขเยี่ยม',
+    view_patient:'ดูผู้ป่วย',save_visit:'บันทึกเยี่ยมบ้าน',edit_visit:'แก้ไขเยี่ยม',aosomo_share:'ส่งให้ อสม.',aosomo_unshare:'ยกเลิกส่ง อสม.',
     delete_visit:'ลบเยี่ยม',verify_visit:'ตรวจสอบเยี่ยม',resolve_referral:'รับเรื่องส่งต่อ',
     create_record:'บันทึกฉีดยา/เยี่ยม',edit_record:'แก้ไขบันทึก',delete_record:'ลบบันทึก',
     create_appointment:'นัดพบแพทย์',edit_appointment:'แก้ไขนัด',delete_appointment:'ลบนัด',
@@ -5680,6 +5752,8 @@ function renderAuditPage(el){
         <option value="delete_patient">ลบผู้ป่วย</option>
         <option value="view_patient">ดูผู้ป่วย</option>
         <option value="save_visit">บันทึกเยี่ยมบ้าน</option>
+        <option value="aosomo_share">ส่งให้ อสม.</option>
+        <option value="aosomo_unshare">ยกเลิกส่ง อสม.</option>
         <option value="edit_visit">แก้ไขเยี่ยม</option>
         <option value="delete_visit">ลบเยี่ยม</option>
         <option value="create_record">บันทึกฉีดยา/เยี่ยม</option>
