@@ -288,8 +288,11 @@ function formatNationalIdInput(v){
 function patientCard(p) {
   const chip = daysChip(p.days_until)
   const over = parseInt(p.days_until) < 0
-  const gl   = p.group_label || groupLabel(p.group_color)
-  const cls  = `patient-card ${p.group_color}${over?' overdue':''} fade-up`
+  // ผู้เสียชีวิตแสดงเป็นสีดำ แทนกลุ่มสี
+  const dead = !!p.deceased_date
+  const gl   = dead ? 'เสียชีวิต' : (p.group_label || groupLabel(p.group_color))
+  const gcls = dead ? 'black' : p.group_color
+  const cls  = `patient-card ${gcls}${over&&!dead?' overdue':''} fade-up`
   const disease = canDo('record') && (p.disease_code||p.disease_name) ? `<div class="pc-note" style="color:#0369a1;background:#f0f9ff">${p.disease_code?`<strong>${esc(p.disease_code)}</strong> `:''}${esc(p.disease_name||'')}</div>` : ''
   const note = p.note ? `<div class="pc-note">${esc(p.note)}</div>` : ''
   const nid = canDo('record') && p.national_id ? `<div class="pc-note" style="color:#78350f;background:#fef9c3;font-family:monospace;letter-spacing:0.5px">🪪 ${maskNationalId(p.national_id)}</div>` : ''
@@ -302,13 +305,13 @@ function patientCard(p) {
       <span class="days-chip ${chip.cls}">${chip.label}</span>
     </div>
     <div class="pc-meta">
-      <span class="badge ${p.group_color}"><span class="badge-dot"></span>${esc(gl)}</span>
+      <span class="badge ${gcls}"><span class="badge-dot"></span>${esc(gl)}</span>
       <span class="pc-date" style="display:flex;gap:8px;flex-wrap:wrap">
         ${p.next_inject_date?`<span>💉 ${thDate(p.next_inject_date)}</span>`:p.next_date?`<span style="color:var(--text3)">💉 ${thDate(p.next_date)}</span>`:''}
         ${p.next_visit_date?`<span style="color:#ea580c">🏡 ${thDate(p.next_visit_date)}</span>`:''}
       </span>
     </div>
-    ${p.deceased_date?`<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#374151;color:#fff">⚫ เสียชีวิต ${thDate(p.deceased_date)}</span></div>`:''}${!hasDiseaseCode(p)?'<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc">🛡️ กลุ่มเสี่ยง · ยังไม่ป่วย</span></div>':''}${riskBadgesHtml(p)}${disease}${nid}${note}
+    ${p.deceased_date?`<div style="margin-top:6px;font-size:11px;color:#374151">⚫ เสียชีวิต ${thDate(p.deceased_date)}</div>`:''}${!hasDiseaseCode(p)?'<div style="margin-top:6px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc">🛡️ กลุ่มเสี่ยง · ยังไม่ป่วย</span></div>':''}${riskBadgesHtml(p)}${disease}${nid}${note}
   </div>`
 }
 
@@ -3002,7 +3005,7 @@ async function generateColorReport(){
     tr{break-inside:avoid}
     .n{text-align:center}
     .sub{color:#6b7280;font-weight:400;font-size:10px}
-    .cards{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:10px 0}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin:10px 0}
     .card{border-radius:8px;padding:8px;text-align:center;border:1px solid #e5e7eb}
     .card .v{font-size:24px;font-weight:800;line-height:1.2}
     .card .l{font-size:11px;color:#374151}
@@ -3019,6 +3022,7 @@ async function generateColorReport(){
   <div class="cards">
     <div class="card"><div class="v" style="color:#0a7ea4">${total}</div><div class="l">ทั้งหมดในทะเบียน</div></div>
     ${GROUPS.map(g=>`<div class="card" style="background:${g.bg};border-color:${g.color}33"><div class="v" style="color:${g.color}">${by[g.key].length}</div><div class="l">${g.shape} ${g.label} · ${pct(by[g.key].length)}%</div></div>`).join('')}
+    ${_deceasedPatients.length?`<div class="card" style="background:#1f2937;border-color:#111827"><div class="v" style="color:#fff">${_deceasedPatients.length}</div><div class="l" style="color:#e5e7eb">⚫ เสียชีวิต (ไม่นับรวม)</div></div>`:''}
   </div>
   <div class="bar">${GROUPS.filter(g=>by[g.key].length).map(g=>`<div style="width:${by[g.key].length/total*100}%;background:${g.color}"></div>`).join('')}</div>
   <div class="note">กลุ่มป่วย = มีรหัสโรค แยกสีตามบันทึกการฉีดยาครั้งล่าสุด · กลุ่มเสี่ยง = ยังไม่มีรหัสโรค${_deceasedPatients.length?` · ไม่นับผู้เสียชีวิต ${_deceasedPatients.length} ราย`:''}${_riskReady?` · กรอกปัจจัยเสี่ยงแล้ว ${pts.filter(riskFilled).length} จาก ${total} ราย`:''}</div>
@@ -3508,7 +3512,7 @@ async function openModal(id){
       ${canDo('admin')?`<button onclick="deletePatient(${p.id},'${jsStr(p.name)}')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">🗑️ ลบผู้ป่วยรายนี้ออกจากระบบ</button>`:''}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-      <span class="badge ${p.group_color}"><span class="badge-dot"></span>${esc(p.group_label)}</span>
+      <span class="badge ${p.deceased_date?'black':p.group_color}"><span class="badge-dot"></span>${esc(p.deceased_date?'เสียชีวิต':p.group_label)}</span>
       <span class="days-chip ${chip.cls}">${chip.label}</span>
     </div>
     ${p.deceased_date?`<div style="background:#1f2937;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px"><b>⚫ เสียชีวิต</b> เมื่อ ${thDateFull(p.deceased_date)}${p.deceased_note?` · ${esc(p.deceased_note)}`:''}<div style="font-size:11px;opacity:.8;margin-top:2px">ไม่นับในนัดหมาย สถิติ และรายงาน · ประวัติยังเก็บไว้</div></div>`:''}

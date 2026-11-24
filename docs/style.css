@@ -213,6 +213,8 @@ html, body {
 .badge.red    .badge-dot { background: var(--red); }
 .badge.yellow .badge-dot { background: var(--yellow); }
 .badge.green  .badge-dot { background: var(--green); }
+.badge.black  { background: #1f2937; color: #fff; border: 1px solid #111827; }
+.badge.black  .badge-dot { background: #fff; }
 
 /* ── Patient card ───────────────────────────────────────────── */
 .patient-card {
@@ -229,6 +231,8 @@ html, body {
 .patient-card.red    { border-left-color: var(--red); }
 .patient-card.yellow { border-left-color: var(--yellow); }
 .patient-card.green  { border-left-color: var(--green); }
+.patient-card.black  { border-left-color: #111827; background: #f9fafb; }
+.patient-card.black .pc-name { color: #374151; }
 .patient-card.overdue { background: var(--red-lt); }
 
 .pc-top    { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
