@@ -1547,6 +1547,14 @@ function renderVisitList(visits){
       <div style="font-size:12px;color:var(--text2)">${v.visit_type==='staff'?'🏥 เจ้าหน้าที่':'🏡 อสม.'} ${esc(v.visitor||'')}${v.refer?` <span style="color:#b91c1c;font-weight:700">⚠️ ส่งต่อ</span>`:''}</div>
       ${v.note?`<div style="font-size:12px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:pre-line">${esc(v.note)}</div>`:''}
       ${v.assessment_json&&canDo('record')?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">${renderMHAssessResult(v.assessment_json,true)}</div>`:''}
+      ${(()=>{ // ผลประเมิน ยาดี-ญาติดี-สาร ต่างจากกลุ่มสีปัจจุบัน → เสนอให้เจ้าหน้าที่ปรับ
+        if(!canDo('record')||!v.patient_id)return''
+        const yc=ytColorFromNote(v.note),pt=allPatients.find(x=>x.id===v.patient_id)
+        if(!yc||!pt||pt.deceased_date||pt.group_color===yc)return''
+        return`<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:#92400e">💡 ผลประเมินยาดี-ญาติดี-สาร = <b>${GC_TH[yc]}</b> · ผู้ป่วยอยู่กลุ่ม ${GC_TH[pt.group_color]||'ยังไม่มีสี'}</span>
+          <button onclick="applyVisitYTColor(${v.id})" style="padding:4px 10px;border-radius:8px;border:1.5px solid #f59e0b;background:#fff;color:#92400e;font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">ปรับสีผู้ป่วย</button>
+        </div>`})()}
       ${v.photo_url&&canDo('record')?`<div style="margin-top:8px"><a href="${safeUrl(v.photo_url)}" target="_blank"><img src="${safeUrl(v.photo_url)}" alt="รูปถ่ายการเยี่ยมบ้าน" style="max-width:100%;max-height:200px;border-radius:8px;object-fit:cover;cursor:pointer"></a></div>`:''}
       ${canDo('record')&&v.visit_type==='aosomo'?`<div style="margin-top:8px;padding:8px 10px;border-top:1px solid var(--border)">${v.verified_by?`<div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;font-weight:700;color:${v.verify_result==='improve'?'#b45309':'#16a34a'}">${v.verify_result==='improve'?'⚠️ ต้องปรับปรุง':'✅ ถูกต้อง'} · ${esc(v.verified_by)} · ${v.verified_at||''}</span>${v.verify_note?`<span style="font-size:11px;color:var(--text2)">💬 ${esc(v.verify_note)}</span>`:''}</div>`:`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11px;color:var(--text3)">⏳ รอเจ้าหน้าที่ตรวจสอบ</span><button onclick="verifyVisit(${v.id})" style="padding:4px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ตรวจสอบแล้ว</button></div><div id="vf-${v.id}" style="display:none;margin-top:8px;padding:8px;background:var(--bg2,#f8fafc);border-radius:8px;border:1px solid var(--border)"><div style="display:flex;gap:12px;margin-bottom:6px"><label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif"><input type="radio" name="vr-${v.id}" value="pass" checked> ✅ ถูกต้อง</label><label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif"><input type="radio" name="vr-${v.id}" value="improve"> ⚠️ ต้องปรับปรุง</label></div><input id="vn-${v.id}" type="text" placeholder="หมายเหตุ (ถ้ามี)" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);margin-bottom:6px"><div style="display:flex;gap:6px;justify-content:flex-end"><button onclick="verifyVisit(${v.id})" style="padding:4px 10px;background:none;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif;color:var(--text2)">ยกเลิก</button><button onclick="submitVerify(${v.id})" style="padding:4px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:6px;font-size:11px;font-weight:700;color:#15803d;cursor:pointer;font-family:'Sarabun',sans-serif">บันทึก</button></div></div>`}</div>`:''}
     </div>`
@@ -1622,6 +1630,15 @@ async function openEditVisit(id){
     // restore note (เฉพาะบรรทัดแรก ไม่รวม auto-text)
     const noteLines=(v.note||'').split('\n')
     const cleanNote=noteLines.filter(l=>!l.startsWith('[')&&!l.startsWith('●')&&l.trim()).join('\n')
+    // ผลประเมินที่สร้างอัตโนมัติ (5 ธงแดง, ยาดี-ญาติดี-สาร, แบบ 10 ด้าน, ปัญหาที่พบ ฯลฯ) — เก็บไว้
+    // ถ้าแก้ไขแล้วไม่ได้ประเมินส่วนนั้นใหม่ จะคงผลเดิม (เดิมหายไปเมื่อกดบันทึกการแก้ไข)
+    window._editAutoLines=noteLines.filter(l=>l.startsWith('[')||l.startsWith('●'))
+    const ytLine=noteLines.find(l=>l.startsWith('[ยาดี-ญาติดี-สาร]'))
+    if(ytLine){
+      const m=k=>{const r=ytLine.match(new RegExp(k+':(ดี|ไม่ดี|ไม่ใช้|ใช้)'));return r?r[1]:null}
+      const ya=m('ยา'),yati=m('ญาติ'),sara=m('สาร')
+      if(ya)setYT('ya',ya==='ดี');if(yati)setYT('yati',yati==='ดี');if(sara)setYT('sara',sara==='ไม่ใช้')
+    }
     const ntEl=document.getElementById('v-note');if(ntEl)ntEl.value=cleanNote
     // แสดงรูปเดิม (ถ้ามี)
     const prevEl=document.getElementById('v-photo-preview')
@@ -1641,10 +1658,17 @@ async function saveEditVisit(id){
   const noteRaw=document.getElementById('v-note')?.value?.trim()||''
   const RF_LABELS={rf1:'ไม่หลับไม่นอน',rf2:'เดินไปเดินมา',rf3:'พูดจาคนเดียว',rf4:'หงุดหงิดฉุนเฉียว',rf5:'หวาดระแวง'}
   const rfText=_redFlags.length>0?`\n[5 Red Flags] พบ: ${_redFlags.map(i=>RF_LABELS[i]).join(', ')}`:''
-  const ytText=_visitType==='aosomo'?getYTText():''
+  const ytText=getYTText()
   const a10Text=_visitType==='staff'?getAssess10Text():''
   const probText=_visitProblems.length>0?`\n[ปัญหาที่พบ] ${_visitProblems.map(i=>AOSOMO_PROBLEMS.find(([pid])=>pid===i)?.[1]||i).join(' | ')}`:''
-  const note=(noteRaw+rfText+ytText+a10Text+probText).trim()
+  const newAuto=rfText+ytText+a10Text+probText
+  // คงผลประเมินเดิมของส่วนที่ไม่ได้ประเมินใหม่ (บรรทัด ● ตามหัวข้อ [..] ก่อนหน้า)
+  const kept=[];let keep=false
+  for(const l of (window._editAutoLines||[])){
+    if(l.startsWith('[')){const key=l.slice(0,l.indexOf(']')+1);keep=!!key&&!newAuto.includes(key)}
+    if(keep)kept.push(l)
+  }
+  const note=(noteRaw+newAuto+(kept.length?'\n'+kept.join('\n'):'')).trim()
   const btn=document.getElementById('v-save-btn')
   btn.disabled=true;btn.textContent='กำลังบันทึก...'
   const photoFile=pickedPhotos('v-photo')[0]||null
@@ -1664,6 +1688,8 @@ async function saveEditVisit(id){
   auditLog('edit_visit','visit',id,{patient_name:name,visitor})
   _markOwnWrite(id)
   closeVisitModal()
+  const vp=allPatients.find(x=>x.name===name&&x.village===village)||allPatients.find(x=>x.name===name)
+  if(vp)await offerYTColor(vp.id,ytColor(),'yt_visit_edit')
   showToast('✅ บันทึกการแก้ไขแล้ว')
   if(location.hash==='#visit')navigate('visit')
   if(document.getElementById('modal-overlay')?.style.display==='flex'&&window._modalPatientId)openModal(window._modalPatientId)
@@ -4482,13 +4508,15 @@ function openVisitForm(type){
     <div id="oas-detail" style="font-size:11px;color:var(--text3);padding:8px 10px;background:#fff;border-radius:6px;border:1px solid var(--border);display:none"></div>
   </div>
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <!-- ซ่อนรายการไว้ก่อน กดหัวข้อเพื่อเปิด (คะแนน/ผลยังแสดงตอนปิด) -->
+    <div onclick="toggleAssess('a10-body')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none">
       <div>
-        <div style="font-size:13px;font-weight:700">📋 แบบติดตาม 10 ด้าน</div>
-        <div style="font-size:11px;color:var(--text3)">แบบติดตามผู้ป่วยจิตเวชเรื้อรังในชุมชน (คะแนน 10–30)</div>
+        <div style="font-size:13px;font-weight:700">📋 แบบติดตาม 10 ด้าน <span id="a10-body-chevron" style="font-size:11px;color:var(--text3)">▶</span></div>
+        <div style="font-size:11px;color:var(--text3)">แบบติดตามผู้ป่วยจิตเวชเรื้อรังในชุมชน (คะแนน 10–30) · กดเพื่อเปิด/ปิด</div>
       </div>
       <span id="a10-badge" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ยังไม่ประเมิน</span>
     </div>
+    <div id="a10-body" style="display:none;margin-top:12px">
     ${ASSESS10_DOMAINS.map(({id,title,opts})=>`
     <div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border)">
       <div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--text1)">${title}</div>
@@ -4502,6 +4530,7 @@ function openVisitForm(type){
         </button>`).join('')}
       </div>
     </div>`).join('')}
+    </div>
     <div id="a10-result" style="display:none;margin-top:4px;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;text-align:center"></div>
   </div>
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
@@ -4516,13 +4545,15 @@ function openVisitForm(type){
   </div>
 
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <!-- ซ่อนรายการไว้ก่อน กดหัวข้อเพื่อเปิด -->
+    <div onclick="toggleAssess('aims-body')" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;cursor:pointer;user-select:none">
       <div>
-        <div style="font-size:13px;font-weight:700">🔄 AIMS — ผลข้างเคียงยา</div>
-        <div style="font-size:11px;color:var(--text3)">Abnormal Involuntary Movement Scale</div>
+        <div style="font-size:13px;font-weight:700">🔄 AIMS — ผลข้างเคียงยา <span id="aims-body-chevron" style="font-size:11px;color:var(--text3)">▶</span></div>
+        <div style="font-size:11px;color:var(--text3)">Abnormal Involuntary Movement Scale · กดเพื่อเปิด/ปิด</div>
       </div>
       <span id="aims-badge" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">0 คะแนน</span>
     </div>
+    <div id="aims-body" style="display:none">
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px">0=ไม่มี · 1=น้อยมาก · 2=น้อย · 3=ปานกลาง · 4=มาก</div>
     ${AIMS_ITEMS.map((item,i)=>`
     <div style="margin-bottom:8px">
@@ -4531,6 +4562,7 @@ function openVisitForm(type){
         ${[0,1,2,3,4].map(j=>`<button type="button" id="aims-${i}-${j}" onclick="setAIMS(${i},${j})" style="flex:1;padding:6px 0;border-radius:6px;border:2px solid ${j===0?'#0a7ea4':'#d1d5db'};background:${j===0?'#0a7ea4':'#f3f4f6'};color:${j===0?'#fff':'#374151'};font-size:12px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">${j}</button>`).join('')}
       </div>
     </div>`).join('')}
+    </div>
     <div id="aims-result" style="margin-top:4px;padding:8px 12px;border-radius:8px;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:700">รวม: 0 — ไม่พบผลข้างเคียง</div>
   </div>`:''}
 
@@ -4659,28 +4691,6 @@ function openVisitForm(type){
     </div>
   </div>
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:700">💊 ยาดี · ญาติดี · ไม่ใช้สารเสพติด</div>
-      <span id="yt-badge" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ยังไม่ประเมิน</span>
-    </div>
-    ${[
-      ['ya','💊 ยา','ผู้ป่วยรับประทานยาตามแพทย์สั่งต่อเนื่อง','ดี','ไม่ดี'],
-      ['yati','👨‍👩‍👧 ญาติ','ครอบครัวดูแล ไม่ทอดทิ้ง อยู่ใกล้ชิด','ดี','ไม่ดี'],
-      ['sara','🚫 สารเสพติด','ไม่มีการใช้สารเสพติด สุรา บุหรี่เกินขนาด','ไม่ใช้','ใช้'],
-    ].map(([key,label,desc,good,bad])=>`
-    <div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border)">
-      <div style="font-size:13px;font-weight:700;margin-bottom:2px">${label}</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${desc}</div>
-      <div style="display:flex;gap:6px">
-        <button type="button" id="yt-good-${key}" onclick="setYT('${key}',true)"
-          style="flex:1;padding:8px;border-radius:8px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ${good}</button>
-        <button type="button" id="yt-bad-${key}" onclick="setYT('${key}',false)"
-          style="flex:1;padding:8px;border-radius:8px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">❌ ${bad}</button>
-      </div>
-    </div>`).join('')}
-    <div id="yt-result" style="display:none;margin-top:4px;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;text-align:center"></div>
-  </div>
-  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px">💊 แบบติดตามการรับประทานยา</div>
     <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid var(--border);margin-bottom:8px">
       <div style="font-size:12px;font-weight:700;margin-bottom:6px">กินยาครบทุกวันในสัปดาห์ที่ผ่านมาหรือไม่</div>
@@ -4702,6 +4712,29 @@ function openVisitForm(type){
       <input type="text" id="med-side-effects" placeholder="เช่น ง่วงมาก มือสั่น แข็งเกร็ง..." style="width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-family:'Sarabun',sans-serif;font-size:12px">
     </div>
 `:''}
+  <!-- ยาดี · ญาติดี · ไม่ใช้สารเสพติด: ใช้ทั้งแบบ อสม. และเจ้าหน้าที่ -->
+  <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700">💊 ยาดี · ญาติดี · ไม่ใช้สารเสพติด</div>
+      <span id="yt-badge" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ยังไม่ประเมิน</span>
+    </div>
+    ${[
+      ['ya','💊 ยา','ผู้ป่วยรับประทานยาตามแพทย์สั่งต่อเนื่อง','ดี','ไม่ดี'],
+      ['yati','👨‍👩‍👧 ญาติ','ครอบครัวดูแล ไม่ทอดทิ้ง อยู่ใกล้ชิด','ดี','ไม่ดี'],
+      ['sara','🚫 สารเสพติด','ไม่มีการใช้สารเสพติด สุรา บุหรี่เกินขนาด','ไม่ใช้','ใช้'],
+    ].map(([key,label,desc,good,bad])=>`
+    <div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700;margin-bottom:2px">${label}</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${desc}</div>
+      <div style="display:flex;gap:6px">
+        <button type="button" id="yt-good-${key}" onclick="setYT('${key}',true)"
+          style="flex:1;padding:8px;border-radius:8px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">✅ ${good}</button>
+        <button type="button" id="yt-bad-${key}" onclick="setYT('${key}',false)"
+          style="flex:1;padding:8px;border-radius:8px;border:2px solid #d1d5db;background:#f3f4f6;color:var(--text2);font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif">❌ ${bad}</button>
+      </div>
+    </div>`).join('')}
+    <div id="yt-result" style="display:none;margin-top:4px;padding:12px 14px;border-radius:10px;font-size:13px;font-weight:700;text-align:center"></div>
+  </div>
   <div class="form-group"><label>บันทึกเพิ่มเติม</label><textarea id="v-note" rows="3" style="resize:none;font-family:'Sarabun',sans-serif" placeholder="อาการ สิ่งที่พบ ข้อสังเกต..."></textarea></div>
   <div class="form-group"><label>📷 รูปถ่าย (ไม่บังคับ)</label>${photoPickHtml('v-photo',false)}<div id="v-photo-preview" style="margin-top:6px"></div></div>
   <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--red-lt);border:1px solid var(--red-bd);border-radius:8px;margin-bottom:14px">
@@ -5009,6 +5042,49 @@ function setYT(key, isGood){
   if(badge){badge.textContent=msg.split(' — ')[0];badge.style.background=bg;badge.style.color=color;badge.style.borderColor=border}
   if(result){result.style.display='block';result.style.background=bg;result.style.border=`1px solid ${border}`;result.style.color=color;result.textContent=msg}
 }
+// สีจากผลประเมิน ยาดี-ญาติดี-สาร (ครบ 3 ข้อเท่านั้น): ไม่ดี 0 ข้อ = เขียว · 1 = เหลือง · 2+ = แดง
+function ytColor(){
+  const {ya,yati,sara}=_ytAssess
+  if(ya===null||yati===null||sara===null)return null
+  const bad=[ya===false,yati===false,sara===false].filter(Boolean).length
+  return bad===0?'green':bad===1?'yellow':'red'
+}
+// อ่านสีจากข้อความในบันทึกเยี่ยม "[ยาดี-ญาติดี-สาร] … → สีเหลือง"
+function ytColorFromNote(note){
+  const m=String(note||'').match(/\[ยาดี-ญาติดี-สาร\][^\n]*→ สี(เขียว|เหลือง|แดง)/)
+  return m?{'เขียว':'green','เหลือง':'yellow','แดง':'red'}[m[1]]:null
+}
+const GC_TH={red:'🔴 สีแดง',yellow:'🟡 สีเหลือง',green:'🟢 สีเขียว'}
+const GC_LABEL={red:'สุขภาพจิต กลุ่ม สีแดง',yellow:'สุขภาพจิต กลุ่ม สีเหลือง',green:'สุขภาพจิต กลุ่ม สีเขียว'}
+// เปลี่ยนกลุ่มสีผู้ป่วย (เหมือนช่องกลุ่มสีในหน้าแก้ไขผู้ป่วย): สีที่ตัวผู้ป่วย + บันทึกฉีดยาล่าสุด + นัดล่วงหน้า
+async function setPatientGroupColor(id,gc,fromColor,source){
+  if(!canDo('record'))throw new Error('เฉพาะเจ้าหน้าที่/แอดมิน เปลี่ยนกลุ่มสีได้')
+  if(_baseColorReady){const{error}=await sb.from('patients').update({group_color:gc}).eq('id',id);if(error)throw error}
+  const{data:last}=await sb.from('injection_records').select('id').eq('patient_id',id).order('injection_date',{ascending:false}).order('id',{ascending:false}).limit(1).maybeSingle()
+  if(last){
+    const[{error:e1},{error:e2}]=await Promise.all([
+      sb.from('injection_records').update({group_color:gc,group_label:GC_LABEL[gc]}).eq('id',last.id),
+      sb.from('injection_records').update({group_color:gc,group_label:GC_LABEL[gc]}).eq('patient_id',id).gt('injection_date',todayISO())
+    ])
+    if(e1||e2)throw e1||e2
+  }else if(!_baseColorReady)throw new Error('ผู้ป่วยยังไม่มีบันทึกฉีดยา และยังไม่ได้รัน 14_patient_color.sql')
+  auditLog('change_group_color','patient',id,{from:fromColor||null,to:gc,source})
+  const p=allPatients.find(x=>x.id===id);if(p){p.group_color=gc;p.group_label=GC_LABEL[gc]}
+  _ptCache=null
+}
+// ถามเจ้าหน้าที่ว่าจะปรับสีผู้ป่วยตามผลประเมินไหม (ไม่เปลี่ยนเองโดยไม่ถาม — สีที่ตั้งไว้อาจมาจากแพทย์)
+async function offerYTColor(patientId,gc,source){
+  if(!patientId||!gc||!canDo('record'))return false
+  const p=allPatients.find(x=>x.id===patientId)
+  if(!p||p.deceased_date||p.group_color===gc)return false
+  if(!confirm(`ผลประเมิน ยาดี · ญาติดี · ไม่ใช้สารเสพติด = ${GC_TH[gc]}\nผู้ป่วย "${p.name}" ตอนนี้อยู่กลุ่ม ${GC_TH[p.group_color]||'ยังไม่มีสี'}\n\nปรับกลุ่มสีของผู้ป่วยเป็น ${GC_TH[gc]} ไหม?\n(ระบบบันทึกผู้ปรับและเวลาไว้ในประวัติ)`))return false
+  try{await setPatientGroupColor(patientId,gc,p.group_color,source);showToast(`✅ ปรับกลุ่มสีเป็น ${GC_TH[gc]} แล้ว`,3000);return true}
+  catch(e){alert('❌ ปรับกลุ่มสีไม่สำเร็จ: '+e.message);return false}
+}
+async function applyVisitYTColor(visitId){
+  const v=(window._allVisits||[]).find(x=>x.id===visitId)
+  if(v&&await offerYTColor(v.patient_id,ytColorFromNote(v.note),'yt_visit_review'))navigate('visit')
+}
 function getYTText(){
   const {ya,yati,sara}=_ytAssess
   if(ya===null&&yati===null&&sara===null)return''
@@ -5084,7 +5160,7 @@ async function saveVisitRecord(){
   const rfText=_visitType==='aosomo'&&_redFlags.length>0
     ?`\n[5 Red Flags] พบ: ${_redFlags.map(id=>RF_LABELS[id]).join(', ')}`
     :''
-  const ytText=_visitType==='aosomo'?getYTText():''
+  const ytText=getYTText()
   const a10Text=_visitType==='staff'?getAssess10Text():''
   const probText=_visitProblems.length>0?`\n[ปัญหาที่พบ] ${_visitProblems.map(id=>AOSOMO_PROBLEMS.find(([pid])=>pid===id)?.[1]||id).join(' | ')}`:''
   const fullNote=(note+oasText+rfText+ytText+a10Text+probText).trim()
@@ -5134,6 +5210,7 @@ async function saveVisitRecord(){
       })
     }
     closeVisitModal()
+    if(found)await offerYTColor(found.id,ytColor(),'yt_visit')
     if(location.hash==='#visit')navigate('visit')
   }catch(e){btn.textContent='❌ '+e.message;btn.disabled=false}
 }
