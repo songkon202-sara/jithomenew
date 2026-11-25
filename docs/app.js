@@ -4714,10 +4714,17 @@ function openVisitForm(type){
 `:''}
   <!-- ยาดี · ญาติดี · ไม่ใช้สารเสพติด: ใช้ทั้งแบบ อสม. และเจ้าหน้าที่ -->
   <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <div style="font-size:13px;font-weight:700">💊 ยาดี · ญาติดี · ไม่ใช้สารเสพติด</div>
       <span id="yt-badge" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#f3f4f6;color:var(--text3)">ยังไม่ประเมิน</span>
     </div>
+    <details style="font-size:11px;color:var(--text2);line-height:1.6;background:#fff;border:1px dashed var(--border);border-radius:8px;padding:6px 10px;margin-bottom:10px">
+      <summary style="font-weight:700;cursor:pointer;color:var(--primary)">ℹ️ เกณฑ์แบ่งกลุ่มสี (กดเพื่ออ่าน)</summary>
+      <div>🟢 <b>เขียว</b> — ยาดี ญาติดี และไม่ใช้สารเสพติด</div>
+      <div>🟡 <b>เหลือง</b> — ไม่ใช้สารเสพติด แต่ยาไม่ดี หรือญาติไม่ดี (ข้อใดข้อหนึ่งหรือทั้งสองข้อ) · ติดตามภายใน 15 วัน</div>
+      <div>🔴 <b>แดง</b> — ใช้สารเสพติด (ไม่ว่าข้ออื่นเป็นอย่างไร) · แจ้งเจ้าหน้าที่ รพ.สต. ทันที</div>
+      <div style="color:var(--text3);margin-top:2px">${_visitType==='staff'||canDo('record')?'บันทึกแล้ว ถ้าสีต่างจากกลุ่มสีเดิมของผู้ป่วย ระบบจะถามก่อนปรับสี':'ผลจะส่งให้เจ้าหน้าที่พิจารณาปรับกลุ่มสีของผู้ป่วย'}</div>
+    </details>
     ${[
       ['ya','💊 ยา','ผู้ป่วยรับประทานยาตามแพทย์สั่งต่อเนื่อง','ดี','ไม่ดี'],
       ['yati','👨‍👩‍👧 ญาติ','ครอบครัวดูแล ไม่ทอดทิ้ง อยู่ใกล้ชิด','ดี','ไม่ดี'],
