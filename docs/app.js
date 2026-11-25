@@ -5029,26 +5029,34 @@ function setYT(key, isGood){
   const activeStyle='border:2px solid;font-weight:800'
   if(goodBtn){goodBtn.style.background=isGood?'#dcfce7':'#f3f4f6';goodBtn.style.borderColor=isGood?'#16a34a':'#d1d5db';goodBtn.style.color=isGood?'#15803d':'var(--text2)'}
   if(badBtn){badBtn.style.background=!isGood?'#fef2f2':'#f3f4f6';badBtn.style.borderColor=!isGood?'#f87171':'#d1d5db';badBtn.style.color=!isGood?'#b91c1c':'var(--text2)'}
-  // คำนวณสีผลลัพธ์
-  const {ya,yati,sara}=_ytAssess
-  if(ya===null||yati===null||sara===null)return
-  const badCount=[ya===false,yati===false,sara===false].filter(Boolean).length
+  // คำนวณสีผลลัพธ์ (เกณฑ์อยู่ที่ ytColorOf)
+  const gc=ytColorOf(_ytAssess)
+  if(!gc){ // ยังตอบไม่ครบ → ล้างผลที่แสดงอยู่
+    const b=document.getElementById('yt-badge'),r=document.getElementById('yt-result')
+    if(b){b.textContent='ยังไม่ประเมิน';b.style.background='#f3f4f6';b.style.color='var(--text3)'}
+    if(r)r.style.display='none'
+    return
+  }
   let color,bg,border,msg
-  if(badCount===0){color='#15803d';bg='#dcfce7';border='#86efac';msg='🟢 สีเขียว — ยาดี ญาติดี ไม่ใช้สารเสพติด'}
-  else if(badCount===1){color='#92400e';bg='#fef9c3';border='#fde047';msg='🟡 สีเหลือง — มีข้อใดข้อหนึ่งไม่ดี ต้องติดตามภายใน 15 วัน'}
-  else{color='#b91c1c';bg='#fef2f2';border='#fca5a5';msg='🔴 สีแดง — เสี่ยงสูง/วิกฤต แจ้งเจ้าหน้าที่ รพ.สต. ทันที';const r=document.getElementById('v-refer');if(r)r.checked=true}
+  if(gc==='green'){color='#15803d';bg='#dcfce7';border='#86efac';msg='🟢 สีเขียว — ยาดี ญาติดี ไม่ใช้สารเสพติด'}
+  else if(gc==='yellow'){color='#92400e';bg='#fef9c3';border='#fde047';msg='🟡 สีเหลือง — ยาไม่ดี หรือญาติไม่ดี (ไม่ใช้สารเสพติด) ต้องติดตามภายใน 15 วัน'}
+  else{color='#b91c1c';bg='#fef2f2';border='#fca5a5';msg='🔴 สีแดง — ใช้สารเสพติด เสี่ยงสูง แจ้งเจ้าหน้าที่ รพ.สต. ทันที';const r=document.getElementById('v-refer');if(r)r.checked=true}
   const badge=document.getElementById('yt-badge')
   const result=document.getElementById('yt-result')
   if(badge){badge.textContent=msg.split(' — ')[0];badge.style.background=bg;badge.style.color=color;badge.style.borderColor=border}
   if(result){result.style.display='block';result.style.background=bg;result.style.border=`1px solid ${border}`;result.style.color=color;result.textContent=msg}
 }
-// สีจากผลประเมิน ยาดี-ญาติดี-สาร (ครบ 3 ข้อเท่านั้น): ไม่ดี 0 ข้อ = เขียว · 1 = เหลือง · 2+ = แดง
-function ytColor(){
-  const {ya,yati,sara}=_ytAssess
+// สีจากผลประเมิน ยาดี-ญาติดี-สาร (เกณฑ์ รพ.สต. 25 พ.ย. 2569):
+//   ใช้สารเสพติด = แดง (ไม่ว่ายา/ญาติเป็นอย่างไร)
+//   ไม่ใช้สาร แต่ยาไม่ดี หรือญาติไม่ดี (ข้อใดข้อหนึ่งหรือทั้งคู่) = เหลือง
+//   ยาดี ญาติดี ไม่ใช้สาร = เขียว
+// ต้องตอบครบ 3 ข้อ ยกเว้นตอบว่าใช้สารเสพติด ซึ่งเป็นแดงทันที
+function ytColorOf({ya,yati,sara}){
+  if(sara===false)return 'red'
   if(ya===null||yati===null||sara===null)return null
-  const bad=[ya===false,yati===false,sara===false].filter(Boolean).length
-  return bad===0?'green':bad===1?'yellow':'red'
+  return (ya===false||yati===false)?'yellow':'green'
 }
+function ytColor(){return ytColorOf(_ytAssess)}
 // อ่านสีจากข้อความในบันทึกเยี่ยม "[ยาดี-ญาติดี-สาร] … → สีเหลือง"
 function ytColorFromNote(note){
   const m=String(note||'').match(/\[ยาดี-ญาติดี-สาร\][^\n]*→ สี(เขียว|เหลือง|แดง)/)
@@ -5089,8 +5097,8 @@ function getYTText(){
   const {ya,yati,sara}=_ytAssess
   if(ya===null&&yati===null&&sara===null)return''
   const labels=[ya===null?'ยา:?':ya?'ยา:ดี':'ยา:ไม่ดี',yati===null?'ญาติ:?':yati?'ญาติ:ดี':'ญาติ:ไม่ดี',sara===null?'สาร:?':sara?'สาร:ไม่ใช้':'สาร:ใช้']
-  const badCount=[ya===false,yati===false,sara===false].filter(Boolean).length
-  const colorLabel=badCount===0?'สีเขียว':badCount===1?'สีเหลือง':'สีแดง'
+  const gc=ytColorOf(_ytAssess)
+  const colorLabel=gc==='green'?'สีเขียว':gc==='yellow'?'สีเหลือง':gc==='red'?'สีแดง':'ยังไม่ครบ'
   return`\n[ยาดี-ญาติดี-สาร] ${labels.join(' ')} → ${colorLabel}`
 }
 function setAssess10(domainId, score){
