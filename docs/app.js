@@ -5366,8 +5366,17 @@ async function _recordFailedLogin(email){
   if(error){console.error('_recordFailedLogin error:',error);return 1}
   return data||1
 }
+// ล้างตัวนับใส่รหัสผิดหลังเข้าระบบสำเร็จ — ใช้ฟังก์ชันในฐานข้อมูล (21_clear_login_lock.sql)
+// เดิมลบตารางตรง ซึ่งผู้ใช้ไม่มีสิทธิ์ลบ → ล้างไม่สำเร็จ ตัวนับสะสมข้ามวันจนถูกล็อก
 async function _clearLoginLock(email){
-  try{await sb.from('login_lockouts').delete().eq('email',email.toLowerCase())}catch(e){}
+  try{
+    const{error}=await sb.rpc('clear_my_login_lock')
+    if(!error)return
+    if(error.code!=='PGRST202'){console.error('clear_my_login_lock:',error.message);return}
+    // ยังไม่ได้รัน 21_clear_login_lock.sql → วิธีเดิม
+    const{error:e2}=await sb.from('login_lockouts').delete().eq('email',email.toLowerCase())
+    if(e2)console.error('clear login lock:',e2.message)
+  }catch(e){console.error('clear login lock:',e)}
 }
 async function adminUnlockAccount(email){
   if(!canDo('admin')){alert('ไม่มีสิทธิ์');return}
